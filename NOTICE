@@ -1,0 +1,34 @@
+Avisos de terceros / Third-party notices
+=========================================
+
+ZunzúnOS se distribuye bajo la licencia 0BSD (archivo LICENSE), salvo lo indicado aquí.
+ZunzúnOS is distributed under the 0BSD license (see LICENSE), except as noted below.
+
+-------------------------------------------------------------------------
+Excepción / Exception
+
+user/lib/font8x16.h contiene la tipografía VGA 8x16 de SeaBIOS, que se
+distribuye bajo la licencia LGPL 3.0 (https://www.gnu.org/licenses/lgpl-3.0.html).
+Esa tipografía no está cubierta por la licencia 0BSD del archivo LICENSE. Si se
+necesita un sistema 100 % 0BSD, basta con sustituir ese archivo por otra
+tipografía de dominio público.
+
+user/lib/font8x16.h holds the SeaBIOS 8x16 VGA font, distributed under the
+LGPL 3.0. That font is not covered by the 0BSD license in LICENSE. Replace that
+single file with a public-domain font for a fully 0BSD system.
+
+-------------------------------------------------------------------------
+Autoridades de certificación / Certificate authorities
+
+user/res/raices.bin se genera con tools/mkraices.py a partir del almacén de
+certificados raíz de Mozilla (tools/datos/cacert.pem, publicado por el
+proyecto curl). Esos datos se distribuyen bajo la Mozilla Public License 2.0
+(https://www.mozilla.org/MPL/2.0/) y no están cubiertos por la licencia 0BSD.
+
+user/res/raices.bin is built by tools/mkraices.py from Mozilla's root
+certificate store (tools/datos/cacert.pem, as published by the curl project).
+That data is distributed under the Mozilla Public License 2.0, not 0BSD.
+
+Las fórmulas de X25519 de user/lib/zcrypto.c siguen TweetNaCl (dominio público).
+The X25519 formulas in user/lib/zcrypto.c follow TweetNaCl (public domain).
+

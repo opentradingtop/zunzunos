@@ -102,7 +102,8 @@ Mac con Apple Silicon.
 
 ZunzúnOS se publica bajo la licencia **0BSD** (Zero-Clause BSD), la más permisiva posible:
 cualquiera puede usarlo, copiarlo, modificarlo y venderlo sin pedir permiso ni citar al autor.
-La única excepción es la tipografía VGA de SeaBIOS (`user/lib/font8x16.h`, LGPL 3.0).
-Los detalles están en [LICENSE](LICENSE).
+Las excepciones son la tipografía VGA de SeaBIOS (`user/lib/font8x16.h`, LGPL 3.0) y los
+certificados raíz de Mozilla (`tools/datos/cacert.pem` y `user/res/raices.bin`, MPL 2.0).
+Los detalles están en [LICENSE](LICENSE); las excepciones de terceros (tipografía LGPL y certificados de Mozilla con MPL) están en [NOTICE](NOTICE).
 
 Las traducciones al inglés están en `user/lib/i18n_tab.h` (generado desde `tools/traducciones.tsv`).
