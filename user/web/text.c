@@ -1,0 +1,131 @@
+/* Juegos de caracteres: la pantalla usa CP437 (la tipografia de la BIOS) y
+ * los archivos HTML vienen en UTF-8. Aqui se convierte entre ambos. */
+#include "kernel.h"
+
+/* Unicode de los caracteres CP437 0x80..0xFF. */
+static const u16 cp437_hi[128] = {
+    0x00C7,0x00FC,0x00E9,0x00E2,0x00E4,0x00E0,0x00E5,0x00E7,0x00EA,0x00EB,0x00E8,0x00EF,0x00EE,0x00EC,0x00C4,0x00C5,
+    0x00C9,0x00E6,0x00C6,0x00F4,0x00F6,0x00F2,0x00FB,0x00F9,0x00FF,0x00D6,0x00DC,0x00A2,0x00A3,0x00A5,0x20A7,0x0192,
+    0x00E1,0x00ED,0x00F3,0x00FA,0x00F1,0x00D1,0x00AA,0x00BA,0x00BF,0x2310,0x00AC,0x00BD,0x00BC,0x00A1,0x00AB,0x00BB,
+    0x2591,0x2592,0x2593,0x2502,0x2524,0x2561,0x2562,0x2556,0x2555,0x2563,0x2551,0x2557,0x255D,0x255C,0x255B,0x2510,
+    0x2514,0x2534,0x252C,0x251C,0x2500,0x253C,0x255E,0x255F,0x255A,0x2554,0x2569,0x2566,0x2560,0x2550,0x256C,0x2567,
+    0x2568,0x2564,0x2565,0x2559,0x2558,0x2552,0x2553,0x256B,0x256A,0x2518,0x250C,0x2588,0x2584,0x258C,0x2590,0x2580,
+    0x03B1,0x00DF,0x0393,0x03C0,0x03A3,0x03C3,0x00B5,0x03C4,0x03A6,0x0398,0x03A9,0x03B4,0x221E,0x03C6,0x03B5,0x2229,
+    0x2261,0x00B1,0x2265,0x2264,0x2320,0x2321,0x00F7,0x2248,0x00B0,0x2219,0x00B7,0x221A,0x207F,0x00B2,0x25A0,0x00A0,
+};
+
+/* Equivalencias aproximadas para caracteres que CP437 no tiene. */
+static const struct { u16 uni; u8 c; } approx[] = {
+    { 0x00C1, 'A' }, { 0x00CD, 'I' }, { 0x00D3, 'O' }, { 0x00DA, 'U' }, { 0x00C0, 'A' },
+    { 0x00C8, 'E' }, { 0x00CC, 'I' }, { 0x00D2, 'O' }, { 0x00D9, 'U' }, { 0x00C2, 'A' },
+    { 0x00CA, 'E' }, { 0x00CE, 'I' }, { 0x00D4, 'O' }, { 0x00DB, 'U' }, { 0x00C3, 'A' },
+    { 0x00E3, 'a' }, { 0x00F5, 'o' }, { 0x00D5, 'O' }, { 0x00F8, 'o' }, { 0x00D8, 'O' },
+    { 0x00E5, 0x86 }, { 0x00A9, 'c' }, { 0x00AE, 'R' }, { 0x00A7, 0x15 }, { 0x00B6, 0x14 },
+    { 0x00D7, 'x' }, { 0x00B3, '3' }, { 0x00B9, '1' }, { 0x00BE, '3' }, { 0x00A0, ' ' },
+    { 0x2018, '\'' }, { 0x2019, '\'' }, { 0x201A, ',' }, { 0x201C, '"' }, { 0x201D, '"' },
+    { 0x201E, '"' }, { 0x2013, '-' }, { 0x2014, '-' }, { 0x2012, '-' }, { 0x2212, '-' },
+    { 0x2026, 0xFA }, { 0x2022, 0x07 }, { 0x25CF, 0x07 }, { 0x25E6, 0x09 }, { 0x2192, 0x1A },
+    { 0x2190, 0x1B }, { 0x2191, 0x18 }, { 0x2193, 0x19 }, { 0x2194, 0x1D }, { 0x21D2, 0x1A },
+    { 0x2713, 0xFB }, { 0x2714, 0xFB }, { 0x2717, 'x' }, { 0x2718, 'x' }, { 0x2716, 'x' },
+    { 0x20AC, 'E' }, { 0x2122, 'T' }, { 0x2264, 0xF3 }, { 0x2265, 0xF2 }, { 0x2260, '#' },
+    { 0x25B6, 0x10 }, { 0x25BA, 0x10 }, { 0x25C0, 0x11 }, { 0x25B2, 0x1E }, { 0x25BC, 0x1F },
+    { 0x2605, '*' }, { 0x2606, '*' }, { 0x2665, 0x03 }, { 0x2666, 0x04 }, { 0x2663, 0x05 },
+    { 0x2660, 0x06 }, { 0x263A, 0x01 }, { 0x2302, 0x7F }, { 0x2032, '\'' }, { 0x2033, '"' },
+    { 0x00B4, '\'' }, { 0x02C6, '^' }, { 0x02DC, '~' }, { 0x2009, ' ' }, { 0x200A, ' ' },
+    { 0x2002, ' ' }, { 0x2003, ' ' }, { 0x202F, ' ' }, { 0x2044, '/' }, { 0x00AD, 0 },
+    { 0x0153, 'o' }, { 0x0152, 'O' }, { 0x0161, 's' }, { 0x0160, 'S' }, { 0x017E, 'z' },
+    { 0x0391, 'A' }, { 0x0392, 'B' }, { 0x0395, 'E' }, { 0x0396, 'Z' }, { 0x0397, 'H' },
+    { 0x0399, 'I' }, { 0x039A, 'K' }, { 0x039C, 'M' }, { 0x039D, 'N' }, { 0x039F, 'O' },
+    { 0x03A1, 'P' }, { 0x03A4, 'T' }, { 0x03A5, 'Y' }, { 0x03A7, 'X' }, { 0x03BF, 'o' },
+    { 0x2039, '<' }, { 0x203A, '>' }, { 0x2020, '+' }, { 0x2030, '%' }, { 0x25CA, 0x04 },
+    { 0x21B5, 0x11 }, { 0x2211, 0xE4 }, { 0x2202, 'd' }, { 0x2207, 'V' }, { 0x2208, 'E' },
+    { 0x21D0, 0x1B }, { 0x2016, '|' }, { 0x03BB, 'l' }, { 0x03B3, 'y' }, { 0x0394, 0x7F },
+    { 0x03B8, 0xE9 }, { 0x2715, 'x' }, { 0x2795, '+' }, { 0x2796, '-' }, { 0x27A4, 0x10 },
+};
+
+u8 uni_to_cp437(u32 cp) {
+    if (cp < 0x80) return (u8)cp;
+    for (int i = 0; i < 128; i++)
+        if (cp437_hi[i] == cp) return (u8)(0x80 + i);
+    for (u32 i = 0; i < sizeof approx / sizeof approx[0]; i++)
+        if (approx[i].uni == cp) return approx[i].c;
+    return 0;
+}
+
+u16 cp437_to_uni(u8 c) {
+    return c < 0x80 ? c : cp437_hi[c - 0x80];
+}
+
+/* Decodifica un caracter UTF-8. Si los bytes no son UTF-8 valido los toma
+ * como Latin-1, que es lo que suele haber en archivos antiguos. */
+int utf8_decode(const u8 **pp, const u8 *end) {
+    const u8 *p = *pp;
+    if (p >= end) return -1;
+    u32 c = *p++;
+    int extra = 0;
+    if (c >= 0xF0 && c < 0xF8) { extra = 3; c &= 0x07; }
+    else if (c >= 0xE0) { extra = 2; c &= 0x0F; }
+    else if (c >= 0xC0) { extra = 1; c &= 0x1F; }
+    else { *pp = p; return (int)c; }
+    if (c >= 0xF8) { *pp = p; return (int)c; }
+    const u8 *q = p;
+    for (int i = 0; i < extra; i++) {
+        if (q >= end || (*q & 0xC0) != 0x80) { *pp = p; return (int)(*(p - 1)); }
+        c = (c << 6) | (*q++ & 0x3F);
+    }
+    *pp = q;
+    return (int)c;
+}
+
+int utf8_encode(u32 cp, char *o) {
+    if (cp < 0x80) { o[0] = (char)cp; return 1; }
+    if (cp < 0x800) { o[0] = (char)(0xC0 | cp >> 6); o[1] = (char)(0x80 | (cp & 0x3F)); return 2; }
+    o[0] = (char)(0xE0 | cp >> 12);
+    o[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    o[2] = (char)(0x80 | (cp & 0x3F));
+    return 3;
+}
+
+char *cp437_to_utf8(const char *s, u32 len, u32 *outlen) {
+    char *out = kmalloc(len * 3 + 1);
+    if (!out) return NULL;
+    u32 n = 0;
+    for (u32 i = 0; i < len; i++) n += (u32)utf8_encode(cp437_to_uni((u8)s[i]), out + n);
+    out[n] = 0;
+    if (outlen) *outlen = n;
+    return out;
+}
+
+#ifndef MIOS_POCKET    /* en el ESP32 ya las da la biblioteca de C */
+static int lower(int c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
+
+int strcasecmp(const char *a, const char *b) {
+    while (*a && lower((u8)*a) == lower((u8)*b)) { a++; b++; }
+    return lower((u8)*a) - lower((u8)*b);
+}
+
+int strncasecmp(const char *a, const char *b, size_t n) {
+    for (; n; n--, a++, b++) {
+        int d = lower((u8)*a) - lower((u8)*b);
+        if (d || !*a) return d;
+    }
+    return 0;
+}
+
+char *strdup(const char *s) {
+    size_t n = strlen(s) + 1;
+    char *d = kmalloc(n);
+    if (d) memcpy(d, s, n);
+    return d;
+}
+
+#endif
+
+int str_ends_with(const char *s, const char *suf) {
+    size_t a = strlen(s), b = strlen(suf);
+    return a >= b && !strcasecmp(s + a - b, suf);
+}
+
+int starts_with_ci(const char *s, const char *prefix) {
+    return !strncasecmp(s, prefix, strlen(prefix));
+}

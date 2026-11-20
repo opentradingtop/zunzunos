@@ -1,0 +1,11 @@
+/* Serpiente */
+#include "z.h"
+#define GW 30
+#define GH 22
+#define CS 18
+static zwin *W; static int sx[700], sy[700], len, dx, dy, nx, ny, fx, fy, score, best, over, pausa;
+static void food(void) { for (;;) { fx = rnd() % GW; fy = rnd() % GH; int ok = 1; for (int i = 0; i < len; i++) if (sx[i] == fx && sy[i] == fy) ok = 0; if (ok) return; } }
+static void reset(void) { len = 4; for (int i = 0; i < len; i++) { sx[i] = 10 - i; sy[i] = 10; } dx = nx = 1; dy = ny = 0; score = 0; over = 0; food(); }
+static void draw(void) { g_clear(W, 0x052E16); g_rect(W, 0, 0, W->w, 26, 0x14532D); char b[64]; snprintf(b, 64, _("Puntos: %d   Mejor: %d"), score, best); g_text(W, 8, 5, b, 0xFFFFFF); for (int y = 0; y < GH; y++) for (int x = 0; x < GW; x++) if ((x + y) & 1) g_rect(W, x * CS, 26 + y * CS, CS, CS, 0x064E23); g_circle(W, fx * CS + CS / 2, 26 + fy * CS + CS / 2, CS / 2 - 2, 0xEF4444, 1); for (int i = len - 1; i >= 0; i--) g_round(W, sx[i] * CS + 1, 26 + sy[i] * CS + 1, CS - 2, CS - 2, 3, i ? 0x4ADE80 : 0xBBF7D0); if (over || pausa) { const char *m = over ? "Fin. Pulsa Intro" : "Pausa"; g_text2(W, (W->w - g_textw(m) * 2) / 2, W->h / 2 - 16, m, 0xFFFFFF, 2); } zw_present(W); }
+static void step(void) { dx = nx; dy = ny; int x = sx[0] + dx, y = sy[0] + dy; if (x < 0 || y < 0 || x >= GW || y >= GH) { over = 1; return; } for (int i = 0; i < len - 1; i++) if (sx[i] == x && sy[i] == y) { over = 1; return; } int eat = x == fx && y == fy; if (eat) len++; for (int i = len - 1; i > 0; i--) { sx[i] = sx[i - 1]; sy[i] = sy[i - 1]; } sx[0] = x; sy[0] = y; if (eat) { score += 10; if (score > best) best = score; food(); } }
+int main(const char *a) { W = zw_new("Serpiente", -1, 0, GW * CS, GH * CS + 26, WF_DECOR); reset(); draw(); zevent e; u64 t = z_ms(); for (;;) { int sp = MAX(60, 140 - score / 5); long left = (long)(t + sp) - (long)z_ms(); if (left < 1) left = 1; if (z_event(&e, left)) { if (e.type == EV_CLOSE) return 0; if (e.type == EV_REDRAW) draw(); if (e.type == EV_KEY) { if (e.key == K_UP && !dy) { nx = 0; ny = -1; } else if (e.key == K_DOWN && !dy) { nx = 0; ny = 1; } else if (e.key == K_LEFT && !dx) { nx = -1; ny = 0; } else if (e.key == K_RIGHT && !dx) { nx = 1; ny = 0; } else if (e.ch == '\n' && over) reset(); else if (e.ch == ' ') pausa = !pausa; } } if (z_ms() >= t + sp) { t = z_ms(); if (!over && !pausa) step(); draw(); } } }

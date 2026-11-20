@@ -1,0 +1,105 @@
+/* Explorador de archivos: todas las unidades, seleccion multiple, copiar, cortar y pegar */
+#include "z.h"
+typedef struct { char name[256]; u64 size; int dir; u8 sel; } it_t;
+#define MAXI 2000
+#define MAXC 512
+#define TB 36
+#define PB 30
+#define RH 22
+#define SB 22
+#define SW 176
+static zwin *W; static char cwd[512] = "/"; static it_t *L; static int n, cur = -1, anchor = -1, top; static char *clip[MAXC]; static int nclip, cut; static char msg[160]; static u64 lc; static int lci = -1; static zmount M[32]; static int nm; static char pedit[512]; static int pfoc, pcur, showh;
+static const char *bts[] = {"Subir", "Nueva carpeta", "Nuevo archivo", "Renombrar", "Copiar", "Cortar", "Pegar", "Borrar"};
+static int cmp(const void *a, const void *b) { const it_t *x = a, *y = b; if (x->dir != y->dir) return y->dir - x->dir; return strcasecmp(x->name, y->name); }
+static void join(const char *dir, const char *nm_, char *o) { snprintf(o, 512, "%s%s%s", dir, strcmp(dir, "/") ? "/" : "", nm_); }
+static void title(void) { char t[560]; snprintf(t, 560, "%s - %s", _("Archivos"), cwd); zw_title(W->id, t); }
+static void load(void) { n = 0; cur = anchor = -1; top = 0; zdirent d; for (int k = 0; n < MAXI && !z_readdir(cwd, k, &d); k++) { if (d.name[0] == '.' && !showh) continue; strncpy0(L[n].name, d.name, 256); L[n].size = d.size; L[n].dir = d.is_dir; L[n].sel = 0; n++; } qsort(L, n, sizeof *L, cmp); title(); nm = z_mounts(M, 32); strcpy(pedit, cwd); pcur = strlen(pedit); }
+static void hum(u64 z, char *s) { if (z >= 1UL << 30) snprintf(s, 24, "%lu.%lu GB", z >> 30, ((z >> 20) & 1023) * 10 / 1024); else if (z >= 1 << 20) snprintf(s, 24, "%lu MB", z >> 20); else if (z >= 1024) snprintf(s, 24, "%lu KB", z >> 10); else snprintf(s, 24, "%lu B", z); }
+static int vis(void) { return (W->h - TB - PB - SB - 20) / RH; }
+static int nsel(void) { int c = 0; for (int i = 0; i < n; i++) c += L[i].sel; return c; }
+/* Lugares: carpetas de uso diario (se crean al pulsarlas si no existen) */
+#define NPL 4
+static const char *PLN[NPL] = {"Documentos", "Escritorio", "Descargas", "Capturas"}; static const u32 PLC[NPL] = {0x2563EB, 0x0D9488, 0x16A34A, 0xDB2777};
+static void place(int i, char *o) { char d[160]; z_docdir(d); zdirent st; if (i == 0) strcpy(o, d); else if (i == 1) strcpy(o, z_stat("/sys", &st) ? "/rd/tmp/ESCRITORIO" : "/sys/ESCRITORIO"); else snprintf(o, 200, "%s/%s", d, i == 2 ? "Descargas" : "Capturas"); }
+static void draw(void) {
+    g_clear(W, UI_WHITE); g_rect(W, 0, 0, W->w, TB, UI_PANEL); int x = 6; for (int i = 0; i < 8; i++) { int w = g_textw(_(bts[i])) + 14; ui_button(W, x, 5, w, 26, bts[i], 0); x += w + 3; }
+    g_rect(W, 0, TB, W->w, PB, UI_BG); ui_input(W, 6, TB + 3, W->w - 12, 24, pedit, pcur, pfoc);
+    int y0 = TB + PB; g_rect(W, 0, y0, SW, W->h - y0 - SB, UI_PANEL); g_textb(W, 10, y0 + 5, _("Unidades"), UI_TEXT); char a[24], b[24], s[300];
+    for (int i = 0; i < nm; i++) { int y = y0 + 26 + i * 38; char r[20]; snprintf(r, 20, "/%s", M[i].name); int on = !strncmp(cwd, r, strlen(r)) && (cwd[strlen(r)] == 0 || cwd[strlen(r)] == '/'); if (on) g_rect(W, 0, y, SW, 36, UI_ACC2); g_rect(W, 8, y + 7, 16, 12, !strcmp(M[i].name, "rd") ? 0x7C3AED : !strncmp(M[i].dev, "usb", 3) ? 0x0284C7 : 0x475569); g_text(W, 30, y + 2, r, UI_TEXT); hum(M[i].free_b, a); snprintf(s, 300, "%s %s", M[i].fstype, M[i].label[0] ? M[i].label : a); zw_clip(W, 30, y, SW - 34, 36); g_text(W, 30, y + 18, s, UI_MUTED); zw_noclip(W); }
+    { int y = y0 + 26 + nm * 38; g_rect(W, 8, y + 9, 16, 14, 0x64748B); g_text(W, 30, y + 8, _("Papelera"), UI_TEXT); }
+    { int y = y0 + 26 + nm * 38 + 34; g_rect(W, 8, y, SW - 16, 1, UI_LINE); g_textb(W, 10, y + 6, _("Lugares"), UI_TEXT); for (int i = 0; i < NPL; i++) { char p[200]; place(i, p); int yy = y + 28 + i * 26, on = !strcmp(cwd, p); if (on) g_rect(W, 0, yy - 3, SW, 24, UI_ACC2); g_rect(W, 10, yy + 2, 14, 11, PLC[i]); g_rect(W, 10, yy, 7, 3, PLC[i]); g_text(W, 30, yy, _(PLN[i]), UI_TEXT); } }
+    int lx = SW + 1, ly = y0 + 20, v = vis(); g_rect(W, lx, y0, W->w - lx, 20, UI_BG); g_text(W, lx + 30, y0 + 2, _("Nombre"), UI_MUTED); g_text(W, W->w - 90, y0 + 2, _("Tamaño"), UI_MUTED); zw_clip(W, lx, ly, W->w - lx, v * RH);
+    for (int i = top; i < n && i < top + v; i++) { int y = ly + (i - top) * RH; it_t *e = &L[i]; if (e->sel) g_rect(W, lx, y, W->w - lx, RH, UI_ACC2); if (i == cur) g_frame(W, lx, y, W->w - lx, RH, UI_ACC); g_rect(W, lx + 8, y + 5, 14, 12, e->dir ? 0xD97706 : 0x9CA3AF); if (e->dir) g_rect(W, lx + 8, y + 3, 7, 3, 0xD97706); zw_clip(W, lx, ly, W->w - lx - 96, v * RH); g_text(W, lx + 30, y + 3, e->name, UI_TEXT); zw_clip(W, lx, ly, W->w - lx, v * RH); if (!e->dir) { hum(e->size, b); g_text(W, W->w - 12 - g_textw(b), y + 3, b, UI_MUTED); } }
+    zw_noclip(W); g_rect(W, 0, W->h - SB, W->w, SB, UI_PANEL); int k = nsel(); snprintf(s, 300, "%d %s, %d %s%s  %s", n, _("elementos"), k, _("seleccionados"), nclip ? cut ? _(", hay elementos cortados") : _(", hay elementos copiados") : "", msg); g_text(W, 8, W->h - SB + 3, s, UI_TEXT); zw_present(W);
+}
+static int ends(const char *s, const char *e) { int a = strlen(s), b = strlen(e); return a >= b && !strcasecmp(s + a - b, e); }
+static void cd(const char *p) { zdirent d; if (strcmp(p, "/") && (z_stat(p, &d) || !d.is_dir)) { snprintf(msg, 160, "%s %s", _("No se puede abrir"), p); return; } strncpy0(cwd, p, 512); int l = strlen(cwd); if (l > 1 && cwd[l - 1] == '/') cwd[l - 1] = 0; msg[0] = 0; load(); }
+/* Imprimir un archivo: fotos y textos aqui mismo; documentos, PDF y paginas web en su programa con el dialogo ya abierto */
+static void print_it(int i) { it_t *e = &L[i]; if (e->dir) return; char p[512]; join(cwd, e->name, p); const char *app = z_app_for(p);
+    if (!strcmp(app, "viewer")) { u32 *px; int w, h; if (z_img_load(p, &px, &w, &h)) { strcpy(msg, _("No se pudo leer la imagen")); return; } zp_print_image(e->name, px, w, h); free(px); }
+    else if (!strcmp(app, "editor")) { long sz; char *t = z_readfile(p, &sz); if (!t) { strcpy(msg, _("No se pudo leer el archivo")); return; } zp_print_text(e->name, p, t, 1); free(t); }
+    else if (!strcmp(app, "pdf") || !strcmp(app, "escritor") || !strcmp(app, "hoja") || !strcmp(app, "diapos") || !strcmp(app, "browser")) { char a[540], b[40]; snprintf(a, 540, "--imprimir %s", p); snprintf(b, 40, "/rd/bin/%s", app); z_spawn(b, a); }
+    else strcpy(msg, _("Este tipo de archivo no se puede imprimir"));
+    char m[600]; snprintf(m, 600, "[prueba] archivos imprimir %s (%s)", p, app); z_log(m); }
+/* Crear acceso directo en: Escritorio, Documentos u otra carpeta */
+static void shortcut_to(int i, int sx, int sy) { char t[512]; join(cwd, L[i].name, t); static const char *it[] = {"Escritorio", "Documentos", "Otra carpeta..."}; int r = ui_menu(sx + 20, sy + 20, it, 3); if (r < 0) return; char dir[300];
+    if (r == 0) place(1, dir); else if (r == 1) place(0, dir); else { strcpy(dir, cwd); if (!ui_prompt("Crear acceso directo", "Carpeta donde crearlo:", dir, 290) || !dir[0]) return; } z_mkdir(dir);
+    char made[400]; int e = z_make_shortcut(t, dir, made, 400); if (e) snprintf(msg, 160, "%s: %s", _("No se pudo crear el acceso directo"), z_errstr(e)); else snprintf(msg, 160, "%s: %s", _("Acceso directo creado"), made); char m[600]; snprintf(m, 600, "[prueba] acceso directo %s -> %s: %d", made, t, e); z_log(m); load(); }
+static void open_it(int i) { it_t *e = &L[i]; char p[512]; join(cwd, e->name, p); if (e->dir) { cd(p); return; } { char t[400]; zdirent st; if (!z_shortcut_target(p, t, 400) && !z_stat(t, &st) && st.is_dir) { cd(t); return; } } if (!strncmp(cwd, "/rd/bin", 7)) { z_spawn(p, ""); return; } z_open_path(p); }
+/* --- progreso --- */
+static zwin *PW; static u64 p_total, p_done, p_t; static int p_cancel; static char p_name[80];
+static void p_draw(void) { g_clear(PW, UI_BG); zw_clip(PW, 12, 8, PW->w - 24, 20); g_text(PW, 12, 10, p_name, UI_TEXT); zw_noclip(PW); g_rect(PW, 12, 34, PW->w - 24, 12, UI_LINE); if (p_total) g_rect(PW, 12, 34, (PW->w - 24) * (p_done >> 10) / MAX(1UL, p_total >> 10), 12, UI_ACC); char a[24], b[24], s[60]; hum(p_done, a); hum(p_total, b); snprintf(s, 60, "%s %s %s", a, _("de"), b); g_text(PW, 12, 54, s, UI_MUTED); ui_button(PW, PW->w - 96, 50, 84, 26, "Cancelar", 0); zw_present(PW); }
+static void p_tick(const char *nm_) { if (nm_) strncpy0(p_name, nm_, 80); u64 t = z_ms(); if (t - p_t < 120) return; p_t = t; zevent e; while (z_event(&e, 0)) if (e.win == (u32)PW->id && ((e.type == EV_DOWN && e.x >= PW->w - 96 && e.y >= 50) || (e.type == EV_KEY && e.ch == 27) || e.type == EV_CLOSE)) p_cancel = 1; p_draw(); }
+static void p_open(const char *t, u64 total) { zsys s; z_sysinfo(&s); PW = zw_new(t, (s.scr_w - 400) / 2, (s.scr_h - 90) / 2, 400, 86, WF_DECOR); p_total = total; p_done = 0; p_cancel = 0; p_t = 0; p_name[0] = 0; p_draw(); }
+static void p_close(void) { zw_close(PW); PW = 0; }
+static char **kids(const char *p, int *cnt) { int cap = 64, c = 0; char **v = malloc(cap * sizeof *v); zdirent d; while (!z_readdir(p, c, &d)) { if (c == cap) { cap *= 2; v = realloc(v, cap * sizeof *v); } v[c++] = strdup(d.name); if (c >= 20000) break; } *cnt = c; return v; }
+static void kfree_(char **v, int c) { for (int i = 0; i < c; i++) free(v[i]); free(v); }
+static u64 tree_size(const char *p) { zdirent d; if (z_stat(p, &d)) return 0; if (!d.is_dir) return d.size; u64 t = 0; int c; char **v = kids(p, &c); char *q = malloc(512); for (int i = 0; i < c; i++) { join(p, v[i], q); t += tree_size(q); } free(q); kfree_(v, c); return t; }
+static char *cbuf;
+static int copy_file(const char *a, const char *b) { int f = z_open(a, O_READ); if (f < 0) return f; int g = z_open(b, O_WRITE | O_CREATE | O_TRUNC); if (g < 0) { z_close(f); return g; } long r; int e = 0; while ((r = z_read(f, cbuf, 256 * 1024)) > 0) { long w = z_write(g, cbuf, r); if (w != r) { e = w < 0 ? (int)w : -28; break; } p_done += r; p_tick(0); if (p_cancel) { e = -125; break; } } if (r < 0) e = r; z_close(f); z_close(g); if (e) z_unlink(b); return e; }
+static int copy_tree(const char *a, const char *b) { zdirent d; int e = z_stat(a, &d); if (e) return e; const char *bn = strrchr(a, '/'); p_tick(bn ? bn + 1 : a); if (!d.is_dir) return copy_file(a, b); e = z_mkdir(b); if (e && e != -17) return e; int c; char **v = kids(a, &c); char *x = malloc(1024), *y = x + 512; e = 0; for (int i = 0; i < c && !e && !p_cancel; i++) { join(a, v[i], x); join(b, v[i], y); e = copy_tree(x, y); } free(x); kfree_(v, c); return e; }
+static int rm_tree(const char *p) { zdirent d; int e = z_stat(p, &d); if (e) return e; if (d.is_dir) { int c; char **v = kids(p, &c); char *x = malloc(512); for (int i = 0; i < c && !e; i++) { join(p, v[i], x); e = rm_tree(x); } free(x); kfree_(v, c); if (e) return e; } if (PW) { p_done++; p_tick(0); } return z_unlink(p); }
+static void set_clip(int c) { for (int i = 0; i < nclip; i++) free(clip[i]); nclip = 0; cut = c; char p[512]; for (int i = 0; i < n && nclip < MAXC; i++) if (L[i].sel) { join(cwd, L[i].name, p); clip[nclip++] = strdup(p); } snprintf(msg, 160, "%d %s", nclip, _("en el portapapeles")); }
+static int same_vol(const char *a, const char *b) { const char *x = strchr(a + 1, '/'), *y = strchr(b + 1, '/'); int l = x ? x - a : (int)strlen(a), k = y ? y - b : (int)strlen(b); return l == k && !strncmp(a, b, l); }
+static void paste(void) {
+    if (!nclip) return; if (!strcmp(cwd, "/")) { strcpy(msg, _("Entra primero en una unidad")); return; } u64 tot = 0; for (int i = 0; i < nclip; i++) tot += tree_size(clip[i]); p_open(_(cut ? "Moviendo" : "Copiando"), tot); int e = 0, done = 0;
+    for (int i = 0; i < nclip && !e && !p_cancel; i++) { char *s = clip[i], d[512], nm2[256]; const char *base = strrchr(s, '/') + 1; strncpy0(nm2, base, 256); join(cwd, nm2, d); int l = strlen(s); if (!strncmp(cwd, s, l) && (cwd[l] == '/' || !cwd[l]) && strcmp(s, d)) { e = -22; strcpy(msg, _("No se puede copiar una carpeta dentro de sí misma")); break; } zdirent st; if (!strcmp(s, d)) { if (cut) continue; for (int t = 1; t < 100; t++) { char *dot = strrchr(base, '.'); if (dot && dot != base) { char stem[256]; int sl = MIN((int)(dot - base), 255); memcpy(stem, base, sl); stem[sl] = 0; snprintf(nm2, 256, "%s (%s %d)%s", stem, _("copia"), t, dot); } else snprintf(nm2, 256, "%s (%s %d)", base, _("copia"), t); join(cwd, nm2, d); if (z_stat(d, &st)) break; } } else if (!z_stat(d, &st)) { char q[320]; snprintf(q, 320, "%s %.200s?", _("¿Reemplazar"), nm2); if (!ui_confirm("Ya existe", q)) continue; if (!st.is_dir) z_unlink(d); }
+        if (cut && same_vol(s, d)) { e = z_rename(s, d); if (e == -17) e = 0; else if (!e) p_done += tree_size(d); } else { e = copy_tree(s, d); if (!e && cut && !p_cancel) e = rm_tree(s); } if (!e) done++; }
+    int canc = p_cancel; p_close(); z_sync(); if (cut && !e && !canc) { for (int i = 0; i < nclip; i++) free(clip[i]); nclip = 0; } load(); if (canc || e == -125) strcpy(msg, _("Cancelado")); else if (e) { if (e != -22) snprintf(msg, 160, "Error: %s", z_errstr(e)); } else snprintf(msg, 160, "%d %s", done, _("elementos pegados")); char m[180]; snprintf(m, 180, "[prueba] pegar en %s: %d ok, error %d", cwd, done, e); z_log(m);
+}
+static int rw_ok(void) { char v[20]; int i = 0; const char *p = cwd + 1; while (*p && *p != '/' && i < 19) v[i++] = *p++; v[i] = 0; zmount m[32]; int c = z_mounts(m, 32); for (int k = 0; k < c; k++) if (!strcmp(m[k].name, v)) { if (!m[k].ro) return 1; if (strncmp(m[k].fstype, "fat", 3) && strcmp(m[k].fstype, "ramfs") && strcmp(m[k].fstype, "exfat")) { strcpy(msg, _("Este formato solo se puede leer")); return 0; } char q[160]; snprintf(q, 160, "/%s: %s", v, _("protegida contra escritura. ¿Desbloquear?")); if (!ui_confirm("Unidad protegida", q)) return 0; z_set_ro(v, 0); nm = z_mounts(M, 32); return 1; } return 1; }
+static int in_trash(void) { return strstr(cwd, "/.PAPELERA") != 0; }
+static void del(int hard) { int k = nsel(); if (!k) return; if (in_trash()) hard = 1; char q[160]; if (hard) { snprintf(q, 160, "%s %d %s", _("¿Borrar"), k, _("elemento(s) para siempre? No se puede deshacer.")); if (!ui_confirm("Borrar", q)) return; } int e = 0, ok = 0; char p[512];
+    if (!hard) { for (int i = 0; i < n && !e; i++) if (L[i].sel) { join(cwd, L[i].name, p); e = z_trash(p); if (!e) ok++; } z_sync(); load(); if (e) snprintf(msg, 160, "%s: %s", _("No se pudo mover a la papelera"), z_errstr(e)); else snprintf(msg, 160, "%d %s", ok, _("a la papelera")); char m[80]; snprintf(m, 80, "[prueba] a la papelera: %d, error %d", ok, e); z_log(m); return; }
+    p_open(_("Borrando"), k); for (int i = 0; i < n && !e && !p_cancel; i++) if (L[i].sel) { join(cwd, L[i].name, p); e = rm_tree(p); } p_close(); z_sync(); load(); if (e) snprintf(msg, 160, "Error: %s", z_errstr(e)); }
+static void act(int b) {
+    char p[512], q[512], nm2[200] = ""; int e = 0; msg[0] = 0; if (b != 0 && b != 4 && b != 5 && !strcmp(cwd, "/")) { strcpy(msg, _("Entra primero en una unidad")); return; }
+    if (b == 0) { char t[512]; strcpy(t, cwd); char *s = strrchr(t, '/'); if (s && s != t) *s = 0; else strcpy(t, "/"); cd(t); return; }
+    if ((b == 1 || b == 2 || b == 3 || b == 6 || b == 7) && !rw_ok()) return;
+    if (b == 1) { if (ui_prompt("Nueva carpeta", "Nombre:", nm2, 190) && nm2[0]) { join(cwd, nm2, p); e = z_mkdir(p); z_sync(); load(); } }
+    else if (b == 2) { if (ui_prompt("Nuevo archivo", "Nombre:", nm2, 190) && nm2[0]) { join(cwd, nm2, p); int f = z_open(p, O_WRITE | O_CREATE); if (f < 0) e = f; else z_close(f); z_sync(); load(); } }
+    else if (b == 3 && cur >= 0) { strncpy0(nm2, L[cur].name, 190); join(cwd, nm2, p); if (ui_prompt("Renombrar", "Nuevo nombre:", nm2, 190) && nm2[0]) { join(cwd, nm2, q); e = z_rename(p, q); z_sync(); load(); } }
+    else if (b == 4 || b == 5) { if (nsel()) set_clip(b == 5); } else if (b == 6) paste(); else if (b == 7) del(0); else if (b == 8) { if (rw_ok()) del(1); }
+    if (e) snprintf(msg, 160, "Error: %s", z_errstr(e));
+}
+static void props(void) { if (cur < 0) return; char p[512], s[24], m[300]; join(cwd, L[cur].name, p); hum(tree_size(p), s); snprintf(m, 300, "%.60s: %s", L[cur].name, s); ui_confirm("Propiedades", m); }
+static void ctx(int sx, int sy) {
+    static const char *it[] = {"Abrir", "Imprimir", "Crear acceso directo en...", "Copiar", "Cortar", "Pegar", "Renombrar", "Mover a la papelera", "Borrar del todo", "Nueva carpeta", "Seleccionar todo", "Propiedades"}; static const int mp[] = {-1, -4, -5, 4, 5, 6, 3, 7, 8, 1, -3, -2};
+    int r = ui_menu(sx, sy, it, 12); if (r < 0) return; if (mp[r] == -1) { if (cur >= 0) open_it(cur); } else if (mp[r] == -4) { if (cur >= 0) print_it(cur); } else if (mp[r] == -5) { if (cur >= 0) shortcut_to(cur, sx, sy); } else if (mp[r] == -2) props(); else if (mp[r] == -3) { for (int k = 0; k < n; k++) L[k].sel = 1; } else act(mp[r]);
+}
+static void drive_ctx(int i, int sx, int sy) { static const char *it[] = {"Abrir", "Expulsar de forma segura"}; int r = ui_menu(sx, sy, it, 2); char p[20]; snprintf(p, 20, "/%s", M[i].name); if (r == 0) cd(p); else if (r == 1) { if (!strcmp(M[i].name, "sys") && !ui_confirm("Expulsar", "Esta unidad contiene el sistema. Si la quitas, se perderán los ajustes hasta reiniciar. ¿Seguir?")) return; char dev[16]; strncpy0(dev, M[i].dev, 16); int e = z_eject(dev); if (e == -22) strcpy(msg, _("Esta unidad no es extraíble")); else if (e) snprintf(msg, 160, "Error: %s", z_errstr(e)); else { snprintf(msg, 160, "%s %s", dev, _("ya se puede retirar con seguridad")); if (!strncmp(cwd, p, strlen(p))) strcpy(cwd, "/"); } char m[60]; snprintf(m, 60, "[prueba] expulsar %s: %d", dev, e); z_log(m); nm = z_mounts(M, 32); load(); } }
+static void pick(int i, int mods) { if (mods & M_SHIFT && anchor >= 0) { for (int k = 0; k < n; k++) L[k].sel = k >= MIN(anchor, i) && k <= MAX(anchor, i); } else if (mods & M_CTRL) { L[i].sel ^= 1; anchor = i; } else { for (int k = 0; k < n; k++) L[k].sel = 0; L[i].sel = 1; anchor = i; } cur = i; }
+int main(const char *a) {
+    L = malloc(MAXI * sizeof *L); cbuf = malloc(256 * 1024); W = zw_new("Archivos", -1, 0, 800, 500, WF_DECOR | WF_RESIZE); nm = z_mounts(M, 32); if (a[0]) strncpy0(cwd, a, 512); else if (nm) { zdirent d; strcpy(cwd, z_stat("/sys", &d) ? "/rd" : "/sys"); } load(); draw(); zevent e;
+    for (;;) { if (!z_event(&e, 2000)) { int c = z_mounts(M, 32); if (c != nm) { nm = c; zdirent d; if (strcmp(cwd, "/") && z_stat(cwd, &d)) strcpy(cwd, "/"); load(); draw(); } continue; } if (e.type == EV_REDRAW) { title(); draw(); continue; } if (e.win != (u32)W->id) continue; int v = vis(), y0 = TB + PB, ly = y0 + 20;
+        if (e.type == EV_CLOSE) return 0; if (e.type == EV_RESIZE) zw_resized(W, e.x, e.y);
+        else if (e.type == EV_WHEEL) top = MAX(0, MIN(top - (int)e.key * 3, MAX(0, n - v)));
+        else if (e.type == EV_DOWN) { pfoc = 0;
+            if (e.y < TB) { int x = 6; for (int i = 0; i < 8; i++) { int w = g_textw(_(bts[i])) + 14; if (e.x >= x && e.x < x + w) { act(i); break; } x += w + 3; } }
+            else if (e.y < y0) { pfoc = 1; pcur = strlen(pedit); }
+            else if (e.x < SW) { int i = (e.y - y0 - 26) / 38; if (e.y >= y0 + 26 && i < nm) { if (e.btn & 2) { int sx, sy; zw_screen(W, e.x, e.y, &sx, &sy); drive_ctx(i, sx, sy); } else { char p[20]; snprintf(p, 20, "/%s", M[i].name); cd(p); } } else if (e.y >= y0 + 26 && i == nm) z_spawn("/rd/bin/papelera", ""); else { int py = y0 + 26 + nm * 38 + 34 + 28 - 3, k = (e.y - py) / 26; if (e.y >= py && k >= 0 && k < NPL) { char p[200]; place(k, p); z_mkdir(p); cd(p); } } }
+            else if (e.y >= ly && e.y < W->h - SB) { int i = top + (e.y - ly) / RH; if (i < n) { if (e.btn & 2) { if (!L[i].sel) pick(i, 0); draw(); zwininfo w; zw_info(W->id, &w); ctx(w.x + e.x, w.y + e.y); } else { u64 t = z_ms(); if (i == lci && t - lc < 500 && !(e.mods & (M_CTRL | M_SHIFT))) { lci = -1; open_it(i); } else { pick(i, e.mods); lci = i; lc = t; } } } else { for (int k = 0; k < n; k++) L[k].sel = 0; cur = -1; if (e.btn & 2) { draw(); zwininfo w; zw_info(W->id, &w); ctx(w.x + e.x, w.y + e.y); } } }
+        } else if (e.type == EV_KEY) { if (pfoc) { if (e.ch == '\n') { pfoc = 0; char t[512]; strcpy(t, pedit); cd(t); } else if (e.ch == 27) { pfoc = 0; strcpy(pedit, cwd); } else ui_input_key(pedit, 500, &pcur, &e); }
+            else if (e.ch == 1) { for (int k = 0; k < n; k++) L[k].sel = 1; } else if (e.ch == 3) act(4); else if (e.ch == 24) act(5); else if (e.ch == 22) act(6); else if (e.key == K_DOWN || e.key == K_UP) { int c = cur + (e.key == K_DOWN ? 1 : -1); if (c >= 0 && c < n) pick(c, e.mods); } else if (e.ch == '\n' && cur >= 0) open_it(cur); else if (e.key == K_BS) act(0); else if (e.key == K_DEL) act(e.mods & M_SHIFT ? 8 : 7); else if (e.ch == 8 && (e.mods & M_CTRL)) { showh = !showh; load(); } else if (e.key == K_F5) load(); else if (e.key == 0x3B) act(3); if (cur >= 0) { if (cur < top) top = cur; if (cur >= top + v) top = cur - v + 1; } }
+        else continue; draw(); }
+}

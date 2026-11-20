@@ -1,0 +1,4 @@
+ZunzunOS
+
+Escribe "ayuda" en la Terminal para ver las ordenes.
+Lo que guardes en /sys queda en la memoria USB; /rd se borra al apagar.

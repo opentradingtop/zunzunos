@@ -1,0 +1,14 @@
+ZunzunOS - memoria USB de arranque
+==================================
+
+COMO ARRANCAR
+1. Conecta la memoria con el PC apagado.
+2. Al encender, pulsa la tecla del menu de arranque:
+   F12 (Lenovo, Dell, Acer), F9 (HP), F8 o Esc (Asus), F11 (MSI).
+3. Elige esta memoria USB.
+4. Si el PC usa UEFI, desactiva antes "Secure Boot" en su configuracion.
+
+Requiere un procesador x86 de 64 bits. No arranca en Mac con Apple Silicon.
+
+NO BORRES las carpetas EFI y ZUNZUN: contienen el sistema.
+Puedes guardar aqui tus archivos. Dentro de ZunzunOS estan en /sys.

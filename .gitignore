@@ -1,0 +1,6 @@
+# Compilacion, imagenes de disco, respaldos de la memoria USB y registros de hardware
+build/
+*.img
+*.iso
+.DS_Store
+__pycache__/
