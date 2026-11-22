@@ -73,3 +73,50 @@ int z_http(const char *method, const char *url, const char *body, long bl, const
     return -40; }
 int z_http_get(const char *url, char **body, long *len, char *fin, int fcap, int *status) { zhttp_info i; int e = z_http("GET", url, 0, 0, 0, body, len, &i); if (status) *status = i.status; if (fin && !e) strncpy0(fin, i.final, fcap); return e; }
 const char *z_http_err(int e) { return e == -1001 ? tr("certificado no fiable") : e == -1002 ? tr("el certificado es de otro sitio") : e == -1003 ? tr("certificado caducado") : e == -1004 ? tr("fallo en la conexion segura") : z_errstr(e); }
+/* ---------- z_http_ex: peticion para APIs (JSON, SSE) con cabeceras propias y lectura progresiva.
+   Sin cookies ni redirecciones. Mientras espera a la red llama a o->pump cada 100 ms (la ventana sigue
+   viva); si pump devuelve distinto de 0 se cancela con -125. Las respuestas 2xx van a o->cb segun llegan
+   (ya sin trozos); si no hay cb, o la respuesta no es 2xx, el cuerpo entero queda en *out. ---------- */
+typedef struct { int s, cancel, err; const zhttp_opt *o; u64 lastp; } xio_t;
+/* atiende la ventana como mucho cada 100 ms, tambien cuando los datos llegan sin pausa */
+static int x_pump(xio_t *x) { if (!x->o->pump || z_ms() - x->lastp < 100) return 0; x->lastp = z_ms(); if (x->o->pump(x->o->ctx)) x->cancel = 1; return x->cancel; }
+static long x_rcv(void *io, void *d, long n, int to) { xio_t *x = io; long lim = x->o->timeout_ms ? x->o->timeout_ms : 120000; u64 t0 = z_ms();
+    for (;;) { if (x->cancel) return -125; long r = z_recv(x->s, d, n, x->o->pump ? 100 : (int)lim); if (r != -110) { if (r < 0) x->err = r; return r; }
+        if ((long)(z_ms() - t0) >= lim) { x->err = -110; return -110; } if (x->o->pump) { x->lastp = 0; if (x_pump(x)) return -125; } } }
+static long x_snd(void *io, const void *d, long n) { return z_send(((xio_t *)io)->s, d, n); }
+/* quita el formato por trozos (chunked) segun llega; st: 0 tamano, 1 datos, 2 fin de linea, 3 terminado */
+typedef struct { int st, ext, stop; long left; sb_t *acc; const zhttp_opt *o; } dch_t;
+static void d_emit(dch_t *k, const char *p, long n) { if (!n || k->stop) return; if (k->acc) sb_add(k->acc, p, n); else if (k->o->cb(p, n, k->o->ctx)) k->stop = 1; }
+static void d_feed(dch_t *k, int chunked, const char *p, long n) {
+    if (!chunked) { d_emit(k, p, n); return; }
+    for (long i = 0; i < n && k->st != 3 && !k->stop; ) {
+        if (k->st == 0) { char c = p[i++]; if (c == '\n') { k->st = k->left ? 1 : 3; k->ext = 0; } else if (c == ';') k->ext = 1; else if (!k->ext && isxd(c)) k->left = k->left * 16 + (isdigit(c) ? c - '0' : (tolower(c) - 'a' + 10)); continue; }
+        if (k->st == 1) { long m = MIN(k->left, n - i); d_emit(k, p + i, m); i += m; k->left -= m; if (!k->left) k->st = 2; continue; }
+        if (p[i++] == '\n') { k->st = 0; k->left = 0; } } }
+int z_http_ex(const char *method, const char *url, const char *body, long bl, const char *ctype, const zhttp_opt *o, char **out, long *olen, zhttp_info *inf) {
+    zhttp_info dummy; if (!inf) inf = &dummy; memset(inf, 0, sizeof *inf); if (out) *out = 0; if (olen) *olen = 0; static const zhttp_opt none; if (!o) o = &none;
+    if (!roots) { roots = (u8 *)z_readfile("/rd/res/raices.bin", &nroots); if (roots) tls_set_roots(roots, nroots); }
+    char host[128], path[1024]; int port, tls; int e = split_url(url, &tls, host, &port, path); if (e) return e; inf->tls = tls; strncpy0(inf->final, url, sizeof inf->final);
+    u32 ip; e = z_dns(host, &ip); if (e) return e; xio_t x = {z_socket(1), 0, 0, o, 0}; if (x.s < 0) return x.s; e = z_connect(x.s, ip, port, 10000); if (e) { z_close(x.s); return e; }
+    ztls *t = 0; if (tls) { t = calloc(1, sizeof(ztls)); t->io = &x; t->snd = x_snd; t->rcv = x_rcv; t->alloc = io_alloc; t->free_ = free;
+        if (tls_handshake(t, host, now_num())) { strncpy0(inf->err, t->err, 96); free(t); z_close(x.s); return x.cancel ? -125 : x.err == -110 ? -110 : -1004; }
+        inf->cert = t->cert_status; if (t->cert_status && !z_https_allow_bad && strcmp(allow_host, host)) { int c = t->cert_status; free(t); z_close(x.s); return -1000 - c; } }
+    sb_t rq = {0}; sb_s(&rq, method ? method : "GET"); sb_s(&rq, " "); sb_s(&rq, path); sb_s(&rq, " HTTP/1.1\r\nHost: "); sb_s(&rq, host);
+    sb_s(&rq, o->cb ? "\r\nUser-Agent: ZunzunOS/2.2\r\nAccept: application/json, text/event-stream\r\nAccept-Encoding: identity\r\nConnection: close\r\n" : "\r\nUser-Agent: ZunzunOS/2.2\r\nAccept: application/json, */*;q=0.5\r\nAccept-Encoding: gzip\r\nConnection: close\r\n");
+    if (o->hdrs) sb_s(&rq, o->hdrs); if (body) sb_f(&rq, "Content-Type: %s\r\nContent-Length: %ld\r\n", ctype ? ctype : "application/json", bl); sb_s(&rq, "\r\n");
+    int ok = (t ? tls_write(t, rq.p, rq.n) : x_snd(&x, rq.p, rq.n)) == rq.n; if (ok && body && bl) { long w = 0; while (w < bl) { long r = t ? tls_write(t, body + w, bl - w) : z_send(x.s, body + w, bl - w); if (r <= 0) { ok = 0; break; } w += r; } } free(rq.p);
+    if (!ok) { free(t); z_close(x.s); return x.cancel ? -125 : -5; }
+    sb_t hb = {0}, acc = {0}; char buf[8192]; long he = -1, clen = -1, got = 0; int chunked = 0, gz = 0, r = 0; dch_t k = {0, 0, 0, 0, 0, o};
+    for (;;) { long n = t ? tls_read(t, buf, sizeof buf) : x_rcv(&x, buf, sizeof buf, 0);
+        if (n <= 0) { if (x.cancel) r = -125; else if (he < 0) r = x.err ? x.err : -5; else if (x.err && k.st != 3 && !(clen >= 0 && got >= clen)) r = x.err; break; }
+        if (he < 0) { sb_add(&hb, buf, n); char *q = 0; for (long i = 3; i < hb.n; i++) if (hb.p[i] == '\n' && hb.p[i - 1] == '\r' && hb.p[i - 2] == '\n' && hb.p[i - 3] == '\r') { q = hb.p + i + 1; break; }
+            if (!q) { if (hb.n > 65536) { r = -5; break; } continue; } he = q - hb.p; char save = *q; *q = 0; char *sp = strchr(hb.p, ' '); inf->status = sp ? atoi(sp + 1) : 0;
+            const char *ct = hdr(hb.p, "content-type"); if (ct) { int i = 0; while (ct[i] && ct[i] != '\r' && i < 95) { inf->ctype[i] = tolower(ct[i]); i++; } inf->ctype[i] = 0; }
+            const char *te = hdr(hb.p, "transfer-encoding"); chunked = te && !strncasecmp(te, "chunked", 7); const char *ce = hdr(hb.p, "content-encoding"); gz = ce && !strncasecmp(ce, "gzip", 4); const char *cl = hdr(hb.p, "content-length"); if (cl && !chunked) clen = atol_(cl);
+            *q = save; k.acc = (!o->cb || gz || inf->status < 200 || inf->status > 299) ? &acc : 0; got = hb.n - he; d_feed(&k, chunked, hb.p + he, got); }
+        else { got += n; d_feed(&k, chunked, buf, n); }
+        if (k.stop || k.st == 3 || (clen >= 0 && got >= clen)) break; if (x_pump(&x)) { r = -125; break; } }
+    free(t); z_close(x.s); free(hb.p); if (r) { free(acc.p); return r; }
+    if (gz && acc.n) { u8 *dec = 0; long dl = gunzip((u8 *)acc.p, acc.n, &dec); if (dl >= 0) { free(acc.p); acc.p = (char *)dec; acc.n = dl; } }
+    if (o->cb && k.acc && inf->status >= 200 && inf->status <= 299) { if (acc.n) o->cb(acc.p, acc.n, o->ctx); free(acc.p); return 0; }
+    if (out) { if (!acc.p) sb_add(&acc, "", 0); *out = acc.p; if (olen) *olen = acc.n; } else free(acc.p); return 0; }

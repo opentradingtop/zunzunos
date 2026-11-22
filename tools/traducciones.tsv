@@ -954,3 +954,108 @@ Condiciones	-	Conditions
 Buscar en tablas	-	Lookup
 Fechas	-	Dates
 Finanzas	-	Finance
+IA	-	AI
+Gratis	-	Free
+precio variable	-	variable price
+El servidor tardó demasiado en responder	-	The server took too long to respond
+No hay conexión con el servidor de la API: revisa la red	-	Cannot reach the API server: check the network
+Esa es una clave de gestión: crea una clave normal en openrouter.ai/keys	-	That is a management key: create a regular key at openrouter.ai/keys
+La API key no es válida o no tiene permiso. Revísala en Ajustes.	-	The API key is not valid or lacks permission. Check it in Settings.
+La cuenta no tiene saldo para este modelo. Elige un modelo gratuito o añade crédito en OpenRouter.	-	The account has no credit for this model. Pick a free model or add credit on OpenRouter.
+Demasiadas peticiones o el modelo gratuito está saturado. Espera un momento o cambia de modelo.	-	Too many requests or the free model is busy. Wait a moment or switch models.
+Este modelo no está disponible ahora. Elige otro en Modelo.	-	This model is not available right now. Pick another one in Model.
+El modelo no acepta esta petición (modelo o tamaño del contexto).	-	The model does not accept this request (model or context size).
+El servidor de la API tiene un problema. Prueba de nuevo en un momento.	-	The API server has a problem. Try again in a moment.
+No se pudo obtener respuesta.	-	Could not get a response.
+Descargando la lista de modelos...	-	Downloading the model list...
+No se pudo descargar la lista de modelos	-	Could not download the model list
+El servidor no devolvió modelos; se muestra la lista básica	-	The server returned no models; showing the basic list
+%d modelos, %d gratuitos	-	%d models, %d free
+Comprobando la clave...	-	Checking the key...
+Las claves de OpenRouter empiezan por sk-or-v1-.	-	OpenRouter keys start with sk-or-v1-.
+Clave %s. Gastado: $%.4f de $%.2f.	-	Key %s. Spent: $%.4f of $%.2f.
+Clave %s. Gastado: $%.4f (sin límite).	-	Key %s. Spent: $%.4f (no limit).
+La clave funciona (comprobada con una petición real).	-	The key works (checked with a real request).
+Clave válida	-	Valid key
+Clave no válida	-	Invalid key
+Clave sin verificar: no se pudo contactar con el servidor	-	Key not verified: could not reach the server
+Esc para detener	-	Esc to stop
+El modelo no devolvió texto. Prueba de nuevo o elige otro modelo.	-	The model returned no text. Try again or pick another model.
+Detenido	-	Stopped
+Respuesta de	-	Answer from
+ (detenida)	-	 (stopped)
+no se pudo guardar el chat	-	could not save the chat
+Tú	-	You
+Razonamiento	-	Reasoning
+palabras	-	words
+  ·  detenida	-	  ·  stopped
+¿Cómo recupero archivos borrados de una memoria USB?	-	How do I recover deleted files from a USB stick?
+Escribe un poema corto sobre el colibrí	-	Write a short poem about the hummingbird
+Dame ideas para organizar mi semana	-	Give me ideas to plan my week
+Explícame qué es un sistema operativo	-	Explain what an operating system is
+Sin clave	-	No key
+Sin verificar	-	Not verified
+Clave guardada	-	Key saved
+Nuevo chat	-	New chat
+Chats	-	Chats
+Ajustes	-	Settings
+Conversaciones	-	Conversations
+Aún no hay chats guardados.	-	No saved chats yet.
+Chat nuevo	-	New chat
+código	-	code
+Reintentar	-	Retry
+Razonando	-	Reasoning
+Pensando	-	Thinking
+Chat con IA para ZunzúnOS	-	AI chat for ZunzúnOS
+Añade tu API key gratuita de OpenRouter para empezar.	-	Add your free OpenRouter API key to get started.
+Añadir API key	-	Add API key
+Escribe un mensaje...	-	Type a message...
+Intro envía  ·  Mayús+Intro, nueva línea	-	Enter sends  ·  Shift+Enter, new line
+API key de OpenRouter	-	OpenRouter API key
+API key (opcional en servidores locales)	-	API key (optional on local servers)
+Guardar y comprobar	-	Save and check
+Probar de nuevo	-	Test again
+Borrar clave	-	Remove key
+Crea una clave gratuita en openrouter.ai/keys (empieza por sk-or-v1-). Se guarda solo en esta memoria (ZUNZUN/LUMEN.TXT) y solo se envía al servidor de la API.	-	Create a free key at openrouter.ai/keys (it starts with sk-or-v1-). It is stored only on this drive (ZUNZUN/LUMEN.TXT) and is sent only to the API server.
+Instrucciones de sistema para todos los chats	-	System instructions for all chats
+Instrucciones solo para este chat (tienen prioridad)	-	Instructions for this chat only (take priority)
+Temperatura	-	Temperature
+Máximo de tokens	-	Max tokens
+Respuesta en vivo	-	Live answer
+auto	-	auto
+Servidor de la API (compatible con OpenAI; también en la red local)	-	API server (OpenAI compatible; also on the local network)
+Datos	-	Data
+Borrar todos los chats	-	Delete all chats
+%d chats en %s/LUMEN	-	%d chats in %s/LUMEN
+Elegir modelo	-	Choose a model
+Actualizar lista	-	Refresh list
+Lista actualizada:	-	List updated:
+los modelos gratuitos tienen límites de uso y cambian a menudo	-	free models have usage limits and change often
+Lista básica sin conexión: pulsa Actualizar lista para ver todos los modelos	-	Basic offline list: click Refresh list to see all models
+Ningún modelo coincide con la búsqueda.	-	No model matches the search.
+contexto	-	context
+%d mensajes	-	%d messages
+Espera a que termine (Esc para detener)	-	Wait for it to finish (Esc to stop)
+Chat	-	Chat
+Instrucciones de sistema	-	System instructions
+Exportado desde LUMEN en ZunzúnOS	-	Exported from LUMEN on ZunzúnOS
+No hay nada que exportar	-	Nothing to export
+Guardar el chat como Markdown en:	-	Save the chat as Markdown to:
+No se pudo guardar	-	Could not save
+No hay nada que imprimir	-	Nothing to print
+No se pudieron guardar los ajustes	-	Could not save the settings
+Primero añade tu API key de OpenRouter (gratis en openrouter.ai/keys)	-	First add your OpenRouter API key (free at openrouter.ai/keys)
+¿Borrar todas las conversaciones guardadas?	-	Delete all saved conversations?
+Conversaciones borradas	-	Conversations deleted
+Guardar como Markdown	-	Save as Markdown
+Copiar todo el chat	-	Copy the whole chat
+Chat copiado al portapapeles	-	Chat copied to the clipboard
+Deteniendo...	-	Stopping...
+Clave borrada	-	Key removed
+Copiar el código	-	Copy the code
+Editar y reenviar	-	Edit and resend
+Regenerar	-	Regenerate
+Código copiado	-	Code copied
+Nuevo nombre del chat:	-	New chat name:
+¿Borrar "%.60s"?	-	Delete "%.60s"?
+Bienvenido a LUMEN. Añade tu API key de OpenRouter en Ajustes.	-	Welcome to LUMEN. Add your OpenRouter API key in Settings.

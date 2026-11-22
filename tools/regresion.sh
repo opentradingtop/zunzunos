@@ -32,5 +32,7 @@ ok "teclado, copiar y pegar, cookies y navegador"; mkstick; rm -rf "$S/r-web"; p
 python3 -I tools/tareas_test.py "$S/r-tar" "$S/r-web" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FW 2>/dev/null; wait $FW 2>/dev/null
 ok "correo"; mkstick; rm -rf "$S/r-mail"; python3 -I tools/fake_mail.py "$S/r-mail" > "$S/r-mail.log" 2>&1 & FM=$!; sleep 1
 python3 -I tools/correo_test.py "$S/r-cor" "$S/r-mail" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FM 2>/dev/null; wait $FM 2>/dev/null
+ok "lumen (chat con IA)"; mkstick; rm -rf "$S/r-or"; python3 -I tools/fake_openrouter.py "$S/r-or" > "$S/r-or.log" 2>&1 & FO=$!; sleep 1
+python3 -I tools/lumen_test.py "$S/r-lum" "$S/r-or" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FO 2>/dev/null; wait $FO 2>/dev/null
 ok "sesiones"; python3 -I tools/sesion_test.py "$S/r-ses" "$K" 2>&1 | filt
 ok "fin"

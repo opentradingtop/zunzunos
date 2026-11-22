@@ -26,6 +26,7 @@ El estudio de KolibriOS y las decisiones de diseño están en
 | Rescate | Copia tolerante a sectores dañados, archivos borrados (FAT, NTFS, exFAT y ext2; ext3/4 si conservan sus bloques), recuperación por firmas, imagen de disco y particiones perdidas |
 | Ofimática | Escritor (libros; TXT, MD, HTML, RTF y DOCX), Hoja (XLSX y CSV), Presentar y Agenda |
 | Apps web | Instalador de programas HTML/CSS con formularios y cálculos, desde archivo, portapapeles o http |
+| Chat con IA | **LUMEN**: chat con los modelos de OpenRouter (gratuitos o de pago) o con un servidor compatible con OpenAI en la red local; respuestas en vivo por HTTPS, razonamiento, Markdown con tablas y código, chats guardados, exportar a Markdown e imprimir. Guía en [docs/LUMEN.md](docs/LUMEN.md) |
 | Restauración | Puntos en memoria USB, comprobación, vuelta atrás y actualización del sistema conservando los datos |
 | Configuración | Una sola herramienta: apariencia y temas, fondo de escritorio (imagen o degradado), fecha y hora del reloj, idioma y teclado, mandos de juego, programas visibles o desinstalados, pantalla y sonido, información del sistema |
 | Escritorio | Iconos agrupados por familias, menú Inicio con subpersianas, carpeta Escritorio (crear carpetas y documentos con el botón derecho); botón derecho en escritorio, iconos, menú Inicio y archivos; papelera de reciclaje; expulsión segura de memorias USB; todas las ventanas se redimensionan por bordes y esquinas |
@@ -36,7 +37,7 @@ El estudio de KolibriOS y las decisiones de diseño están en
 | Seguridad | Criptografía propia: SHA-2, AES-GCM, X25519, ECDH/ECDSA P-256 y P-384, RSA (PKCS#1 y PSS); cliente TLS 1.3 y 1.2 con las autoridades raíz de Mozilla |
 | Red | Anclaje USB de iPhone (protocolo de Apple, en pruebas) y de móviles Android (RNDIS) y adaptadores Ethernet USB (CDC-ECM); e1000, e1000e (82574), Intel 82577/82578/82579 e I217/I218, RTL8139, RTL8168/8169, virtio. ARP, IPv4, ICMP, UDP, TCP, DHCP, DNS |
 | Sonido | AC'97 e Intel HD Audio |
-| Programas | Terminal, Archivos (todas las unidades, copiar, cortar y pegar), Discos, Instalar, Editor, Calculadora, Pintar, Imágenes (galería y visor de PNG, JPEG baseline y progresivo, BMP y GIF), Lector PDF, Navegador web con HTTPS (TLS 1.3 y 1.2, certificados verificados), imágenes y formularios, Música (WAV), Monitor, Configuración, Papelera, Serpiente, Campo minado, Bloques |
+| Programas | Terminal, Archivos (todas las unidades, copiar, cortar y pegar), Discos, Instalar, Editor, Calculadora, Pintar, Imágenes (galería y visor de PNG, JPEG baseline y progresivo, BMP y GIF), Lector PDF, Navegador web con HTTPS (TLS 1.3 y 1.2, certificados verificados), imágenes y formularios, Correo, LUMEN (chat con IA), Música (WAV), Monitor, Configuración, Papelera, Serpiente, Campo minado, Bloques |
 
 ## Compilar y probar
 

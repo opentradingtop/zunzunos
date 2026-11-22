@@ -29,7 +29,7 @@ $(B)/k $(B)/u $(B)/a $(B)/rd:
 $(B)/boot.bin: boot/bios.S | $(B)/k
 	$(CC) -target i386-unknown-none-elf -c $< -o $(B)/k/bios.o
 	$(LD) -m elf_i386 -Ttext 0x7C00 --image-base=0 --oformat binary -e _start -o $@ $(B)/k/bios.o
-	@test $$(stat -f%z $@) -le 12800 || (echo "cargador demasiado grande"; exit 1)
+	@test $$(wc -c < $@) -le 12800 || (echo "cargador demasiado grande"; exit 1)
 
 $(B)/BOOTX64.EFI: boot/uefi.c | $(B)/k
 	$(CC) -target x86_64-unknown-windows -std=gnu11 -O2 -ffreestanding -fno-builtin \
