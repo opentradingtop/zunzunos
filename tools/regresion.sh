@@ -27,6 +27,9 @@ ok "captura de pantalla y cancelar impresion"; mkstick; rm -rf "$S/r-pj3"; pytho
 python3 -I tools/captura_test.py "$S/r-cap" "$K/stick.img" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FP 2>/dev/null; wait $FP 2>/dev/null
 ok "lugares, accesos directos y seleccionar"; mkstick; python3 -I tools/seleccion_test.py "$S/r-sel" "$STICK" 2>&1 | filt
 ok "grabar pantalla y videos"; mkstick; python3 -I tools/video_test.py "$S/r-vid" "$K/stick.img" "$STICK" 2>&1 | filt
+ok "formulas de la hoja"; tools/pruebas/hoja/correr.sh "$S/r-hoja" 2>&1 | filt
+ok "teclado, copiar y pegar, cookies y navegador"; mkstick; rm -rf "$S/r-web"; python3 -I tools/fake_web.py "$S/r-web" > "$S/r-web.log" 2>&1 & FW=$!; sleep 1
+python3 -I tools/tareas_test.py "$S/r-tar" "$S/r-web" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FW 2>/dev/null; wait $FW 2>/dev/null
 ok "correo"; mkstick; rm -rf "$S/r-mail"; python3 -I tools/fake_mail.py "$S/r-mail" > "$S/r-mail.log" 2>&1 & FM=$!; sleep 1
 python3 -I tools/correo_test.py "$S/r-cor" "$S/r-mail" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FM 2>/dev/null; wait $FM 2>/dev/null
 ok "sesiones"; python3 -I tools/sesion_test.py "$S/r-ses" "$K" 2>&1 | filt

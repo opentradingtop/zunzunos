@@ -19,6 +19,7 @@ static char *hb[64], *hf[64]; static int nb, nf;
 /* ---------- cache de imagenes ---------- */
 typedef struct { char *url; u32 *px; int w, h, state; } img_t; /* state 1 lista, 2 fallo */
 static img_t IM[160]; static int nim; static long impx;
+static char pbase[1100], pend_ref[1100]; static int nref; /* base de los enlaces (<base href>) y redireccion <meta refresh> pendiente */
 static void resolve(const char *base, const char *rel, char *out, int cap) {
     while (*rel == ' ' || *rel == '\t' || *rel == '\n' || *rel == '\r') rel++;
     if (!strncasecmp(rel, "http://", 7) || !strncasecmp(rel, "https://", 8) || !strncasecmp(rel, "zunzun:", 7)) { strncpy0(out, rel, cap); return; }
@@ -32,18 +33,18 @@ static void resolve(const char *base, const char *rel, char *out, int cap) {
     char t[1400]; snprintf(t, sizeof t, "%s%s", b, rel); /* quita ./ y ../ */
     char *r = t + hl; char o[1400]; int k = 0; memcpy(o, t, hl); k = hl;
     while (*r) { if (!strncmp(r, "/./", 3)) { r += 2; continue; } if (!strncmp(r, "/../", 4)) { r += 3; while (k > hl && o[k - 1] != '/') k--; if (k > hl) k--; continue; } o[k++] = *r++; } o[k] = 0; strncpy0(out, o, cap); }
-static int img_get(const char *s, u32 **px, int *w, int *h) { char u[1100]; resolve(url, s, u, sizeof u); for (int i = 0; i < nim; i++) if (!strcmp(IM[i].url, u)) { if (IM[i].state != 1) return 0; *px = IM[i].px; *w = IM[i].w; *h = IM[i].h; return 1; } return 0; }
+static int img_get(const char *s, u32 **px, int *w, int *h) { char u[1100]; resolve(pbase, s, u, sizeof u); for (int i = 0; i < nim; i++) if (!strcmp(IM[i].url, u)) { if (IM[i].state != 1) return 0; *px = IM[i].px; *w = IM[i].w; *h = IM[i].h; return 1; } return 0; }
 static void img_clear(void) { for (int i = 0; i < nim; i++) { free(IM[i].url); free(IM[i].px); } nim = 0; impx = 0; }
 /* ---------- utilidades ---------- */
 static void dl_dir(char *o) { char d[160]; z_docdir(d); snprintf(o, 200, "%s/Descargas", d); z_mkdir(d); z_mkdir(o); }
 static char *latin1_to_utf8(const char *s, long n, long *on) { char *o = malloc(n * 2 + 1); long k = 0; for (long i = 0; i < n; i++) { u8 c = s[i]; if (c < 128) o[k++] = c; else { o[k++] = 0xC0 | c >> 6; o[k++] = 0x80 | (c & 63); } } o[k] = 0; *on = k; return o; }
-static int sa_i, sb_i, nsi; static void set_page(char *html, long n) { sa_i = sb_i = -1; nsi = 0; if (D) html_free(D); free(src); src = html; srcl = n; D = html_load(src, srcl, G->w - 18); scroll = 0; const char *t = html_title(D); if (t && *t) { u32 tl; char *u8t = cp437_to_utf8(t, strlen(t), &tl); strncpy0(title, u8t ? u8t : t, sizeof title); free(u8t); } else strncpy0(title, url, sizeof title); char wt[260]; snprintf(wt, sizeof wt, "%s - %s", title, _("Navegador")); zw_title(G->id, wt); }
+static int sa_i, sb_i, nsi; static void set_page(char *html, long n) { sa_i = sb_i = -1; nsi = 0; if (D) html_free(D); free(src); src = html; srcl = n; D = html_load(src, srcl, G->w - 18); scroll = 0; strncpy0(pbase, url, sizeof pbase); { const char *b = html_base(D); if (b && *b) { char t[1100]; resolve(url, b, t, sizeof t); strcpy(pbase, t); } int secs = 0; const char *r = html_refresh(D, &secs); if (r && *r && secs <= 5 && nref < 3) { resolve(pbase, r, pend_ref, sizeof pend_ref); nref++; } else nref = 0; } const char *t = html_title(D); if (t && *t) { u32 tl; char *u8t = cp437_to_utf8(t, strlen(t), &tl); strncpy0(title, u8t ? u8t : t, sizeof title); free(u8t); } else strncpy0(title, url, sizeof title); char wt[260]; snprintf(wt, sizeof wt, "%s - %s", title, _("Navegador")); zw_title(G->id, wt); }
 static void page_text(const char *fmt, const char *a, const char *b) { char *h = malloc(4096); long n = snprintf(h, 4096, fmt, a, b); set_page(h, n); }
 static void esc(const char *s, char *o, int cap) { int k = 0; for (; *s && k < cap - 8; s++) { if (*s == '<') { memcpy(o + k, "&lt;", 4); k += 4; } else if (*s == '&') { memcpy(o + k, "&amp;", 5); k += 5; } else if (*s == '"') { memcpy(o + k, "&quot;", 6); k += 6; } else o[k++] = *s; } o[k] = 0; }
 static void draw(void);
 static void navigate(const char *u, const char *post, int push);
-static int pending_imgs(void) { if (!D) return 0; int n = html_nimages(D); int c = 0; for (int i = 0; i < n; i++) { char u[1100]; resolve(url, html_image_src(D, i), u, sizeof u); int f = 0; for (int k = 0; k < nim; k++) if (!strcmp(IM[k].url, u)) f = 1; if (!f) c++; } return c; }
-static void load_one_img(void) { int n = html_nimages(D); for (int i = 0; i < n && nim < 160; i++) { char u[1100]; resolve(url, html_image_src(D, i), u, sizeof u); int f = 0; for (int k = 0; k < nim; k++) if (!strcmp(IM[k].url, u)) f = 1; if (f) continue;
+static int pending_imgs(void) { if (!D) return 0; int n = html_nimages(D); int c = 0; for (int i = 0; i < n; i++) { char u[1100]; resolve(pbase, html_image_src(D, i), u, sizeof u); int f = 0; for (int k = 0; k < nim; k++) if (!strcmp(IM[k].url, u)) f = 1; if (!f) c++; } return c; }
+static void load_one_img(void) { int n = html_nimages(D); for (int i = 0; i < n && nim < 160; i++) { char u[1100]; resolve(pbase, html_image_src(D, i), u, sizeof u); int f = 0; for (int k = 0; k < nim; k++) if (!strcmp(IM[k].url, u)) f = 1; if (f) continue;
         img_t *m = &IM[nim++]; memset(m, 0, sizeof *m); m->url = strdup(u); m->state = 2; if (strncasecmp(u, "http", 4) && u[0] != '/') return; if (impx > 24L << 20) return;
         char *b = 0; long l = 0; int e; snprintf(msg, sizeof msg, "%s %s", _("Imagen"), u); draw();
         if (u[0] == '/') { b = z_readfile(u, &l); e = b ? 0 : -2; } else { zhttp_info inf; e = z_http("GET", u, 0, 0, 0, &b, &l, &inf); if (!e && inf.status != 200) e = -5; }
@@ -87,14 +88,17 @@ static void go_addr(void) { char u[1100]; const char *a = addr; while (*a == ' '
 /* ---------- marcadores ---------- */
 #define MARC "/sys/ZUNZUN/MARCADORES.TXT"
 static void add_mark(void) { long n; char *t = z_readfile(MARC, &n); sb_t s = {0}; if (t) sb_add(&s, t, n); sb_f(&s, "%s\t%s\n", url, title); int e = z_writefile(MARC, s.p, s.n); free(s.p); free(t); z_sync(); strcpy(msg, e ? z_errstr(e) : _("Página añadida a marcadores")); }
-static void marks_menu(int sx, int sy) { char *t = z_readfile(MARC, 0); const char *it[24]; char *us[24]; int n = 0; if (t) { char *p = t; while (*p && n < 24) { char *e = strchr(p, '\n'); if (e) *e = 0; char *tab = strchr(p, '\t'); if (tab) { *tab = 0; us[n] = p; it[n] = tab[1] ? tab + 1 : p; n++; } if (!e) break; p = e + 1; } }
-    if (!n) { strcpy(msg, _("Aún no hay marcadores: pulsa la estrella para guardar la página.")); free(t); return; } int r = ui_menu(sx, sy, it, n); char u[1100] = ""; if (r >= 0) strncpy0(u, us[r], sizeof u); free(t); if (u[0]) navigate(u, 0, 1); }
+/* quita el marcador numero k (en el orden del archivo) */
+static void del_mark(int k) { long n; char *t = z_readfile(MARC, &n); if (!t) return; sb_t s = {0}; sb_s(&s, ""); int i = 0; char *p = t; while (*p) { char *e = strchr(p, '\n'); long l = e ? e - p + 1 : (long)strlen(p); if (strchr(p, '\t') && (!e || strchr(p, '\t') < e)) { if (i != k) sb_add(&s, p, l); i++; } else sb_add(&s, p, l); p += l; } int er = z_writefile(MARC, s.p, s.n); z_sync(); free(s.p); free(t); strcpy(msg, er ? z_errstr(er) : _("Marcador eliminado")); char m[80]; snprintf(m, 80, "[prueba] marcador %d eliminado: %d", k, er); z_log(m); }
+static void marks_menu(int sx, int sy) { char *t = z_readfile(MARC, 0); const char *it[26]; char *us[24]; int n = 0; if (t) { char *p = t; while (*p && n < 24) { char *e = strchr(p, '\n'); if (e) *e = 0; char *tab = strchr(p, '\t'); if (tab) { *tab = 0; us[n] = p; it[n] = tab[1] ? tab + 1 : p; n++; } if (!e) break; p = e + 1; } }
+    if (!n) { strcpy(msg, _("Aún no hay marcadores: pulsa la estrella para guardar la página.")); free(t); return; } it[n] = "Eliminar un marcador..."; int r = ui_menu(sx, sy, it, n + 1); char u[1100] = ""; if (r == n) { r = ui_menu(sx + 20, sy + 20, it, n); if (r >= 0) { char q[300]; snprintf(q, 300, "%s %.200s?", _("¿Eliminar el marcador"), it[r]); if (ui_confirm("Marcadores", q)) del_mark(r); } free(t); return; } if (r >= 0) strncpy0(u, us[r], sizeof u); free(t); if (u[0]) navigate(u, 0, 1); }
 /* ---------- dibujo ---------- */
-static const char *BT[] = {"<", ">", "R", "Inicio", "*", "Marcadores", "Imprimir"};
+static const char *BT[] = {"<", ">", "R", "Inicio", "*", "Marcadores", "Imprimir", "Sitios"}; /* Sitios se dibuja junto a Inicio */
 static int bw(int i) { return g_textw(_(BT[i])) + 16; }
 static int bx(int i) { int x = 6; for (int k = 0; k < i; k++) x += bw(k) + 4; return x; }
-static int addr_x(void) { return bx(4) + 26; }
+static int addr_x(void) { return bx(4) + bw(7) + 4 + 26; }
 static int addr_w(void) { return G->w - addr_x() - bw(4) - bw(5) - bw(6) - 24; }
+#define SITIOS "/rd/res/sitios.html"
 /* ---------- seleccionar texto arrastrando; menu del boton derecho (copiar, enlaces, imagenes) ---------- */
 typedef struct { int type, x, y, w, h, len, sc; const char *s; const u32 *px; int iw, ih; } sit_t;
 static sit_t *SI; static int nsi, capsi, sa_i = -1, sa_c, sb_i = -1, sb_c, seldrag;
@@ -116,8 +120,8 @@ static void sel_copy(void) { char *t = sel_text(); if (!t) return; z_clip_set(t,
 static void save_img(const sit_t *t) { char d[200], p[300]; dl_dir(d); u32 tm[6]; z_time(tm); snprintf(p, 300, "%s/imagen-%02u%02u%02u.png", d, tm[2], tm[1], tm[0]); int e = z_png_save(p, t->px, t->iw, t->ih); z_sync(); snprintf(msg, sizeof msg, "%s %s", e ? z_errstr(e) : _("Imagen guardada en"), e ? "" : p); }
 static void print_(void);
 static void page_menu(int X, int Y, int wx, int wy) { si_load(); int sx, sy; zw_screen(G, wx, wy, &sx, &sy); const char *l = html_link_at(D, X, Y); const sit_t *im = 0; for (int i = 0; i < nsi; i++) if (SI[i].type == 2 && SI[i].px && X >= SI[i].x && X < SI[i].x + SI[i].w && Y >= SI[i].y && Y < SI[i].y + SI[i].h) im = &SI[i];
-    const char *it[8]; int id[8], k = 0; if (sel_has()) { it[k] = "Copiar"; id[k++] = 0; } if (l) { it[k] = "Abrir el enlace"; id[k++] = 1; it[k] = "Copiar el enlace"; id[k++] = 2; } if (im) { it[k] = "Copiar la imagen"; id[k++] = 3; it[k] = "Guardar la imagen"; id[k++] = 4; } it[k] = "Seleccionar todo"; id[k++] = 5; it[k] = "Imprimir"; id[k++] = 6;
-    int r = ui_menu(sx, sy, it, k); if (r < 0) return; char nx[1100]; switch (id[r]) { case 0: sel_copy(); break; case 1: resolve(url, l, nx, sizeof nx); navigate(nx, 0, 1); break; case 2: resolve(url, l, nx, sizeof nx); z_clip_set(nx, strlen(nx)); strcpy(msg, _("Enlace copiado")); break; case 3: z_clip_set_img(im->px, im->iw, im->ih); strcpy(msg, _("Imagen copiada")); break; case 4: save_img(im); break; case 5: sel_all(); break; case 6: print_(); break; } }
+    const char *it[10]; int id[10], k = 0; if (sel_has()) { it[k] = "Copiar"; id[k++] = 0; } if (l) { it[k] = "Abrir el enlace"; id[k++] = 1; it[k] = "Copiar el enlace"; id[k++] = 2; } if (im) { it[k] = "Copiar la imagen"; id[k++] = 3; it[k] = "Guardar la imagen"; id[k++] = 4; } it[k] = "Seleccionar todo"; id[k++] = 5; it[k] = "Imprimir"; id[k++] = 6; it[k] = "Borrar cookies"; id[k++] = 7;
+    int r = ui_menu(sx, sy, it, k); if (r < 0) return; char nx[1100]; switch (id[r]) { case 0: sel_copy(); break; case 1: resolve(pbase, l, nx, sizeof nx); navigate(nx, 0, 1); break; case 2: resolve(pbase, l, nx, sizeof nx); z_clip_set(nx, strlen(nx)); strcpy(msg, _("Enlace copiado")); break; case 3: z_clip_set_img(im->px, im->iw, im->ih); strcpy(msg, _("Imagen copiada")); break; case 4: save_img(im); break; case 5: sel_all(); break; case 6: print_(); break; case 7: { char q[160]; snprintf(q, 160, _("¿Borrar las %d cookies guardadas? Tendrás que volver a iniciar sesión en las webs."), z_cookies_count()); if (ui_confirm("Borrar cookies", q)) { int n = z_cookies_clear(); snprintf(msg, sizeof msg, _("%d cookies borradas"), n); char m[60]; snprintf(m, 60, "[prueba] cookies borradas: %d", n); z_log(m); } } break; } }
 /* ---------- Imprimir: la pagina se vuelve a maquetar a 760 px y se pasa al documento de impresion
    como textos, lineas e imagenes (texto nitido a la resolucion de la impresora). Sin fondos, como hacen los navegadores */
 #define PW_ 760
@@ -134,14 +138,14 @@ static void print_(void) { if (!D || !src) return; const char *t = html_title(D)
 static void draw(void) {
     int vh = G->h - TB - SB; g_rect(G, 0, TB, G->w, vh, D ? html_background(D) & 0xFFFFFF : 0xFFFFFF);
     if (D) { int mx = MAX(0, html_height(D) - vh); scroll = MAX(0, MIN(scroll, mx)); zw_clip(G, 0, TB, G->w - 10, vh); html_draw(D, 4, TB + 4, G->w - 18, vh, scroll); sel_paint(vh); zw_noclip(G); if (mx) { int bh = MAX(24, vh * vh / html_height(D)); g_rect(G, G->w - 8, TB + scroll * (vh - bh) / mx, 6, bh, UI_LINE); } }
-    g_rect(G, 0, 0, G->w, TB, UI_PANEL); for (int i = 0; i < 4; i++) ui_button(G, bx(i), 6, bw(i), 26, BT[i], 0);
+    g_rect(G, 0, 0, G->w, TB, UI_PANEL); for (int i = 0; i < 4; i++) ui_button(G, bx(i), 6, bw(i), 26, BT[i], 0); ui_button(G, bx(4), 6, bw(7), 26, BT[7], !strcmp(url, SITIOS) ? 2 : 0);
     int ax = addr_x(); u32 lk = secure ? 0x16A34A : certst ? 0xDC2626 : 0x9CA3AF; g_round(G, ax - 20, 13, 12, 10, 2, lk); g_frame(G, ax - 18, 8, 8, 7, lk);
     ui_input(G, ax, 6, addr_w(), 26, addr, acur, afoc); if (afoc && asel && addr[0]) { int tw = MIN(g_textw(addr), addr_w() - 10); g_rect(G, ax + 5, 10, tw, 18, 0xBFDBFE); zw_clip(G, ax + 4, 6, addr_w() - 8, 26); g_text(G, ax + 5, 11, addr, 0x111827); zw_noclip(G); } ui_button(G, ax + addr_w() + 6, 6, bw(4), 26, "*", 0); ui_button(G, ax + addr_w() + 10 + bw(4), 6, bw(5), 26, "Marcadores", 0); ui_button(G, ax + addr_w() + 14 + bw(4) + bw(5), 6, bw(6), 26, "Imprimir", 0);
     g_rect(G, 0, G->h - SB, G->w, SB, UI_PANEL); zw_clip(G, 0, G->h - SB, G->w, SB); g_text(G, 8, G->h - SB + 3, loading ? _("Cargando...") : msg, UI_TEXT); zw_noclip(G); zw_present(G); }
 int main(const char *a) { int wp; a = z_print_arg(a, &wp);
     zsys s; z_sysinfo(&s); G = zw_new("Navegador", -1, 0, MIN(1040, (int)s.scr_w - 40), MIN(720, (int)s.scr_h - 80), WF_DECOR | WF_RESIZE); html_img_get = img_get;
     navigate(a[0] ? a : "/rd/res/inicio.html", 0, 0); draw(); if (wp) { print_(); draw(); } zevent e; int sel_drag = 0; (void)sel_drag;
-    for (;;) { int idle = D && pending_imgs() > 0; if (!z_event(&e, idle ? 0 : -1)) { if (idle) { load_one_img(); if (!pending_imgs()) { html_relayout(D); snprintf(msg, sizeof msg, "%s", _("Listo")); } else if (nim % 3 == 0) html_relayout(D); draw(); } continue; }
+    for (;;) { if (pend_ref[0]) { char u[1100]; strcpy(u, pend_ref); pend_ref[0] = 0; navigate(u, 0, 1); draw(); continue; } int idle = D && pending_imgs() > 0; if (!z_event(&e, idle ? 0 : -1)) { if (idle) { load_one_img(); if (!pending_imgs()) { html_relayout(D); snprintf(msg, sizeof msg, "%s", _("Listo")); } else if (nim % 3 == 0) html_relayout(D); draw(); } continue; }
         if (e.type == EV_REDRAW) { draw(); continue; } if (e.win != (u32)G->id) continue; if (e.type == EV_CLOSE) return 0;
         if (e.type == EV_RESIZE) { zw_resized(G, e.x, e.y); if (D) { char *c = src; src = 0; long n = srcl; set_page(c, n); } draw(); continue; }
         int vh = G->h - TB - SB;
@@ -152,26 +156,27 @@ int main(const char *a) { int wp; a = z_print_arg(a, &wp);
                 else if (e.x < bx(1)) navigate("zunzun:volver", 0, 0);
                 else if (e.x < bx(2)) { if (nf) { char *p = hf[--nf]; if (nb < 64) hb[nb++] = strdup(url); navigate(p, 0, 0); free(p); } }
                 else if (e.x < bx(3)) navigate(url, 0, 0);
-                else if (e.x < ax - 22) navigate("/rd/res/inicio.html", 0, 1);
+                else if (e.x >= bx(4) && e.x < bx(4) + bw(7)) navigate(SITIOS, 0, 1);
+                else if (e.x < bx(4)) navigate("/rd/res/inicio.html", 0, 1);
                 else if (e.x >= ax + addr_w() + 6 && e.x < ax + addr_w() + 6 + bw(4)) add_mark();
                 else if (e.x >= ax + addr_w() + 14 + bw(4) + bw(5)) print_();
                 else if (e.x >= ax + addr_w() + 10 + bw(4)) { int sx, sy; zw_screen(G, e.x, e.y + 20, &sx, &sy); marks_menu(sx, sy); } }
             else if (D && e.y < G->h - SB && (e.btn & 2)) page_menu(e.x - 4, e.y - TB - 4 + scroll, e.x, e.y);
             else if (D && e.y < G->h - SB) { int X = e.x - 4, Y = e.y - TB - 4 + scroll; sel_clear(); if (html_click(D, X, Y)) { int post = 0; const char *sub = html_take_submit(D, &post);
-                    if (sub) { char act[1100]; const char *sep = post ? strchr(sub, '\n') : strchr(sub, '?'); int al = sep ? sep - sub : (int)strlen(sub); char a2[1100]; { int cl = MIN(al, (int)sizeof a2 - 1); memcpy(a2, sub, cl); a2[cl] = 0; } if (!a2[0]) { strcpy(act, url); char *q = strchr(act, '?'); if (q) *q = 0; } else resolve(url, a2, act, sizeof act);
+                    if (sub) { char act[1100]; const char *sep = post ? strchr(sub, '\n') : strchr(sub, '?'); int al = sep ? sep - sub : (int)strlen(sub); char a2[1100]; { int cl = MIN(al, (int)sizeof a2 - 1); memcpy(a2, sub, cl); a2[cl] = 0; } if (!a2[0]) { strcpy(act, url); char *q = strchr(act, '?'); if (q) *q = 0; } else resolve(pbase, a2, act, sizeof act);
                         if (post) navigate(act, sep ? sep + 1 : "", 1); else { char full[2200]; snprintf(full, sizeof full, "%s?%s", act, sep ? sep + 1 : ""); navigate(full, 0, 1); } }
                     else html_relayout(D); }
-                else { const char *l = html_link_at(D, X, Y); if (l) { if (l[0] == '#') { int y = html_anchor_y(D, l + 1); if (y >= 0) scroll = y; } else { char nx[1100]; resolve(url, l, nx, sizeof nx); if (!strncasecmp(nx, "mailto:", 7) || !strncasecmp(nx, "javascript:", 11)) strcpy(msg, _("Ese enlace necesita un programa que no está disponible.")); else navigate(nx, 0, 1); } } else sel_start(X, Y); } } }
+                else { const char *l = html_link_at(D, X, Y); if (l) { if (l[0] == '#') { int y = html_anchor_y(D, l + 1); if (y >= 0) scroll = y; } else { char nx[1100]; resolve(pbase, l, nx, sizeof nx); if (!strncasecmp(nx, "mailto:", 7) || !strncasecmp(nx, "javascript:", 11)) strcpy(msg, _("Ese enlace necesita un programa que no está disponible.")); else navigate(nx, 0, 1); } } else sel_start(X, Y); } } }
         else if (e.type == EV_MOVE && seldrag && D) { si_hit(e.x - 4, e.y - TB - 4 + scroll, &sb_i, &sb_c); if (e.y > G->h - SB - 10) scroll += 20; else if (e.y < TB + 10) scroll -= 20; }
         else if (e.type == EV_UP && seldrag) { seldrag = 0; if (sel_has()) { char m[80]; snprintf(m, 80, "[prueba] navegador seleccion %d-%d", sa_i, sb_i); z_log(m); } }
-        else if (e.type == EV_MOVE && D && e.y > TB && e.y < G->h - SB) { const char *l = html_link_at(D, e.x - 4, e.y - TB - 4 + scroll); static int had; if (l) { char nx[1100]; resolve(url, l, nx, sizeof nx); snprintf(msg, sizeof msg, "%s", nx); had = 1; } else if (had) { had = 0; msg[0] = 0; } else continue; }
+        else if (e.type == EV_MOVE && D && e.y > TB && e.y < G->h - SB) { const char *l = html_link_at(D, e.x - 4, e.y - TB - 4 + scroll); static int had; if (l) { char nx[1100]; resolve(pbase, l, nx, sizeof nx); snprintf(msg, sizeof msg, "%s", nx); had = 1; } else if (had) { had = 0; msg[0] = 0; } else continue; }
         else if (e.type == EV_KEY) {
             if (e.ch == 16) { print_(); draw(); continue; }
             if (!afoc && e.ch == 3 && sel_has()) { sel_copy(); draw(); continue; } if (!afoc && e.ch == 1) { sel_all(); draw(); continue; }
             if (e.ch == 12 && (e.mods & M_CTRL)) { afoc = 1; asel = 1; acur = strlen(addr); }
             else if (afoc) { if (e.ch == '\n') { afoc = 0; asel = 0; go_addr(); } else if (e.ch == 27) { afoc = 0; asel = 0; strcpy(addr, url); } else if (e.ch == 1) { asel = 1; acur = strlen(addr); } else { if (asel && (e.ch >= 32 || e.ch == 8 || e.ch == 22)) { addr[0] = 0; acur = 0; } asel = 0; ui_input_key(addr, 1000, &acur, &e); } }
             else { int k = e.key == K_UP ? KEY_UP : e.key == K_DOWN ? KEY_DOWN : e.key == K_LEFT ? KEY_LEFT : e.key == K_RIGHT ? KEY_RIGHT : e.key == K_HOME ? KEY_HOME : e.key == K_END ? KEY_END : e.key == K_PGUP ? KEY_PGUP : e.key == K_PGDN ? KEY_PGDN : e.key == K_DEL ? KEY_DEL : e.ch < 128 ? (int)e.ch : uni_to_cp437(e.ch);
-                if (D && k && html_key(D, k)) { int post = 0; const char *sub = html_take_submit(D, &post); if (sub) { char act[1100]; const char *sep = post ? strchr(sub, '\n') : strchr(sub, '?'); int al = sep ? sep - sub : (int)strlen(sub); char a2[1100]; { int cl = MIN(al, (int)sizeof a2 - 1); memcpy(a2, sub, cl); a2[cl] = 0; } if (!a2[0]) { strcpy(act, url); char *q = strchr(act, '?'); if (q) *q = 0; } else resolve(url, a2, act, sizeof act); if (post) navigate(act, sep ? sep + 1 : "", 1); else { char full[2200]; snprintf(full, sizeof full, "%s?%s", act, sep ? sep + 1 : ""); navigate(full, 0, 1); } } else html_relayout(D); }
+                if (D && k && html_key(D, k)) { int post = 0; const char *sub = html_take_submit(D, &post); if (sub) { char act[1100]; const char *sep = post ? strchr(sub, '\n') : strchr(sub, '?'); int al = sep ? sep - sub : (int)strlen(sub); char a2[1100]; { int cl = MIN(al, (int)sizeof a2 - 1); memcpy(a2, sub, cl); a2[cl] = 0; } if (!a2[0]) { strcpy(act, url); char *q = strchr(act, '?'); if (q) *q = 0; } else resolve(pbase, a2, act, sizeof act); if (post) navigate(act, sep ? sep + 1 : "", 1); else { char full[2200]; snprintf(full, sizeof full, "%s?%s", act, sep ? sep + 1 : ""); navigate(full, 0, 1); } } else html_relayout(D); }
                 else if (e.key == K_F5) navigate(url, 0, 0); else if (e.key == K_BS) navigate("zunzun:volver", 0, 0);
                 else if (e.key == K_DOWN) scroll += 40; else if (e.key == K_UP) scroll -= 40; else if (e.key == K_PGDN || e.ch == ' ') scroll += vh - 40; else if (e.key == K_PGUP) scroll -= vh - 40; else if (e.key == K_HOME) scroll = 0; else if (e.key == K_END) scroll = 1 << 28; else continue; } }
         draw(); }

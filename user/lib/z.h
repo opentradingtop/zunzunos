@@ -243,5 +243,6 @@ extern int zp_default_land; int zp_dialog(const char *title, void (*build)(zpdoc
 /* HTTP y HTTPS (zhttp.c) */
 typedef struct { int status, tls, cert; char ctype[96]; char final[1100]; char err[96]; } zhttp_info;
 int z_http(const char *method, const char *url, const char *body, long bl, const char *ctype, char **out, long *len, zhttp_info *inf);
+int z_cookies_count(void); int z_cookies_clear(void); /* cookies del navegador */
 extern int z_https_allow_bad; void z_https_allow(const char *host); const char *z_http_err(int e);
 

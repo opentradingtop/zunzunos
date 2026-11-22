@@ -1,7 +1,7 @@
 /* Configuracion: apariencia, fondo, fecha y hora, idioma, mandos, programas, pantalla y sistema */
 #include "z.h"
 static zwin *W; static int sec; static char msg[120];
-static const char *SN[] = {"Apariencia", "Fondo de escritorio", "Fecha y hora", "Idioma y teclado", "Mandos de juego", "Programas", "Pantalla y sonido", "Sistema", "Energía y bloqueo"};
+static const char *SN[] = {"Apariencia", "Fondo de escritorio", "Fecha y hora", "Idioma y teclado", "Mandos de juego", "Desinstalar programas", "Pantalla y sonido", "Sistema", "Energía y bloqueo"};
 #define NSEC 9
 #define SW 200
 #define X0 (SW + 16)
@@ -54,7 +54,7 @@ static void k_mando(zevent *e) { if (e->type == EV_JOY) { { char m[80]; snprintf
 /* ---------- Programas ---------- */
 static char WA[60][120]; static int nwa, ptop;
 static void p_load(void) { nwa = 0; zdirent d; for (int i = 0; nwa < 60 && !z_readdir("/sys/PROGRAMAS", i, &d); i++) if (z_ends(d.name, ".html") || z_ends(d.name, ".htm")) strncpy0(WA[nwa++], d.name, 120); }
-static void d_prog(void) { hdr("Programas"); g_text(W, X0, 50, _("Los programas del sistema se pueden ocultar; las apps web se desinstalan."), UI_MUTED); int vis = (W->h - 90) / 26, n = z_napps + nwa; for (int i = ptop; i < n && i < ptop + vis; i++) { int y = 74 + (i - ptop) * 26; if (i < z_napps) { const zapp *a = &z_apps[i]; g_rect(W, X0, y + 4, 16, 16, a->col); g_text(W, X0 + 24, y + 4, _(a->name), UI_TEXT); int hd = z_hidden(a->bin); g_text(W, X0 + 240, y + 4, hd ? _("oculto") : _("visible"), hd ? 0xB45309 : UI_MUTED); ui_button(W, X0 + 340, y + 1, 110, 24, hd ? "Mostrar" : "Ocultar", 0); } else { char *nm = WA[i - z_napps]; g_rect(W, X0, y + 4, 16, 16, 0x6D28D9); zw_clip(W, X0 + 24, y, 300, 26); g_text(W, X0 + 24, y + 4, nm, UI_TEXT); zw_noclip(W); g_text(W, X0 + 340 - 0, y + 4, "", 0); ui_button(W, X0 + 340, y + 1, 110, 24, "Desinstalar", 0); } } }
+static void d_prog(void) { hdr("Desinstalar programas"); g_text(W, X0, 50, _("Las apps web instaladas se desinstalan (van a la papelera). Los programas del sistema solo se ocultan del menú."), UI_MUTED); int vis = (W->h - 90) / 26, n = z_napps + nwa; for (int i = ptop; i < n && i < ptop + vis; i++) { int y = 74 + (i - ptop) * 26; if (i < z_napps) { const zapp *a = &z_apps[i]; g_rect(W, X0, y + 4, 16, 16, a->col); g_text(W, X0 + 24, y + 4, _(a->name), UI_TEXT); int hd = z_hidden(a->bin); g_text(W, X0 + 240, y + 4, hd ? _("oculto") : _("visible"), hd ? 0xB45309 : UI_MUTED); ui_button(W, X0 + 340, y + 1, 110, 24, hd ? "Mostrar" : "Ocultar", 0); } else { char *nm = WA[i - z_napps]; g_rect(W, X0, y + 4, 16, 16, 0x6D28D9); zw_clip(W, X0 + 24, y, 300, 26); g_text(W, X0 + 24, y + 4, nm, UI_TEXT); zw_noclip(W); g_text(W, X0 + 340 - 0, y + 4, "", 0); ui_button(W, X0 + 340, y + 1, 110, 24, "Desinstalar", 0); } } }
 static void k_prog(zevent *e) { if (e->type == EV_WHEEL) { ptop = MAX(0, ptop - (int)e->key * 3); return; } if (e->type != EV_DOWN || e->x < X0 + 340 || e->x >= X0 + 450 || e->y < 74) return; int i = ptop + (e->y - 74) / 26; if (i < z_napps) { z_set_hidden(z_apps[i].bin, !z_hidden(z_apps[i].bin)); z_notify(); } else if (i < z_napps + nwa) { char q[200]; snprintf(q, 200, _("Desinstalar %.100s? Irá a la papelera."), WA[i - z_napps]); if (ui_confirm("Desinstalar", q)) { char p[200]; snprintf(p, 200, "/sys/PROGRAMAS/%s", WA[i - z_napps]); int r = z_trash(p); snprintf(msg, 120, "%s", r ? z_errstr(r) : _("Programa desinstalado")); z_log(r ? "[prueba] desinstalar fallo" : "[prueba] desinstalado"); p_load(); } } }
 /* ---------- Pantalla y sonido ---------- */
 static int sdrag = -1;

@@ -779,7 +779,7 @@ Invitado	-	Guest
 Se borra al salir	-	Erased on sign-out
 Con PIN	-	With PIN
 Sin PIN	-	No PIN
-Esperando la memoria del sistema...	Esperando la memoria del sistema…	Waiting for the system drive…
+Esperando la memoria del sistema...	Esperando la memoria del sistema...	Waiting for the system drive...
 Bloquear	-	Lock
 Cambiar PIN	-	Change PIN
 Cerrar sesión	-	Sign out
@@ -872,7 +872,7 @@ No se pudo conectar con	-	Could not connect to
 El servidor cerró la conexión	-	The server closed the connection
 El servidor no aceptó el usuario o la contraseña de aplicación	-	The server did not accept the user name or app password
 %ld mensajes en la bandeja de entrada, %d sin leer	-	%ld messages in the inbox, %d unread
-Descargando el mensaje...	Descargando el mensaje…	Downloading the message…
+Descargando el mensaje...	Descargando el mensaje...	Downloading the message...
 Enviando por	-	Sending through
 Falta el destinatario	-	The recipient is missing
 No se pudo enviar	-	Could not send
@@ -886,8 +886,8 @@ No es un archivo de texto (es un programa o datos)	-	Not a text file (it is a pr
 Lugares	-	Places
 Descargas	-	Downloads
 Capturas	-	Screenshots
-Crear acceso directo en...	Crear acceso directo en…	Create shortcut in…
-Otra carpeta...	Otra carpeta…	Another folder…
+Crear acceso directo en...	Crear acceso directo en...	Create shortcut in...
+Otra carpeta...	Otra carpeta...	Another folder...
 Crear acceso directo	-	Create shortcut
 Carpeta donde crearlo:	-	Folder to create it in:
 No se pudo crear el acceso directo	-	Could not create the shortcut
@@ -936,3 +936,21 @@ No	-	No
 Software libre	-	Free software
 Licencia 0BSD	-	0BSD license
 Úsalo, cámbialo y compártelo sin pedir permiso.	-	Use it, change it and share it without asking permission.
+No hay nada copiado	-	Nothing has been copied
+Flechas o Tab para elegir, Intro para entrar	-	Arrows or Tab to choose, Enter to sign in
+Eliminar un marcador...	Eliminar un marcador...	Delete a bookmark...
+¿Eliminar el marcador	-	Delete the bookmark
+Marcador eliminado	-	Bookmark deleted
+¿Borrar las %d cookies guardadas? Tendrás que volver a iniciar sesión en las webs.	-	Delete the %d saved cookies? You will have to sign in to websites again.
+%d cookies borradas	-	%d cookies deleted
+Borrar cookies	-	Delete cookies
+Sitios	-	Sites
+Desinstalar programas	-	Uninstall programs
+Las apps web instaladas se desinstalan (van a la papelera). Los programas del sistema solo se ocultan del menú.	-	Installed web apps are uninstalled (moved to the trash). System programs can only be hidden from the menu.
+Desinstalar programas...	Desinstalar programas...	Uninstall programs...
+Matemáticas	-	Math
+Estadística	-	Statistics
+Condiciones	-	Conditions
+Buscar en tablas	-	Lookup
+Fechas	-	Dates
+Finanzas	-	Finance

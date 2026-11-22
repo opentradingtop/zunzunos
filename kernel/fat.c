@@ -233,7 +233,7 @@ static i64 f_read(file_t *o, void *b, u64 n) {
     kfree(tmp); return done;
 }
 static i64 f_write(file_t *o, const void *b, u64 n) {
-    fs_t *f = o->priv; const u8 *p = b; u64 done = 0, pos = o->pos; u8 *tmp = kmalloc(f->ss);
+    fs_t *f = o->priv; const u8 *p = b; u64 done = 0, pos = o->pos; if (!n) return 0; /* escribir 0 bytes no es "disco lleno" */ u8 *tmp = kmalloc(f->ss);
     if (pos + n > 0xFFFFFFFFUL) { kfree(tmp); return E_NOSPC; }
     while (done < n) {
         u32 c = seek_cl(f, o, pos, 1); if (!c) break;

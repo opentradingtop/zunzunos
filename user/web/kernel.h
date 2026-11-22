@@ -19,5 +19,6 @@ int calc_eval(const char *, calc_lookup_fn, void *, int, char *, int); int calc_
 struct html_doc;
 struct html_item { int type, x, y, w, h; u32 color, bg; const char *str; int len, scale, bold, underline; const u32 *px; int iw, ih; };
 void html_walk(struct html_doc *, void (*)(void *, const struct html_item *), void *);
+const char *html_base(struct html_doc *); const char *html_refresh(struct html_doc *, int *secs);
 struct html_doc; struct html_doc *html_load(const char *, u32, int); void html_free(struct html_doc *); int html_height(struct html_doc *); u32 html_background(struct html_doc *); const char *html_title(struct html_doc *); void html_draw(struct html_doc *, int, int, int, int, int); const char *html_link_at(struct html_doc *, int, int); int html_anchor_y(struct html_doc *, const char *); int html_has_script(struct html_doc *); int html_click(struct html_doc *, int, int); int html_key(struct html_doc *, int); int html_has_focus(struct html_doc *); void html_relayout(struct html_doc *); int html_focus_y(struct html_doc *); const char *html_focus_text(struct html_doc *);
 const char *html_take_submit(struct html_doc *, int *post); int html_nimages(struct html_doc *); const char *html_image_src(struct html_doc *, int); extern int (*html_img_get)(const char *src, u32 **px, int *w, int *h);

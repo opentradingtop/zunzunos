@@ -130,6 +130,7 @@ struct node {
     char *alt, *value, *placeholder, *itype, *border, *start, *colspan, *name, *src, *action, *method;
     int hidden_attr, checked;
     char *calc, *cif;                    /* data-calc y data-if */
+    char *equiv, *content;               /* <meta http-equiv content> */
     char *edit;                          /* texto de un campo editable */
     int dec, selidx;                     /* data-dec + 1 (0 = auto); opcion elegida */
     struct style s;
@@ -372,6 +373,8 @@ static void set_attr(struct html_doc *d, struct node *n, const char *name, int n
     else if (!strcmp(k, "data-calc")) n->calc = val;
     else if (!strcmp(k, "data-if")) n->cif = val;
     else if (!strcmp(k, "data-dec")) n->dec = atoi(val) + 1;
+    else if (!strcmp(k, "http-equiv")) n->equiv = val;
+    else if (!strcmp(k, "content")) n->content = val;
     (void)d;
 }
 
@@ -1177,7 +1180,7 @@ static void ua_style(struct node *n, struct style *s) {
         for (int i = 0; i < 4; i++) { s->bw[i] = 1; s->bc[i] = 0xAAAAAA; }
         break;
     case T_HEAD: case T_TITLE: case T_STYLE: case T_SCRIPT: case T_META: case T_LINK:
-    case T_BASE: case T_NOSCRIPT: case T_TEMPLATE: case T_SVG: case T_CANVAS:
+    case T_BASE: case T_TEMPLATE: case T_SVG: case T_CANVAS:
     case T_IFRAME: case T_VIDEO: case T_AUDIO: case T_OPTION: case T_OPTGROUP:
     case T_COL: case T_COLGROUP: case T_SOURCE: case T_TRACK: case T_PARAM:
     case T_EMBED: case T_OBJECT: case T_MAP: case T_AREA: case T_WBR:
@@ -1986,6 +1989,10 @@ int html_height(struct html_doc *d) { return d->height; }
 u32 html_background(struct html_doc *d) { return d->bg; }
 const char *html_title(struct html_doc *d) { return d->title && *d->title ? d->title : NULL; }
 int html_has_script(struct html_doc *d) { return d->has_script; }
+/* <base href> y <meta http-equiv="refresh" content="N; url=..."> */
+static struct node *find_tag(struct node *n, int tag, int need_meta) { for (; n; n = n->next) { if (n->type == N_ELEM && n->tag == tag && (!need_meta ? n->href != NULL : (n->equiv && !strcasecmp(n->equiv, "refresh") && n->content))) return n; struct node *r = find_tag(n->first, tag, need_meta); if (r) return r; } return NULL; }
+const char *html_base(struct html_doc *d) { struct node *n = find_tag(d->root, T_BASE, 0); return n ? n->href : NULL; }
+const char *html_refresh(struct html_doc *d, int *secs) { struct node *n = find_tag(d->root, T_META, 1); if (!n) return NULL; const char *c = n->content; *secs = atoi(c); const char *u = strcasestr(c, "url="); if (!u) return ""; u += 4; while (*u == ' ' || *u == '\'' || *u == '"') u++; return u; }
 
 void html_draw(struct html_doc *d, int x, int y, int w, int h, int scroll) {
     (void)w;
