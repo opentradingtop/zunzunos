@@ -72,10 +72,10 @@ $(B)/zunzun.img: $(B)/boot.bin $(B)/BOOTX64.EFI $(B)/KERNEL.BIN $(B)/INITRD.BIN 
 	python3 -I tools/mkimage.py $(B)/boot.bin $(B)/BOOTX64.EFI $(B)/KERNEL.BIN $(B)/INITRD.BIN docs/LEEME.TXT $@
 	@truncate -s 256m $@
 
-# Imagen para una memoria concreta:  make usb-img DISK_BYTES=4026531840 [LABEL="TYNI CORE"]
+# Imagen para una memoria concreta:  make usb-img DISK_BYTES=4026531840 [LABEL="TYNI CORE"] [DOCS=carpeta]
 LABEL ?= ZUNZUN
 usb-img: $(B)/boot.bin $(B)/BOOTX64.EFI $(B)/KERNEL.BIN $(B)/INITRD.BIN
-	python3 -I tools/mkimage.py $(B)/boot.bin $(B)/BOOTX64.EFI $(B)/KERNEL.BIN $(B)/INITRD.BIN docs/LEEME.TXT $(B)/usb.img --disk-bytes $(DISK_BYTES) --label "$(LABEL)"
+	python3 -I tools/mkimage.py $(B)/boot.bin $(B)/BOOTX64.EFI $(B)/KERNEL.BIN $(B)/INITRD.BIN docs/LEEME.TXT $(B)/usb.img --disk-bytes $(DISK_BYTES) --label "$(LABEL)" $(if $(DOCS),--docs "$(DOCS)")
 
 BASE := -m 512 -rtc base=localtime -serial stdio -device VGA,vgamem_mb=32
 run: $(B)/zunzun.img

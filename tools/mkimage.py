@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Crea la imagen de ZunzunOS: MBR + cargador BIOS + particion FAT32 con todo.
 
-  mkimage.py boot.bin BOOTX64.EFI kernel.bin initrd.bin leeme.txt salida.img [--disk-bytes N] [--label NOMBRE]
+  mkimage.py boot.bin BOOTX64.EFI kernel.bin initrd.bin leeme.txt salida.img [--disk-bytes N] [--label NOMBRE] [--docs CARPETA]
+
+Con --docs los archivos de CARPETA se copian en DOCS/<CARPETA> (Documentos), con nombres 8.3.
 
 Con --disk-bytes la particion ocupa todo el disco, pero el archivo solo contiene
 hasta el ultimo dato usado: grabar es rapido y el resto queda como espacio libre.
@@ -25,6 +27,11 @@ if '--label' in args:
 if not label or len(label) > 11 or any(c in '"*+,./:;<=>?[\\]|' or not (32 <= ord(c) < 127) for c in label):
     sys.exit('etiqueta no valida: hasta 11 letras, cifras o espacios')
 LABEL = label.ljust(11).encode()
+docs_dir = None
+if '--docs' in args:
+    i = args.index('--docs')
+    docs_dir = args[i + 1]
+    del args[i:i + 2]
 boot_p, efi_p, kern_p, ird_p, leeme_p, out_p = args
 rd = lambda p: open(p, 'rb').read()
 boot, efi, kern, ird, leeme = map(rd, (boot_p, efi_p, kern_p, ird_p, leeme_p))
@@ -97,11 +104,29 @@ ef_cl = next_cl                 # EFI ocupa un cluster y BOOT va justo detras
 ef = mkdir([('BOOT', 0x10, ef_cl + 1, 0)], 0)
 bt = mkdir([('BOOTX64.EFI', 0x20, e_cl, len(efi))], ef)
 
+docs = []
+if docs_dir:
+    import os
+    def ok83(n):
+        b, _, e = n.partition('.')
+        return n == n.upper() and 1 <= len(b) <= 8 and len(e) <= 3 and '.' not in e and all(c.isalnum() or c in '_-' for c in b + e)
+    sub = os.path.basename(os.path.normpath(docs_dir)).upper()
+    files = sorted(os.listdir(docs_dir))
+    if not ok83(sub) or '.' in sub or not all(ok83(f) for f in files) or len(files) > 100:
+        sys.exit('--docs: la carpeta y sus archivos necesitan nombres 8.3 en mayusculas')
+    fents = [(f, 0x20, alloc(rd(os.path.join(docs_dir, f))), os.path.getsize(os.path.join(docs_dir, f))) for f in files]
+    dd_cl = next_cl                 # DOCS ocupa un cluster y la subcarpeta va justo detras
+    dd = mkdir([(sub, 0x10, dd_cl + 1, 0)], 0)
+    mkdir(fents, dd)
+    docs = [('DOCS', 0x10, dd, 0)]
+
 root = bytearray()
 root += ent(LABEL, 0x08, 0, 0)
 root += ent(name83('EFI'), 0x10, ef, 0)
 root += ent(name83('ZUNZUN'), 0x10, zz, 0)
 root += ent(name83('LEEME.TXT'), 0x20, l_cl, len(leeme))
+for n, a, c, sz in docs:
+    root += ent(name83(n), a, c, sz)
 root += bytes(-len(root) % csize)
 blobs.append((root_cl, bytes(root)))
 
