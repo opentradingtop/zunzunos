@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Crea la imagen de ZunzunOS: MBR + cargador BIOS + particion FAT32 con todo.
 
-  mkimage.py boot.bin BOOTX64.EFI kernel.bin initrd.bin leeme.txt salida.img [--disk-bytes N]
+  mkimage.py boot.bin BOOTX64.EFI kernel.bin initrd.bin leeme.txt salida.img [--disk-bytes N] [--label NOMBRE]
 
 Con --disk-bytes la particion ocupa todo el disco, pero el archivo solo contiene
 hasta el ultimo dato usado: grabar es rapido y el resto queda como espacio libre.
@@ -17,6 +17,14 @@ if '--disk-bytes' in args:
     i = args.index('--disk-bytes')
     disk_bytes = int(args[i + 1])
     del args[i:i + 2]
+label = 'ZUNZUN'
+if '--label' in args:
+    i = args.index('--label')
+    label = args[i + 1].upper()
+    del args[i:i + 2]
+if not label or len(label) > 11 or any(c in '"*+,./:;<=>?[\\]|' or not (32 <= ord(c) < 127) for c in label):
+    sys.exit('etiqueta no valida: hasta 11 letras, cifras o espacios')
+LABEL = label.ljust(11).encode()
 boot_p, efi_p, kern_p, ird_p, leeme_p, out_p = args
 rd = lambda p: open(p, 'rb').read()
 boot, efi, kern, ird, leeme = map(rd, (boot_p, efi_p, kern_p, ird_p, leeme_p))
@@ -90,7 +98,7 @@ ef = mkdir([('BOOT', 0x10, ef_cl + 1, 0)], 0)
 bt = mkdir([('BOOTX64.EFI', 0x20, e_cl, len(efi))], ef)
 
 root = bytearray()
-root += ent(b'ZUNZUN     ', 0x08, 0, 0)
+root += ent(LABEL, 0x08, 0, 0)
 root += ent(name83('EFI'), 0x10, ef, 0)
 root += ent(name83('ZUNZUN'), 0x10, zz, 0)
 root += ent(name83('LEEME.TXT'), 0x20, l_cl, len(leeme))
@@ -128,7 +136,7 @@ struct.pack_into('<HBHBHHBHHHII', b, 11, SECT, spc, RESERVED, 2, 0, 0, 0xF8, 0, 
 struct.pack_into('<IHHIHH', b, 36, fat_sectors, 0, 0, root_cl, 1, 6)
 b[64] = 0x80; b[66] = 0x29
 struct.pack_into('<I', b, 67, 0x5A554E5A)
-b[71:82] = b'ZUNZUN     '
+b[71:82] = LABEL
 b[82:90] = b'FAT32   '
 b[510:512] = b'\x55\xaa'
 fsi = bytearray(SECT)

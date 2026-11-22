@@ -2,6 +2,7 @@
 # Graba ZunzunOS en una memoria USB (macOS). BORRA TODO su contenido.
 #   tools/grabar-usb.sh              lista las memorias conectadas
 #   tools/grabar-usb.sh /dev/diskN   graba y verifica
+#   LABEL="TYNI CORE" tools/grabar-usb.sh /dev/diskN   con otro nombre de volumen (hasta 11 letras)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DISK="${1:-}"
@@ -14,7 +15,7 @@ echo "$INFO" | grep -q "Internal: *Yes" && { echo "$DISK es interno. Cancelado."
 BYTES=$(echo "$INFO" | sed -n 's/.*(\([0-9]*\) Bytes).*/\1/p' | head -1)
 [ "$BYTES" -lt $((256*1024*1024*1024)) ] || { echo "Disco demasiado grande para ser una memoria. Cancelado."; exit 1; }
 make -s all
-make -s usb-img DISK_BYTES="$BYTES"
+make -s usb-img DISK_BYTES="$BYTES" LABEL="${LABEL:-ZUNZUN}"
 IMG=build/usb.img; RAW="${DISK/\/dev\/disk//dev/rdisk}"; SIZE=$(stat -f%z "$IMG")
 if [ "${2:-}" != "--si" ]; then
   echo "Se va a BORRAR:"; echo "$INFO" | grep -E "Device / Media Name|Disk Size"; diskutil list "$DISK"
