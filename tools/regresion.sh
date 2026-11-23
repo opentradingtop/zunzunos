@@ -41,5 +41,6 @@ ok "teclado: repeticion, deshacer y atajos"; mkstick; python3 -I tools/teclado_t
 ok "bateria (en el Mac, EC simulado)"; tools/pruebas/bateria/correr.sh "$S/r-bat" 2>&1 | filt
 ok "red local (dos equipos con cable directo)"; python3 -I tools/red_test.py "$S/r-red" 2>&1 | filt
 ok "red local (uno con router, el otro con direccion local; cambio de cable)"; python3 -I tools/red_test.py "$S/r-rt" router 2>&1 | filt
+ok "guardia de red: permisos de Internet y registro"; mkstick; python3 -I tools/guardia_test.py "$S/r-gua" "-nic user,model=e1000 $STICK" 2>&1 | filt
 ok "sesiones"; python3 -I tools/sesion_test.py "$S/r-ses" "$K" 2>&1 | filt
 ok "fin"

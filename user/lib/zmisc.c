@@ -78,3 +78,12 @@ int z_png_save(const char *path, const u32 *px, int w, int h) {
 /* ---------- imagen en el portapapeles ---------- */
 int z_clip_set_img(const u32 *px, int w, int h) { long n = 12 + (long)w * h * 4; u8 *b = malloc(n); if (!b) return -12; memcpy(b, "ZIMG", 4); memcpy(b + 4, &w, 4); memcpy(b + 8, &h, 4); memcpy(b + 12, px, (long)w * h * 4); int r = SC2(15, b, n); free(b); return r < 0 ? r : 0; }
 u32 *z_clip_get_img(int *w, int *h) { long n = SC2(16, 0, 0); if (n < 12) return 0; u8 *b = malloc(n); if (!b) return 0; SC2(16, b, n); if (memcmp(b, "ZIMG", 4)) { free(b); return 0; } memcpy(w, b + 4, 4); memcpy(h, b + 8, 4); if ((long)*w * *h * 4 + 12 > n || *w <= 0 || *h <= 0) { free(b); return 0; } u32 *px = malloc((long)*w * *h * 4); memcpy(px, b + 12, (long)*w * *h * 4); free(b); return px; }
+
+/* reglas de Internet por programa, guardadas en /sys/ZUNZUN/PERMISOS-RED.TXT ("programa=0|1|2").
+   Si no existe el archivo: el navegador, el correo, LUMEN y las apps web pueden salir; los demas preguntan. */
+#define RULES "/sys/ZUNZUN/PERMISOS-RED.TXT"
+int z_rules_load(void) { char *t = z_readfile(RULES, 0); int n = 0; z_guard(0, "*", 0);
+    if (!t) { static const char *def[] = {"browser", "correo", "lumen", "apps"}; for (int i = 0; i < 4; i++) { z_guard(0, def[i], 1); n++; } return n; }
+    for (char *p = t; p && *p; ) { char *e = strchr(p, '\n'); if (e) *e = 0; char *q = strchr(p, '='); if (q) { *q = 0; z_guard(0, p, atoi(q + 1)); n++; } p = e ? e + 1 : 0; } free(t); return n; }
+int z_rules_save(void) { zrule r[64]; int n = z_guard(1, r, 64); if (n < 0) return n; char b[64 * 32]; int l = 0; for (int i = 0; i < n; i++) l += snprintf(b + l, sizeof b - l, "%s=%u\n", r[i].name, r[i].pol); int e = z_writefile(RULES, b, l); z_sync(); return e; }
+const char *z_app_name(const char *bin) { for (int i = 0; i < z_napps; i++) if (!strcmp(z_apps[i].bin, bin)) return tr(z_apps[i].name); return bin; }

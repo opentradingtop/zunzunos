@@ -1200,3 +1200,33 @@ Nombre de este equipo en la red:	-	Name of this computer in the network:
 Nombre nuevo:	-	New name:
 La red local solo se puede usar en la sesión del administrador.	-	The local network can only be used in the administrator session.
 Cambiar nombre	-	Rename
+Impresoras compartidas de la red	-	Shared printers of the network
+Compartir una impresora	-	Share a printer
+Aparecen en el diálogo Imprimir de todos los equipos de la red.	-	They appear in the Print dialog of every computer in the network.
+El equipo que tiene la impresora tiene que estar encendido.	-	The computer the printer is connected to must be switched on.
+Todavía no hay impresoras. Pulsa Compartir una impresora.	-	No printers yet. Press Share a printer.
+El administrador todavía no ha compartido impresoras.	-	The administrator has not shared any printers yet.
+conectada a	-	connected to
+¿Dejar de compartir %s?	-	Stop sharing %s?
+%s no tiene impresoras configuradas (se añaden en Impresoras de ese equipo)	-	%s has no printers set up (add them in Printers on that computer)
+%s compartida: ya aparece al imprimir en los demás equipos	-	%s shared: it now appears when printing on the other computers
+Imprimiendo un trabajo de %s en %s	-	Printing a job from %s on %s
+%s quiere conectarse a Internet:	-	%s wants to connect to the Internet:
+Si no lo esperabas, bloquéalo.	-	If you did not expect it, block it.
+Lo puedes cambiar en Configuración, Conexiones.	-	You can change it in Settings, Connections.
+Permitir siempre	-	Always allow
+Solo esta vez	-	Only this time
+Permiso de Internet	-	Internet permission
+Conexiones	-	Connections
+Internet: lo que puede hacer cada programa.	-	Internet: what each program may do.
+La red local (impresoras, Red local) siempre se permite.	-	The local network (printers, Local network) is always allowed.
+Preguntar	-	Ask
+Permitir	-	Allow
+Últimas conexiones	-	Recent connections
+Borrar la lista	-	Clear the list
+Ninguna todavía.	-	None yet.
+hace %lu s	-	%lu s ago
+hace %lu min	-	%lu min ago
+BLOQUEADO	-	BLOCKED
+red local	-	local network
+Solo el administrador puede cambiar los permisos	-	Only the administrator can change the permissions

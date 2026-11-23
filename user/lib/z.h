@@ -74,6 +74,12 @@ static inline void z_poweroff(void) { SC1(90, 0); }
 static inline const char *z_print_arg(const char *a, int *p) { const char *k = "--imprimir "; int i = 0; while (k[i] && a[i] == k[i]) i++; *p = !k[i]; return *p ? a + 11 : a; }
 /* sesion: 0 consulta (bits 0-2 modo 1 admin 2 invitado, 8 hay PIN, 16 hay /sys), 1 entrar como admin, 2 invitado, 3 cerrar, 4 cambiar PIN, 5 comprobar PIN */
 static inline int z_sess(int op, const char *a, const char *b) { return SC3(109, op, a, b); }
+/* guardia de red: registro de conexiones y permiso de Internet por programa (kernel/guardia.c) */
+typedef struct { u64 t, t0; u32 seq, ip; u16 port; u8 proto, verdict; u32 count; char app[24]; char host[48]; u64 tx, rx; } zconn;   /* verdict 1 Internet, 2 bloqueado, 3 red local */
+typedef struct { char name[24]; u32 pol; } zrule;   /* pol 0 preguntar, 1 permitir, 2 bloquear */
+typedef struct { u32 id; int pid; char name[24], host[48]; u32 ip; u32 port; } zask;
+static inline long z_guard(int op, const void *a, long b) { return SC3(114, op, a, b); }
+int z_rules_load(void); int z_rules_save(void); const char *z_app_name(const char *bin);
 /* bateria: o[0] hay, o[1] %, o[2] cargando, o[3] con cargador, o[4] descargando; error si no se puede leer */
 static inline int z_battery(int o[5]) { return SC1(113, o); }
 static inline long z_idle_ms(void) { return SC0(110); } /* tiempo sin tocar teclado ni raton */
@@ -248,7 +254,7 @@ void zp_image(zpdoc *d, double x, double y, double w, double h, const u32 *px, i
 double zp_textw(int font, double size, const char *s);
 void zp_flow_init(zpflow *f, zpdoc *d, double margin); void zp_flow_newpage(zpflow *f); void zp_para(zpflow *f, int font, double size, u32 col, const char *text, int align, double after);
 long zp_render(zpdoc *d, const zpset *s, const char *lang, u8 **out); u32 *zp_raster(zpdoc *d, const zpset *s, int pg, int dpi, int *w, int *h); u32 *zp_raster_rows(zpdoc *d, const zpset *s, int pg, int dpi, int ry, int rows, int *w); long zp_render_qpdl(zpdoc *d, const zpset *s, u8 **out); int zp_print_text(const char *title, const char *sub, const char *text, int mono); int zp_print_image(const char *title, const u32 *px, int w, int h);
-int zp_printers(zprinter *o, int max); int zp_save_printers(const zprinter *o, int n); int zp_send(const zprinter *p, const u8 *data, long len, const char *job);
+int zp_printers(zprinter *o, int max); int zp_save_printers(const zprinter *o, int n); int zp_send(const zprinter *p, const u8 *data, long len, const char *job); int zp_net_printers(zprinter *o, int max); int zp_send_job(const zprinter *p, const u8 *data, long len, const char *job);
 int zp_print(zpdoc *d, const zprinter *p, const zpset *s, const char *job); int zp_ipp_query(const char *uri, char *model, int mcap, char *formats, int fcap, int *color);
 int zp_usb_list(zusbprn *o, int max); const char *zp_guess_lang(const char *devid_or_formats);
 extern int zp_default_land; int zp_dialog(const char *title, void (*build)(zpdoc *d, const zpset *s, void *ctx), void *ctx);

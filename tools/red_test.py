@@ -18,12 +18,13 @@ def stick(name, docs=None):
         a = subprocess.run(['hdiutil', 'attach', '-imagekey', 'diskimage-class=CRawDiskImage', '-mountrandom', '/tmp', p], capture_output=True, text=True, timeout=60).stdout; dev = a.split()[0]
         try:
             mnt = [l.split('\t')[-1].strip() for l in a.splitlines() if '/tmp' in l][0]; os.makedirs(os.path.join(mnt, 'DOCS'), exist_ok=True)
-            for n, d in docs.items(): open(os.path.join(mnt, 'DOCS', n), 'w').write(d)
+            for n, d in docs.items():
+                f = os.path.join(mnt, n if '/' in n else os.path.join('DOCS', n)); os.makedirs(os.path.dirname(f), exist_ok=True); open(f, 'w').write(d)
             for x in os.listdir(mnt):
                 if x.startswith('.'): subprocess.run(['rm', '-rf', os.path.join(mnt, x)])
         finally: subprocess.run(['hdiutil', 'detach', dev], capture_output=True)
     return p
-A = stick('a.img', {'nota.txt': 'Nota de prueba de la red local de ZunzunOS.\n'}); B = stick('b.img')
+A = stick('a.img', {'nota.txt': 'Nota de prueba de la red local de ZunzunOS.\n', 'ZUNZUN/IMPRESORAS.TXT': 'Samsung ML-1640|file:/sys/DOCS/impreso.qpdl|qpdl|0|0|1|600|Samsung ML-1640 Series\n'}); B = stick('b.img')
 def q(img, mac, net): return (f'-device usb-ehci,id=e -device usb-kbd,bus=e.0 -device usb-tablet,bus=e.0 -drive if=none,id=st,format=raw,file={img} -device usb-storage,bus=e.0,drive=st,bootindex=0 '
                               f'-netdev socket,id=n1,{net} -device e1000,netdev=n1,mac={mac}')
 # ventana de Red local (920x640): marco en (88, 50), contenido 26 mas abajo; los menus emergentes no tienen barra
@@ -53,7 +54,9 @@ if not explore and not router:
     # B abre Red local y ve la carpeta que tiene compartida (sin red, es suya)
     SB += M('redlocal') + ['wait:red local abierta', 'sleep:1', at(137, 20), 'sleep:0.8', at(300, 106), 'wait:red lista Fotos/: 1', 'sleep:0.5', 'shot:b-carpeta', 'key:alt-f4', 'sleep:1']
     # A saca a B de la red
+    SA += [at(329, 20), 'sleep:1', at(797, 64), 'sleep:1', menu_item(200, 120, 0), 'wait:red impresora compartida', 'sleep:1', 'shot:a-impresoras', 'wait:red impresion de', 'sleep:2']
     SA += ['sleep:8', at(80, 20), 'sleep:1', at(829, 250), 'sleep:0.8', 'key:ret', 'sleep:3', 'shot:a-sacado']
+    SB += ['wait:(1 impresoras)', 'sleep:1'] + M('agenda') + ['sleep:1', 'key:ctrl-p', 'wait:dialogo imprimir abierto', 'sleep:1.2', 'shot:b-dialogo', 'click:955,625', 'wait:red trabajo enviado', 'sleep:1', 'key:alt-f4', 'sleep:0.5']
     SB += ['wait:red sacado de la red', 'sleep:1']
 res = {}
 def run(name, steps, img, mac, net, port):
@@ -66,10 +69,20 @@ ta.join(); tb.join()
 if rt: rt.kill()
 la = open(os.path.join(out, 'a', 'serial-bios.log'), errors='replace').read(); lb = open(os.path.join(out, 'b', 'serial-bios.log'), errors='replace').read()
 ok = res.get('a') == 0 and res.get('b') == 0
-CHK = ((la, ('red: IP 192.168.50.20', 'red creada', 'red invitado', 'red mensaje enviado 1/1', 'cable conectado de nuevo', 'sin DHCP, direccion local')), (lb, ('sin DHCP, direccion local', 'red unido', 'red MENSAJE de'))) if router else ((la, ('red creada', 'red codigo', 'red invitado', 'red carpeta Fotos', 'red subido nota.txt', 'red descargado /sys/DOCS/Red/nota.txt', 'red mensaje enviado 1/1')), (lb, ('red invitacion recibida', 'red unido', 'red MENSAJE de', 'red lista Fotos/: 1', 'red sacado de la red')))
+CHK = ((la, ('red: IP 192.168.50.20', 'red creada', 'red invitado', 'red mensaje enviado 1/1', 'cable conectado de nuevo', 'sin DHCP, direccion local')), (lb, ('sin DHCP, direccion local', 'red unido', 'red MENSAJE de'))) if router else ((la, ('red creada', 'red codigo', 'red invitado', 'red carpeta Fotos', 'red subido nota.txt', 'red descargado /sys/DOCS/Red/nota.txt', 'red mensaje enviado 1/1', 'red impresora compartida', 'red impresion de')), (lb, ('red invitacion recibida', 'red unido', 'red MENSAJE de', 'red lista Fotos/: 1', 'red trabajo enviado', 'red sacado de la red')))
 for log, what in CHK:
     for w in what:
         if w not in log: print('FALLO: falta', repr(w)); ok = False
+if not router:
+    m = re.search(r'red trabajo enviado a .*: (\d+) bytes, (-?\d+)', lb); m2 = re.search(r'red impresion de .* en Samsung ML-1640: (\d+) bytes, (-?\d+)', la)
+    if not m or m.group(2) != '0' or not m2 or m2.group(2) != '0' or m.group(1) != m2.group(1): print('FALLO: impresion por la red', m and m.group(0), m2 and m2.group(0)); ok = False
+    a = subprocess.run(['hdiutil', 'attach', '-readonly', '-imagekey', 'diskimage-class=CRawDiskImage', '-mountrandom', '/tmp', A], capture_output=True, text=True, timeout=60).stdout
+    try:
+        mnt = [l.split('\t')[-1].strip() for l in a.splitlines() if '/tmp' in l][0]; d = open(os.path.join(mnt, 'DOCS', 'impreso.qpdl'), 'rb').read()
+        if b'QPDL' not in d[:200] or (m2 and len(d) != int(m2.group(1))): print('FALLO: el trabajo no es QPDL o no esta entero', len(d)); ok = False
+        else: print('trabajo QPDL recibido en A:', len(d), 'bytes')
+    except Exception as e: print('FALLO: no se encontro el trabajo en A:', e); ok = False
+    finally: subprocess.run(['hdiutil', 'detach', a.split()[0]] if a.split() else ['true'], capture_output=True)
 ca = re.search(r'red codigo (\d{3} \d{3})', la)
 for x in ('PANICO', 'fallo de pagina', 'excepcion', 'termino: -'):
     if x in la or x in lb: print('FALLO:', x); ok = False

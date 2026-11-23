@@ -98,6 +98,10 @@ u64 syscall_dispatch(regs_t *r) {
     case 110: { extern volatile u64 last_input; return (ticks - last_input) * 1000 / HZ; }
     case 112: { UCHK(a, b * 4); extern int wm_capture(u32 *, u64); return wm_capture((u32 *)a, b); }
     case 111: { extern int screen_power(int); return screen_power(a); }
+    case 114: { if (a == 0) { char n[24]; if (user_str((char *)b, n, 24) < 0) return E_INVAL; return guard_syscall(0, (u64)n, c); }
+        if (a == 1) { UCHK(b, c * sizeof(zrule_t)); } else if (a == 2) { UCHK(b, c * sizeof(gl_t)); } else if (a == 3) { UCHK(b, sizeof(zask_t)); }
+        if ((a == 0 || a == 4 || a == 5) && cur->proc && cur->proc->pid != 1 && !guard_admin()) return E_ACCES;   /* cambiar reglas: escritorio o Configuracion */
+        return guard_syscall(a, b, c); }
     case 113: { int o[5]; int r = acpi_battery(o); if (r) return r; UCHK(a, sizeof o); memcpy((void *)a, o, sizeof o); return 0; }
     case 109: { char pb[8] = "", pc[8] = ""; if (b && user_str((char *)b, pb, 8) < 0) return E_INVAL; if (c && user_str((char *)c, pc, 8) < 0) return E_INVAL; return sess_syscall(a, b ? pb : 0, c ? pc : 0); }
     case 108: { UCHK(b, c); extern long usbprn_write(int, const void *, long); return usbprn_write(a, (const void *)b, c); }

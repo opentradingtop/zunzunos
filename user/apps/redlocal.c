@@ -24,7 +24,9 @@
 
 typedef struct { char id[12], name[32]; } mem_t;
 typedef struct { char id[12], name[40], host[12], path[160]; int rw; } share_t;
-static struct { char net[12], netname[40], admin[12]; u8 key[32]; int ver, nm, ns; mem_t m[MAXM]; share_t s[MAXS]; } R;
+#define MAXP 16
+typedef struct { char id[12], name[64], host[12], pname[64], lang[8], model[64]; int paper, dpi, color; } rprn_t;
+static struct { char net[12], netname[40], admin[12]; u8 key[32]; int ver, nm, ns, np; mem_t m[MAXM]; share_t s[MAXS]; rprn_t p[MAXP]; } R;
 static char myid[12], myname[32];
 static const char *tr_(const char *s) { return tr(s); }
 static long atol(const char *s) { while (*s == ' ') s++; long v = 0; while (*s >= '0' && *s <= '9') v = v * 10 + *s++ - '0'; return v; }
@@ -49,11 +51,13 @@ static void ident(void) { znet ni; memset(&ni, 0, sizeof ni); z_netinfo(&ni); ch
 static void ident_save(void) { char b[100]; snprintf(b, 100, "id=%s\nnombre=%s\nmac=%s\n", myid, myname, mymac); z_writefile(IDF, b, strlen(b)); z_sync(); }
 
 static int cfg_text(sb_t *b) { char k[65]; hex(R.key, 32, k); sb_f(b, "ZRED1\nred=%s\nnombre=%s\nclave=%s\nadmin=%s\nversion=%d\n", R.net, R.netname, k, R.admin, R.ver);
-    for (int i = 0; i < R.nm; i++) sb_f(b, "equipo=%s|%s\n", R.m[i].id, R.m[i].name); for (int i = 0; i < R.ns; i++) sb_f(b, "carpeta=%s|%s|%s|%s|%d\n", R.s[i].id, R.s[i].name, R.s[i].host, R.s[i].path, R.s[i].rw); return b->n; }
+    for (int i = 0; i < R.nm; i++) sb_f(b, "equipo=%s|%s\n", R.m[i].id, R.m[i].name); for (int i = 0; i < R.ns; i++) sb_f(b, "carpeta=%s|%s|%s|%s|%d\n", R.s[i].id, R.s[i].name, R.s[i].host, R.s[i].path, R.s[i].rw);
+    for (int i = 0; i < R.np; i++) sb_f(b, "impresora=%s|%s|%s|%s|%s|%d|%d|%d|%s\n", R.p[i].id, R.p[i].name, R.p[i].host, R.p[i].pname, R.p[i].lang, R.p[i].paper, R.p[i].dpi, R.p[i].color, R.p[i].model); return b->n; }
 static int cfg_parse(char *t) { memset(&R, 0, sizeof R); if (!t || strncmp(t, "ZRED1\n", 6)) return -1; char v[80]; kvs(t, "red", R.net, 12); kvs(t, "nombre", R.netname, 40); kvs(t, "admin", R.admin, 12); kvs(t, "version", v, 16); R.ver = atoi(v);
     kvs(t, "clave", v, 80); if (unhex(v, R.key, 32)) { memset(&R, 0, sizeof R); return -1; }
     for (char *p = t; p && *p; p = strchr(p, '\n') ? strchr(p, '\n') + 1 : 0) { char l[400]; int i = 0; while (p[i] && p[i] != '\n' && i < 399) { l[i] = p[i]; i++; } l[i] = 0; char *f[6];
         if (!strncmp(l, "equipo=", 7) && R.nm < MAXM) { int n = split(l + 7, f, 2); if (n == 2) { strncpy0(R.m[R.nm].id, f[0], 12); strncpy0(R.m[R.nm].name, f[1], 32); R.nm++; } }
+        else if (!strncmp(l, "impresora=", 10) && R.np < MAXP) { char *g[9]; int n = split(l + 10, g, 9); if (n >= 8) { rprn_t *q = &R.p[R.np++]; strncpy0(q->id, g[0], 12); strncpy0(q->name, g[1], 64); strncpy0(q->host, g[2], 12); strncpy0(q->pname, g[3], 64); strncpy0(q->lang, g[4], 8); q->paper = atoi(g[5]); q->dpi = atoi(g[6]); q->color = atoi(g[7]); if (n > 8) strncpy0(q->model, g[8], 64); } }
         else if (!strncmp(l, "carpeta=", 8) && R.ns < MAXS) { int n = split(l + 8, f, 5); if (n == 5) { share_t *s = &R.s[R.ns++]; strncpy0(s->id, f[0], 12); strncpy0(s->name, f[1], 40); strncpy0(s->host, f[2], 12); strncpy0(s->path, f[3], 160); s->rw = atoi(f[4]); } } }
     return R.net[0] ? 0 : -1; }
 static void cfg_load(void) { char *t = z_readfile(CFG, 0); if (cfg_parse(t)) memset(&R, 0, sizeof R); free(t); }
@@ -112,6 +116,17 @@ static long request(const char *id, const char *hdr, const void *pay, long pn, u
     long n = crecv(&c, resp, 30000); z_close(c.s); if (n < 0) { strcpy(err, tr_("sin respuesta")); return -1; }
     if (strncmp((char *)*resp, "OK", 2)) { snprintf(err, 120, "%s", (char *)*resp + (strncmp((char *)*resp, "ERR|", 4) ? 0 : 4)); free(*resp); *resp = 0; return -1; } return n; }
 
+/* impresoras de este equipo (las de IMPRESORAS.TXT, sin las que vienen de la red) */
+static int local_printers(zprinter *o, int max) { zprinter all[32]; int n = zp_printers(all, 32), k = 0; for (int i = 0; i < n && k < max; i++) if (strncmp(all[i].uri, "red://", 6)) o[k++] = all[i]; return k; }
+/* trabajos que los programas de este equipo dejan para impresoras de la red (zp_send con red://EQUIPO/ID) */
+#define SPOOL "/rd/tmp/RED-IMPRIMIR"
+static void spool(void) { zdirent e; char inf[64] = ""; for (int i = 0; !z_readdir(SPOOL, i, &e); i++) if (z_ends(e.name, ".inf")) { strncpy0(inf, e.name, 64); break; } if (!inf[0]) return;
+    char b[160], f[200], g[200]; strcpy(b, inf); b[strlen(b) - 4] = 0; snprintf(f, 200, SPOOL "/%s.inf", b); snprintf(g, 200, SPOOL "/%s.env", b); if (z_rename(f, g)) return;   /* recogido: ya no se puede cancelar */
+    char *t = z_readfile(g, 0); long n = 0; snprintf(f, 200, SPOOL "/%s.bin", b); u8 *d = z_readfile(f, &n); int rc = -5; char err[120] = "";
+    if (t && d) { char *bar = strchr(t, '|'), *sl = strchr(t, '/'); if (bar) *bar = 0; if (sl) *sl = 0; if (sl) { if (bar) safe(bar + 1); char h[300]; snprintf(h, 300, "IMPRIME|%s|%ld|%.200s", sl + 1, n, bar ? bar + 1 : "ZunzunOS");
+            conn_t c; if (!cconnect(&c, t, err)) { if (!csends(&c, h)) { for (long o = 0; o < n; o += 65536) csend(&c, d + o, MIN(65536L, n - o)); if (!n) csend(&c, "", 0); u8 *r = 0; if (crecv(&c, &r, 120000) > 0) { rc = strncmp((char *)r, "OK", 2) ? (strncmp((char *)r, "ERR|", 4) ? -5 : atoi((char *)r + 4) ? atoi((char *)r + 4) : -5) : 0; } free(r); } z_close(c.s); } else rc = -111; } }
+    char lg[200]; snprintf(lg, 200, "[prueba] red trabajo enviado a %s: %ld bytes, %d %s", t ? mname(t) : "?", n, rc, err); z_log(lg);
+    char res[200], v[16]; snprintf(res, 200, SPOOL "/%s.res", b); snprintf(v, 16, "%d", rc); z_writefile(res, v, strlen(v)); z_unlink(f); z_unlink(g); free(t); free(d); }
 /* ---------- carpetas: rutas seguras dentro de la carpeta compartida ---------- */
 static share_t *share(const char *id) { for (int i = 0; i < R.ns; i++) if (!strcmp(R.s[i].id, id)) return &R.s[i]; return 0; }
 static int resolve(share_t *s, const char *rel, char *o, int cap) { if (strstr(rel, "..") || strchr(rel, '|')) return -1; while (*rel == '/') rel++; snprintf(o, cap, "%s%s%s", s->path, *rel ? "/" : "", rel); int l = strlen(o); while (l > 1 && o[l - 1] == '/') o[--l] = 0; return 0; }
@@ -141,6 +156,7 @@ static void srv_invite(conn_t *c, char **f, int k) {
     if (cfg_parse((char *)pl)) z_log("[prueba] red invitacion: configuracion no valida");
     if (cfg_parse((char *)pl) == 0) { cfg_save(); mk_shares(); lsend(c, "LISTO"); char m[200]; snprintf(m, 200, tr_("Este equipo ya forma parte de la red \"%s\"."), R.netname); notify(m); char lg[120]; snprintf(lg, 120, "[prueba] red unido a %s como %s", R.net, myid); z_log(lg); } free(pl); }
 static void srv_session(conn_t *c, char **f, int k) {
+    cfg_load();   /* la ventana de este mismo equipo puede haber cambiado la configuracion hace un momento */
     if (!in_net() || k < 5 || strcmp(f[2], R.net)) { lsend(c, "NO"); return; } char who[12]; strncpy0(who, f[3], 12); if (!member(who) && strcmp(who, R.admin)) { lsend(c, "NO"); return; }
     u8 nc[16], ns[16]; if (unhex(f[4], nc, 16)) return; zc_random(ns, 16); char h[40], l[200]; hex(ns, 16, h); snprintf(l, 200, "RETO|%s", h); lsend(c, l);
     char want[65]; proof(nc, ns, 'c', want); if (line(c, l, 200, 5000) < 0 || strncmp(l, "PRUEBA|", 7) || strcmp(l + 7, want)) { z_log("[prueba] red prueba incorrecta"); return; }
@@ -163,7 +179,12 @@ static void srv_session(conn_t *c, char **f, int k) {
         else if (!strcmp(a[0], "CONFIG") && na >= 2) { if (strcmp(who, R.admin)) { csends(c, "ERR|solo el administrador"); continue; } u8 *t2; long m = crecv(c, &t2, 20000); if (m < 0) break;
             char key[32]; memcpy(key, R.key, 32); char net[12]; strcpy(net, R.net); int ver = R.ver; if (cfg_parse((char *)t2) || strcmp(R.net, net)) { cfg_load(); csends(c, "ERR|configuracion no valida"); free(t2); continue; }
             if (R.ver < ver) { cfg_load(); csends(c, "OK"); free(t2); continue; } if (!member(myid)) { z_unlink(CFG); memset(&R, 0, sizeof R); z_sync(); z_log("[prueba] red sacado de la red"); notify(tr_("El administrador ha sacado este equipo de la red local.")); csends(c, "OK"); free(t2); break; }
-            cfg_save(); mk_shares(); free(t2); csends(c, "OK"); (void)key; char lg2[80]; snprintf(lg2, 80, "[prueba] red configuracion %d", R.ver); z_log(lg2); }
+            cfg_save(); mk_shares(); free(t2); csends(c, "OK"); (void)key; char lg2[80]; snprintf(lg2, 80, "[prueba] red configuracion %d (%d impresoras)", R.ver, R.np); z_log(lg2); }
+        else if (!strcmp(a[0], "IMPRESORAS")) { zprinter pr[16]; int n = local_printers(pr, 16); sb_t o = {0}; sb_s(&o, "OK\n"); for (int i = 0; i < n; i++) { char nm[64]; strcpy(nm, pr[i].name); safe(nm); sb_f(&o, "%s|%s|%d|%d|%d|%s\n", nm, pr[i].lang, pr[i].paper, pr[i].dpi, pr[i].color, pr[i].model); } csend(c, o.p, o.n); free(o.p); }
+        else if (!strcmp(a[0], "IMPRIME") && na >= 4) { long sz = atol(a[2]), got = 0; sb_t d = {0}; sb_add(&d, "", 0); while (got < sz) { u8 *q2; long m = crecv(c, &q2, 20000); if (m < 0) break; sb_add(&d, q2, m); free(q2); got += m; } if (got != sz) { free(d.p); break; }
+            rprn_t *rp = 0; for (int i = 0; i < R.np; i++) if (!strcmp(R.p[i].id, a[1]) && !strcmp(R.p[i].host, myid)) rp = &R.p[i]; zprinter pr[16]; int n = local_printers(pr, 16), k = -1; for (int i = 0; rp && i < n; i++) if (!strcmp(pr[i].name, rp->pname)) k = i;
+            if (k < 0) { csends(c, "ERR|la impresora ya no esta en este equipo"); free(d.p); continue; } char job[120]; snprintf(job, 120, "%s (%s)", a[3], mname(who)); char m2[200]; snprintf(m2, 200, tr_("Imprimiendo un trabajo de %s en %s"), mname(who), pr[k].name); notify(m2);
+            int e = zp_send_job(&pr[k], (u8 *)d.p, d.n, job); free(d.p); char lg2[200]; snprintf(lg2, 200, "[prueba] red impresion de %s en %s: %ld bytes, %d", mname(who), pr[k].name, sz, e); z_log(lg2); char r2[40]; snprintf(r2, 40, e ? "ERR|%d" : "OK", e); csends(c, r2); }
         else if (!strcmp(a[0], "PIDECONFIG")) { sb_t o = {0}; sb_s(&o, "OK\n"); cfg_text(&o); csend(c, o.p, o.n); free(o.p); }
         else csends(c, "ERR|peticion desconocida"); } }
 static int service(void) { service_mode = 1;
@@ -171,6 +192,7 @@ static int service(void) { service_mode = 1;
     char lg[120]; snprintf(lg, 120, "[prueba] red servicio listo: %s %s (%s)", myid, myname, in_net() ? R.net : "sin red"); z_log(lg); u64 last_soy = 0, last_cfg = 0; u8 m[1500];
     for (;;) { u64 now = z_ms(); if (now - last_soy > 15000) { last_soy = now; char o[200]; cfg_load(); soy(o, 200); z_sendto(us, 0xFFFFFFFF, PUDP, o, strlen(o)); }
         u32 fr[2]; long n; while ((n = z_recvfrom(us, m, sizeof m - 1, 20, fr)) > 0) on_udp(us, (char *)m, n, fr[0], fr[1]);
+        { static u64 ls; if (now - ls > 400) { ls = now; spool(); } }
         int cs = z_accept(ts, 150); if (cs >= 0) { conn_t c; memset(&c, 0, sizeof c); c.s = cs; char l[400]; if (line(&c, l, 400, 5000) > 0) { char *f[8]; int k = split(l, f, 8); if (k >= 2 && !strcmp(f[0], "ZRED1")) { if (!strcmp(f[1], "INVITA")) srv_invite(&c, f, k); else if (!strcmp(f[1], "HOLA")) srv_session(&c, f, k); } } z_close(cs); }
         /* un terminal que vuelve pide al administrador la configuracion por si cambio mientras estaba apagado */
         if (in_net() && !is_admin() && now - last_cfg > 60000 && online(R.admin)) { last_cfg = now; u8 *r; char err[120]; if (request(R.admin, "PIDECONFIG", 0, 0, &r, err) > 0) { int ver = R.ver; char *t = strchr((char *)r, '\n'); if (t && !cfg_parse(t + 1) && R.ver >= ver) { if (member(myid)) cfg_save(); else { z_unlink(CFG); memset(&R, 0, sizeof R); z_sync(); } } else cfg_load(); free(r); } }
@@ -203,7 +225,7 @@ static void invite(peer_t *p) { msg[0] = 0; u8 priv[32], pub[32], bpub[32], sh[3
     int ok = line(&c, l, 400, 10000) >= 0 && !strcmp(l, "LISTO"); z_close(c.s); { char lg2[120]; snprintf(lg2, 120, "[prueba] red invitacion respuesta final: %s", ok ? "LISTO" : l); z_log(lg2); } if (!ok) { snprintf(msg, 300, "%s: %s", bname, tr_("no se completó la invitación")); return; }
     cfg_save(); p->net[0] = 0; strcpy(p->net, R.net); p->role = 'T'; push_config(); snprintf(msg, 300, tr_("%s ya forma parte de la red"), bname); snprintf(lg, 80, "[prueba] red invitado %s", bid); z_log(lg); }
 static void remove_member(int i) { if (i <= 0 || i >= R.nm || !strcmp(R.m[i].id, myid)) return; char q[160]; snprintf(q, 160, tr_("¿Sacar a %s de la red? Se cambiará la clave de la red."), R.m[i].name); if (!ui_confirm("Sacar de la red", q)) return;
-    char gone[12]; strcpy(gone, R.m[i].id); memmove(&R.m[i], &R.m[i + 1], (R.nm - i - 1) * sizeof R.m[0]); R.nm--; for (int k = 0; k < R.ns; k++) if (!strcmp(R.s[k].host, gone)) { memmove(&R.s[k], &R.s[k + 1], (R.ns - k - 1) * sizeof R.s[0]); R.ns--; k--; }
+    char gone[12]; strcpy(gone, R.m[i].id); memmove(&R.m[i], &R.m[i + 1], (R.nm - i - 1) * sizeof R.m[0]); R.nm--; for (int k = 0; k < R.ns; k++) if (!strcmp(R.s[k].host, gone)) { memmove(&R.s[k], &R.s[k + 1], (R.ns - k - 1) * sizeof R.s[0]); R.ns--; k--; } for (int k = 0; k < R.np; k++) if (!strcmp(R.p[k].host, gone)) { memmove(&R.p[k], &R.p[k + 1], (R.np - k - 1) * sizeof R.p[0]); R.np--; k--; }
     /* primero se avisa al equipo que sale (con la clave antigua) y despues se cambia la clave para los demas */
     { conn_t c; char err[120]; if (online(gone) && !cconnect(&c, gone, err)) { sb_t b = {0}; R.ver++; cfg_text(&b); char h[40]; snprintf(h, 40, "CONFIG|%d", R.ver); u8 *r = 0; csends(&c, h); csend(&c, b.p, b.n); crecv(&c, &r, 8000); free(r); free(b.p); z_close(c.s); } }
     u8 old[32]; memcpy(old, R.key, 32); sb_t b = {0}; zc_random(R.key, 32); R.ver++; cfg_text(&b); u8 nk[32]; memcpy(nk, R.key, 32); memcpy(R.key, old, 32); int sent = 0;
@@ -216,6 +238,16 @@ static void add_share(void) { const char *it[MAXM]; int map[MAXM], n = 0; for (i
     static const char *rw[] = {"Solo lectura", "Lectura y escritura"}; int k = ui_menu(sx, sy + 40, rw, 2); if (k < 0) return; s.rw = k; u8 rr[3]; zc_random(rr, 3); hex(rr, 3, s.id);
     if (R.ns < MAXS) R.s[R.ns++] = s; mk_shares(); push_config(); char lg[160]; snprintf(lg, 160, "[prueba] red carpeta %s en %s", s.name, mname(s.host)); z_log(lg); }
 static int local(void) { return sel_sh >= 0 && !strcmp(R.s[sel_sh].host, myid); }
+static void add_printer(void) { const char *it[MAXM]; int map[MAXM], n = 0; for (int i = 0; i < R.nm; i++) if (online(R.m[i].id)) { map[n] = i; it[n++] = R.m[i].name; } if (!n) return;
+    int sx, sy; zw_screen(W, 200, 120, &sx, &sy); int r = n == 1 ? 0 : ui_menu(sx, sy, it, n); if (r < 0) return; mem_t *h = &R.m[map[r]]; zprinter pr[16]; int np2 = 0;
+    if (!strcmp(h->id, myid)) np2 = local_printers(pr, 16);
+    else { u8 *q; char err[120]; if (request(h->id, "IMPRESORAS", 0, 0, &q, err) < 0) { snprintf(msg, 300, "%s: %s", h->name, err); return; }
+        for (char *p = strchr((char *)q, '\n'); p && np2 < 16; ) { p++; char *e = strchr(p, '\n'); if (!e) break; *e = 0; char *f[6]; if (split(p, f, 6) == 6) { zprinter *z = &pr[np2++]; memset(z, 0, sizeof *z); strncpy0(z->name, f[0], 64); strncpy0(z->lang, f[1], 8); z->paper = atoi(f[2]); z->dpi = atoi(f[3]); z->color = atoi(f[4]); strncpy0(z->model, f[5], 64); } p = e; } free(q); }
+    if (!np2) { snprintf(msg, 300, tr_("%s no tiene impresoras configuradas (se añaden en Impresoras de ese equipo)"), h->name); return; }
+    const char *pn[16]; for (int i = 0; i < np2; i++) pn[i] = pr[i].name; int k = np2 == 1 ? 0 : ui_menu(sx, sy + 40, pn, np2); if (k < 0 || R.np >= MAXP) return;
+    rprn_t q; memset(&q, 0, sizeof q); u8 rr[3]; zc_random(rr, 3); hex(rr, 3, q.id); snprintf(q.name, 64, "%.40s (%s %.16s)", pr[k].name, tr_("en"), h->name); safe(q.name); strcpy(q.host, h->id); strncpy0(q.pname, pr[k].name, 64); safe(q.pname);
+    strncpy0(q.lang, pr[k].lang, 8); q.paper = pr[k].paper; q.dpi = pr[k].dpi; q.color = pr[k].color; strncpy0(q.model, pr[k].model, 64); safe(q.model); R.p[R.np++] = q; push_config();
+    snprintf(msg, 300, tr_("%s compartida: ya aparece al imprimir en los demás equipos"), q.name); char lg[160]; snprintf(lg, 160, "[prueba] red impresora compartida %s", q.name); z_log(lg); }
 static void list_dir(void) { nent = 0; etop = 0; if (sel_sh < 0 || sel_sh >= R.ns) return; share_t *s = &R.s[sel_sh]; char h[400], err[120]; snprintf(h, 400, "LISTA|%s|%s", s->id, cwd); u8 *r; strcpy(msg, tr_("Leyendo la carpeta..."));
     if (local()) { char p[400]; sb_t o = {0}; sb_s(&o, "OK\n"); if (!resolve(s, cwd, p, 400)) { zdirent e; for (int i = 0; !z_readdir(p, i, &e); i++) if (e.name[0] != '.') sb_f(&o, "%c|%lu|%s\n", e.is_dir ? 'D' : 'F', (unsigned long)e.size, e.name); } r = (u8 *)o.p; }
     else if (request(s->host, h, 0, 0, &r, err) < 0) { snprintf(msg, 300, "%s: %s", s->name, err); return; }
@@ -246,9 +278,9 @@ typedef struct { int x, y, w, h, id; } hz_t; static hz_t HZ[300]; static int nhz
 static void hz(int x, int y, int w, int h, int id) { if (nhz < 300) HZ[nhz++] = (hz_t){x, y, w, h, id}; }
 static int bw(const char *s) { return g_textw(tr(s)) + 22; }
 static void btn(int x, int y, const char *s, int st, int id) { ui_button(W, x, y, bw(s), 28, s, st); hz(x, y, bw(s), 28, id); }
-enum { B_TAB = 1, B_FIELD = 50, B_CREATE = 10, B_RENAME, B_LEAVE, B_DELNET, B_ADDSH, B_UP, B_UPLOAD, B_MKDIR, B_REFRESH, B_SEND, B_CLOSEB, B_INV = 100, B_DEL = 300, B_SH = 500, B_SHDEL = 700, B_ENT = 900 };
-static void draw(void) { nhz = 0; g_clear(W, UI_WHITE); g_rect(W, 0, 0, W->w, 40, UI_PANEL); static const char *T[] = {"Equipos", "Carpetas", "Mensajes"}; int x = 10;
-    for (int i = 0; i < 3; i++) { ui_button(W, x, 6, bw(T[i]), 28, T[i], tab == i ? 2 : 0); hz(x, 6, bw(T[i]), 28, B_TAB + i); x += bw(T[i]) + 6; }
+enum { B_TAB = 1, B_FIELD = 50, B_CREATE = 10, B_RENAME, B_LEAVE, B_DELNET, B_ADDSH, B_UP, B_UPLOAD, B_MKDIR, B_REFRESH, B_SEND, B_CLOSEB, B_INV = 100, B_DEL = 300, B_SH = 500, B_SHDEL = 700, B_ENT = 900, B_ADDP = 1400, B_PDEL = 1500 };
+static void draw(void) { nhz = 0; g_clear(W, UI_WHITE); g_rect(W, 0, 0, W->w, 40, UI_PANEL); static const char *T[] = {"Equipos", "Carpetas", "Mensajes", "Impresoras"}; int x = 10;
+    for (int i = 0; i < 4; i++) { ui_button(W, x, 6, bw(T[i]), 28, T[i], tab == i ? 2 : 0); hz(x, 6, bw(T[i]), 28, B_TAB + i); x += bw(T[i]) + 6; }
     char b[300]; int y = 56, X = 20, w = W->w - 40; zs_area(W, 0, 40, W->w, W->h - 62, 0);
     if (tab == 0) { g_text2(W, X, y, in_net() ? R.netname : tr_("Sin red local"), UI_TEXT, 2); y += 40;
         snprintf(b, 300, "%s: %s   (%s %s)", tr_("Este equipo"), myname, tr_("id"), myid); g_text(W, X, y, b, UI_MUTED); if (!in_net()) btn(X + w - bw("Cambiar nombre"), y - 6, "Cambiar nombre", 0, B_RENAME); y += 26;
@@ -264,6 +296,12 @@ static void draw(void) { nhz = 0; g_clear(W, UI_WHITE); g_rect(W, 0, 0, W->w, 40
         for (int i = 0; i < np; i++) { peer_t *p = &P[i]; if (z_ms() - p->seen >= 45000 || (in_net() && !strcmp(p->net, R.net))) continue; char ip2[20]; z_fmt_ip(p->ip, ip2);
             if (p->role == 'L') snprintf(b, 300, "%s   %s   %s", p->name, ip2, tr_("sin red")); else snprintf(b, 300, "%s   %s   %s \"%s\"", p->name, ip2, tr_("en la red"), p->netname); g_text(W, X + 18, y + 2, b, UI_TEXT);
             if (is_admin() && p->role == 'L') btn(X + w - bw("Invitar a la red"), y - 4, "Invitar a la red", 2, B_INV + i); y += 30; } }
+    else if (tab == 3) { if (!in_net()) g_text(W, X, y, tr_("Primero une este equipo a una red local (pestaña Equipos)."), UI_MUTED);
+        else { g_textb(W, X, y, tr_("Impresoras compartidas de la red"), UI_TEXT); if (is_admin()) btn(X + w - bw("Compartir una impresora"), y - 6, "Compartir una impresora", 2, B_ADDP); y += 30;
+            g_text(W, X, y, tr_("Aparecen en el diálogo Imprimir de todos los equipos de la red."), UI_MUTED); y += 18; g_text(W, X, y, tr_("El equipo que tiene la impresora tiene que estar encendido."), UI_MUTED); y += 30;
+            if (!R.np) g_text(W, X, y, is_admin() ? tr_("Todavía no hay impresoras. Pulsa Compartir una impresora.") : tr_("El administrador todavía no ha compartido impresoras."), UI_MUTED);
+            for (int i = 0; i < R.np; i++) { rprn_t *q = &R.p[i]; int on = online(q->host); g_rect(W, X, y, w, 40, i % 2 ? UI_WHITE : UI_BG); g_circle(W, X + 12, y + 20, 5, on ? 0x16A34A : 0x9CA3AF, 1); g_textb(W, X + 26, y + 4, q->name, UI_TEXT);
+                snprintf(b, 300, "%s %s · %s · %s", tr_("conectada a"), mname(q->host), q->model[0] ? q->model : q->pname, q->lang); g_text(W, X + 26, y + 22, b, UI_MUTED); if (is_admin()) btn(X + w - bw("Dejar de compartir"), y + 6, "Dejar de compartir", 0, B_PDEL + i); y += 44; } } }
     else if (tab == 1) { if (!in_net()) g_text(W, X, y, tr_("Primero une este equipo a una red local (pestaña Equipos)."), UI_MUTED);
         else if (sel_sh < 0) { g_textb(W, X, y, tr_("Carpetas compartidas de la red"), UI_TEXT); if (is_admin()) btn(X + w - bw("Compartir una carpeta"), y - 6, "Compartir una carpeta", 2, B_ADDSH); y += 30;
             if (!R.ns) { g_text(W, X, y, is_admin() ? tr_("Todavía no hay carpetas. Pulsa Compartir una carpeta.") : tr_("El administrador todavía no ha compartido carpetas."), UI_MUTED); }
@@ -279,10 +317,12 @@ static void draw(void) { nhz = 0; g_clear(W, UI_WHITE); g_rect(W, 0, 0, W->w, 40
             if (!k) g_text(W, X, y, tr_("Ninguno."), UI_MUTED); free(t); } }
     zs_stop(W); zs_show(W); g_rect(W, 0, W->h - 22, W->w, 22, UI_PANEL); g_text(W, 8, W->h - 19, msg, UI_TEXT); zw_present(W); }
 static void click(zevent *e) { for (int i = nhz - 1; i >= 0; i--) { hz_t *h = &HZ[i]; if (e->x < h->x || e->y < h->y || e->x >= h->x + h->w || e->y >= h->y + h->h) continue; int id = h->id; msg[0] = 0;
-        if (id >= B_TAB && id < B_TAB + 3) { tab = id - B_TAB; cfoc = tab == 2; }
+        if (id >= B_TAB && id < B_TAB + 4) { tab = id - B_TAB; cfoc = tab == 2; }
         else if (id == B_CREATE) create_net(); else if (id == B_RENAME) { char n[32]; strcpy(n, myname); if (ui_prompt("Nombre del equipo", "Nombre de este equipo en la red:", n, 30) && n[0]) { safe(n); strcpy(myname, n); ident_save(); } }
         else if (id == B_LEAVE) { if (ui_confirm("Salir de la red", "¿Sacar este equipo de la red local? Necesitará otra invitación para volver.")) { z_unlink(CFG); memset(&R, 0, sizeof R); z_sync(); strcpy(msg, tr_("Este equipo ya no está en la red")); } }
         else if (id == B_DELNET) { if (ui_confirm("Borrar la red", "¿Borrar esta red? Los terminales dejarán de poder usarla.")) { char ids[MAXM][12]; int n = R.nm; for (int k = 0; k < n; k++) strcpy(ids[k], R.m[k].id); R.nm = 1; strcpy(R.m[0].id, myid); strcpy(R.m[0].name, myname); R.ns = 0; push_to(ids, n); z_unlink(CFG); memset(&R, 0, sizeof R); z_sync(); strcpy(msg, tr_("Red borrada")); } }
+        else if (id >= B_PDEL) { int k = id - B_PDEL; char q[200]; snprintf(q, 200, tr_("¿Dejar de compartir %s?"), R.p[k].name); if (k < R.np && ui_confirm("Dejar de compartir", q)) { memmove(&R.p[k], &R.p[k + 1], (R.np - k - 1) * sizeof R.p[0]); R.np--; push_config(); } }
+        else if (id == B_ADDP) add_printer();
         else if (id >= B_ENT) { int k = id - B_ENT; if (k >= nent) break; ent_t *en = &E[k]; if (en->d == 'D') { if (strlen(cwd) + strlen(en->name) < 290) { if (cwd[0]) strcat(cwd, "/"); strcat(cwd, en->name); } list_dir(); break; }
             static const char *it[] = {"Abrir", "Guardar en Documentos", "Cambiar nombre", "Borrar"}; int sx, sy; zw_screen(W, e->x, e->y, &sx, &sy); int r = ui_menu(sx, sy, it, R.s[sel_sh].rw ? 4 : 2); char dst[400], rel[400]; snprintf(rel, 400, "%s%s%s", cwd, cwd[0] ? "/" : "", en->name);
             if (r == 0 && !fetch(en, dst, 400, 1)) { z_open_path(dst); snprintf(msg, 300, "%s %s", tr_("Abierto"), en->name); } else if (r == 1 && !fetch(en, dst, 400, 0)) snprintf(msg, 300, "%s %s", tr_("Guardado en"), dst);

@@ -34,6 +34,18 @@ encendido). Dentro de una carpeta:
   **Cambiar nombre** o **Borrar** (estas dos solo si la carpeta es de lectura y escritura);
 - **Subir un archivo...** copia un archivo de este equipo a la carpeta; **Nueva carpeta** crea una.
 
+## Impresoras compartidas
+
+La impresora se configura en el equipo al que está conectada por USB (o por red), con **Impresoras**, como siempre.
+Después, el administrador va a **Red local → Impresoras → Compartir una impresora**, elige ese equipo y la impresora.
+
+En los demás equipos aparece en el diálogo **Imprimir** de todos los programas como, por ejemplo,
+«Samsung ML-1640 (en Equipo-X220)». Si el equipo no tiene impresoras propias, viene ya elegida.
+
+Cada equipo prepara el trabajo en el idioma de la impresora (QPDL para la Samsung ML-1640, PCL, PostScript...) y lo
+manda cifrado al equipo que la tiene, que lo pasa a la impresora y lo muestra en su cola de la barra de tareas.
+El equipo con la impresora tiene que estar encendido y con la sesión del administrador abierta.
+
 ## Mensajes
 
 **Mensajes**: escribe y pulsa Intro o **Enviar a...** para mandarlo a un equipo o a todos. Al que lo recibe le
@@ -65,7 +77,9 @@ aparece un aviso en la esquina de la pantalla y el mensaje queda en la lista.
 | Configuración | `/sys/ZUNZUN/RED.TXT` (red, clave, equipos y carpetas; la reparte el administrador con número de versión) |
 | Identidad | `/sys/ZUNZUN/RED-ID.TXT` (identificador y nombre del equipo) |
 | Mensajes | `/sys/ZUNZUN/RED-MENSAJES.TXT` |
+| Impresión | los programas dejan el trabajo en `/rd/tmp/RED-IMPRIMIR` (impresora `red://EQUIPO/ID`) y el servicio lo entrega |
 | Servicio | `redlocal --servicio`, lo arranca el escritorio al entrar el administrador |
 
 Prueba: `tools/red_test.py` arranca dos equipos en QEMU unidos por un cable virtual (sin router ni DHCP) y
-recorre todo: crear la red, invitar, compartir, subir, descargar, mensaje y sacar de la red.
+recorre todo: crear la red, invitar, compartir, subir, descargar, mensaje, imprimir desde B en la impresora de A y
+sacar de la red. Con `router`, A tiene la dirección de un router y B una 169.254, y A cambia de cable.

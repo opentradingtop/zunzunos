@@ -240,12 +240,21 @@ long zp_render_txt(zpdoc *d, const zpset *s, u8 **out) {
 
 /* ---------- impresoras guardadas ---------- */
 #define PFILE "/sys/ZUNZUN/IMPRESORAS.TXT"
-int zp_printers(zprinter *o, int max) { char *t = z_readfile(PFILE, 0); if (!t) return 0; int n = 0; char *p = t;
+int zp_printers(zprinter *o, int max) { char *t = z_readfile(PFILE, 0); if (!t) { int n = zp_net_printers(o, max); if (n) o[0].def = 1; return n; }   /* sin impresoras propias: las de la red, la primera la predeterminada */ int n = 0; char *p = t;
     while (*p && n < max) { char *e = strchr(p, '\n'); if (e) *e = 0; zprinter *r = &o[n]; memset(r, 0, sizeof *r); char *f[8]; int k = 0; f[k++] = p; for (char *q = p; *q && k < 8; q++) if (*q == '|') { *q = 0; f[k++] = q + 1; }
         if (k >= 6) { strncpy0(r->name, f[0], 64); strncpy0(r->uri, f[1], 160); strncpy0(r->lang, f[2], 8); r->paper = atoi(f[3]); r->color = atoi(f[4]); r->def = atoi(f[5]); r->dpi = k > 6 ? atoi(f[6]) : 300; if (k > 7) strncpy0(r->model, f[7], 64); n++; }
         if (!e) break; p = e + 1; }
+    free(t); return n + zp_net_printers(o + n, max - n); }
+/* impresoras que el administrador de la Red local ha compartido (en /sys/ZUNZUN/RED.TXT), menos las de este equipo:
+   "impresora=id|nombre|equipo|impresora_del_equipo|lenguaje|papel|ppp|color|modelo" */
+int zp_net_printers(zprinter *o, int max) { char *t = z_readfile("/sys/ZUNZUN/RED.TXT", 0), *idf = z_readfile("/sys/ZUNZUN/RED-ID.TXT", 0); int n = 0; char me[16] = "";
+    if (idf) { char *p = strstr(idf, "id="); if (p) { int i = 0; p += 3; while (p[i] && p[i] != '\n' && i < 15) { me[i] = p[i]; i++; } me[i] = 0; } free(idf); }
+    for (char *p = t; p && *p && n < max; ) { char *e = strchr(p, '\n'); if (e) *e = 0;
+        if (!strncmp(p, "impresora=", 10)) { char *f[10]; int k = 0; f[k++] = p + 10; for (char *q = p + 10; *q && k < 10; q++) if (*q == '|') { *q = 0; f[k++] = q + 1; }
+            if (k >= 8 && strcmp(f[2], me)) { zprinter *r = &o[n++]; memset(r, 0, sizeof *r); snprintf(r->name, 64, "%s", f[1]); snprintf(r->uri, 160, "red://%s/%s", f[2], f[0]); strncpy0(r->lang, f[4], 8); r->paper = atoi(f[5]); r->dpi = atoi(f[6]); r->color = atoi(f[7]); if (k > 8) strncpy0(r->model, f[8], 64); } }
+        p = e ? e + 1 : 0; }
     free(t); return n; }
-int zp_save_printers(const zprinter *o, int n) { ob_t b = {0}; for (int i = 0; i < n; i++) ob_f(&b, "%s|%s|%s|%d|%d|%d|%d|%s\n", o[i].name, o[i].uri, o[i].lang, o[i].paper, o[i].color, o[i].def, o[i].dpi, o[i].model); int e = z_writefile(PFILE, b.p ? (char *)b.p : "", b.n); free(b.p); z_sync(); return e; }
+int zp_save_printers(const zprinter *o, int n) { ob_t b = {0}; for (int i = 0; i < n; i++) if (strncmp(o[i].uri, "red://", 6)) ob_f(&b, "%s|%s|%s|%d|%d|%d|%d|%s\n", o[i].name, o[i].uri, o[i].lang, o[i].paper, o[i].color, o[i].def, o[i].dpi, o[i].model); int e = z_writefile(PFILE, b.p ? (char *)b.p : "", b.n); free(b.p); z_sync(); return e; }
 
 /* ---------- envio ---------- */
 static int host_port(const char *s, u32 *ip, int *port, char *path, int defp) { char h[128]; int i = 0; while (*s && *s != ':' && *s != '/' && i < 127) h[i++] = *s++; h[i] = 0; *port = defp; if (*s == ':') { *port = atoi(s + 1); while (*s && *s != '/') s++; } if (path) strcpy(path, *s ? s : "/ipp/print"); if (z_parse_ip(h, ip)) return z_dns(h, ip); return 0; }
@@ -278,6 +287,13 @@ int zp_send(const zprinter *pr, const u8 *data, long len, const char *job) {
     if (!strncmp(u, "file:", 5)) return z_writefile(u + 5, (const char *)data, len);
     if (!strncmp(u, "socket://", 9)) { u32 ip; int port; if (host_port(u + 9, &ip, &port, 0, 9100)) return -2; int sk = z_socket(1); if (sk < 0) return sk; int e = z_connect(sk, ip, port, 8000); if (!e) e = send_all(sk, data, len); z_close(sk); return e; }
     if (!strncmp(u, "ipp://", 6)) return ipp_call(u + 6, 0x0002, mime(pr->lang), job, data, len, 0, 0);
+    if (!strncmp(u, "red://", 6)) { z_mkdir("/rd/tmp"); z_mkdir("/rd/tmp/RED-IMPRIMIR"); char b[200], f[160]; unsigned long id = (unsigned long)z_ms(); snprintf(b, 200, "/rd/tmp/RED-IMPRIMIR/%012lu", id);
+        snprintf(f, 160, "%s.bin", b); int e = z_writefile(f, (const char *)data, len); if (e) return e; char inf[400]; int l = snprintf(inf, 400, "%s|%s", u + 6, job ? job : "ZunzunOS"); for (int i = 0; i < l; i++) if (inf[i] == '\n') inf[i] = ' ';
+        snprintf(f, 160, "%s.inf", b); z_writefile(f, inf, l); char res[160]; snprintf(res, 160, "%s.res", b); u64 t0 = z_ms();
+        /* el servicio de la Red local lo recoge (lo renombra a .env), lo manda al equipo de la impresora y deja el resultado en .res */
+        for (;;) { char *r = z_readfile(res, 0); if (r) { int rc = atoi(r); free(r); z_unlink(res); return rc; }
+            if (q_cancelled()) { char g[160]; snprintf(g, 160, "%s.inf", b); if (!z_unlink(g)) { snprintf(g, 160, "%s.bin", b); z_unlink(g); } return ZP_CANCELADO; }
+            if (z_ms() - t0 > 180000) return -110; z_sleep(200); } }
     if (!strncmp(u, "usb://", 6)) { zusbprn l[8]; int n = zp_usb_list(l, 8), k = -1; for (int i = 0; i < n; i++) if (!strcmp(l[i].id, u + 6) || (k < 0 && atoi(u + 6) == i && isdigit(u[6]))) k = i; if (k < 0) return -2; long o = 0; while (o < len) { if (q_cancelled()) { SC3(108, k, "\x1B%-12345X", 9); return ZP_CANCELADO; } long r = SC3(108, k, data + o, MIN(65536L, len - o)); if (r <= 0) return r < 0 ? (int)r : -5; o += r; } return 0; }
     return -22;
 }
@@ -289,6 +305,8 @@ static void q_set(const char *f, int st, const char *pr, const char *job, long n
 static void q_trim(void) { zdirent e; char nm[40][64]; int c = 0; for (int i = 0; c < 40 && !z_readdir(QDIR, i, &e); i++) if (e.name[0] != '.') strncpy0(nm[c++], e.name, 64); if (c <= 20) return; for (int i = 0; i < c; i++) for (int j = i + 1; j < c; j++) if (strcmp(nm[j], nm[i]) < 0) { char x[64]; strcpy(x, nm[i]); strcpy(nm[i], nm[j]); strcpy(nm[j], x); } for (int i = 0; i < c - 20; i++) { char f[120]; snprintf(f, 120, QDIR "/%s", nm[i]); z_unlink(f); } }
 int zp_print(zpdoc *d, const zprinter *p, const zpset *s, const char *job) { z_mkdir("/rd/tmp"); z_mkdir(QDIR); q_trim(); char qf[120]; snprintf(q_name, 64, "%012lu.txt", (unsigned long)z_ms()); snprintf(qf, 120, QDIR "/%s", q_name); q_set(qf, 0, p->name, job, 0, 0);
     u8 *o; long n = zp_render(d, s, p->lang, &o); if (n == ZP_CANCELADO || (n > 0 && q_cancelled())) { if (n > 0) free(o); q_set(qf, 4, p->name, job, 0, 0); q_name[0] = 0; char m[200]; snprintf(m, 200, "[prueba] imprimir %s (%s): cancelado", p->name, p->lang); z_log(m); return ZP_CANCELADO; } if (n <= 0) { q_set(qf, 3, p->name, job, 0, -12); return -12; } q_set(qf, 1, p->name, job, n, 0); int e = zp_send(p, o, n, job); free(o); q_set(qf, e == ZP_CANCELADO ? 4 : e ? 3 : 2, p->name, job, n, e == ZP_CANCELADO ? 0 : e); q_name[0] = 0; char m[200]; snprintf(m, 200, "[prueba] imprimir %s (%s, %ld bytes): %d", p->name, p->lang, n, e); z_log(m); return e; }
+int zp_send_job(const zprinter *p, const u8 *data, long len, const char *job) { z_mkdir("/rd/tmp"); z_mkdir(QDIR); q_trim(); char qf[120]; snprintf(q_name, 64, "%012lu.txt", (unsigned long)z_ms()); snprintf(qf, 120, QDIR "/%s", q_name);
+    q_set(qf, 1, p->name, job, len, 0); int e = zp_send(p, data, len, job); q_set(qf, e == ZP_CANCELADO ? 4 : e ? 3 : 2, p->name, job, len, e == ZP_CANCELADO ? 0 : e); q_name[0] = 0; return e; }
 /* elige el lenguaje a partir del IEEE 1284 (USB) o de los formatos IPP */
 const char *zp_guess_lang(const char *s) {
     if (!s) return 0; char u[600]; int i = 0; for (; s[i] && i < 599; i++) u[i] = toupper(s[i]); u[i] = 0;

@@ -13,6 +13,7 @@ typedef struct sock {
     struct sock *next, *parent; int type, st, orphan, accepted, peer_fin, fin_sent, want_fin, err; u16 lport, rport; u32 rip;
     u32 una, nxt, rnxt, wnd; u8 *rx, *tx; u32 rh, rl, th, tl; u64 rto_at; u32 rto; u64 die_at; int retries;
     dg_t *q, *qe; int qn; u32 from_ip; u16 from_port;
+    u32 gseq; int trusted;   /* guardia: entrada del registro y socket del propio nucleo (DNS) */
 } sock_t;
 static sock_t *socks; static u16 next_port = 49200;
 
@@ -191,7 +192,7 @@ int net_info(znet_t *o) {
     memset(o, 0, sizeof *o); if (!nic) return E_NOENT; memcpy(o->mac, nic->mac, 6); o->up = nic->link(nic); o->dhcp = dhcp_ok; o->local = ll_on; o->ip = my_ip; o->mask = my_mask; o->gw = my_gw; o->dns = my_dns; o->rxp = nic->rxp; o->txp = nic->txp; o->rxb = nic->rxb; o->txb = nic->txb; strncpy0(o->name, nic->name, 8); strncpy0(o->kind, nic->kind, 16); return 0;
 }
 int net_ping(u32 ip, int to, int seq) {
-    if (!my_ip) return E_CONN; u8 b[64]; memset(b, 0x5A, 64); b[0] = 8; b[1] = 0; *(u16 *)(b + 2) = 0; *(u16 *)(b + 4) = HS16(0x5A5A); *(u16 *)(b + 6) = HS16(seq); *(u16 *)(b + 2) = HS16(csum(b, 64, 0));
+    if (!my_ip) return E_CONN; { int g = guard_check(ip, 0, 'I', 0, 0); if (g) return g; } u8 b[64]; memset(b, 0x5A, 64); b[0] = 8; b[1] = 0; *(u16 *)(b + 2) = 0; *(u16 *)(b + 4) = HS16(0x5A5A); *(u16 *)(b + 6) = HS16(seq); *(u16 *)(b + 2) = HS16(csum(b, 64, 0));
     ping_seq = seq; ping_ok = 0; u64 st = ticks, end = ticks + to; int sent = 0; u64 retry = 0;
     while (ticks < end) { if (!sent && ticks >= retry) { mutex_lock(&nl); sent = !ip_tx(ip, 1, b, 64); mutex_unlock(&nl); retry = ticks + 100; } if (ping_ok) return ticks - st; msleep(1); }
     return E_TIMEOUT;
@@ -203,7 +204,7 @@ file_t *sock_file(int type) {
 }
 static u16 alloc_port(void) { if (++next_port > 65000) next_port = 49200; return next_port; }
 int sock_connect(file_t *f, u32 ip, int port, int to) {
-    sock_t *s = f->priv; if (!my_ip) return E_CONN; if (s->st != C) return E_INVAL;
+    sock_t *s = f->priv; { u32 gs; int g = guard_check(ip, port, s->type == 1 ? 'T' : 'U', 0, &gs); if (g) return g; s->gseq = gs; } if (!my_ip) return E_CONN; if (s->st != C) return E_INVAL;
     mutex_lock(&nl); s->rip = ip; s->rport = port; if (!s->lport) s->lport = alloc_port();
     if (s->type == 2) { mutex_unlock(&nl); return 0; }
     s->una = s->nxt = (u32)rdtsc(); s->st = SYN_S; s->rto = 300; s->err = 0; s->wnd = 1460; seg_tx(s, s->nxt, F_SYN, 0, 0); s->nxt++; s->rto_at = ticks + 200; mutex_unlock(&nl);
@@ -221,14 +222,14 @@ i64 sock_send(file_t *f, const void *b, u64 n) {
         mutex_lock(&nl); u32 fr = TXS - s->tl, c = MIN(fr, n - done); for (u32 i = 0; i < c; i++) s->tx[(s->th + s->tl + i) % TXS] = p[done + i]; s->tl += c; done += c; tcp_out(s); mutex_unlock(&nl);
         if (!c) msleep(1);
     }
-    return done;
+    guard_bytes(s->gseq, done, 0); return done;
 }
 i64 sock_recv(file_t *f, void *b, u64 n, int to) {
     sock_t *s = f->priv; u64 end = to > 0 ? ticks + to : 0; u8 *p = b;
     for (;;) {
         mutex_lock(&nl);
-        if (s->type == 2 && s->q) { dg_t *g = s->q; s->from_ip = g->src; s->from_port = g->sp; s->q = g->next; if (!s->q) s->qe = 0; s->qn--; u32 c = MIN(n, g->len); memcpy(b, g->d, c); kfree(g); mutex_unlock(&nl); return c; }
-        if (s->type == 1 && s->rl) { int was_zero = s->rl == RXS; u32 c = MIN(n, s->rl); for (u32 i = 0; i < c; i++) p[i] = s->rx[(s->rh + i) % RXS]; s->rh = (s->rh + c) % RXS; s->rl -= c; if (was_zero || c > 8192) seg_tx(s, s->nxt, F_ACK, 0, 0); mutex_unlock(&nl); return c; }
+        if (s->type == 2 && s->q) { dg_t *g = s->q; s->from_ip = g->src; s->from_port = g->sp; s->q = g->next; if (!s->q) s->qe = 0; s->qn--; u32 c = MIN(n, g->len); memcpy(b, g->d, c); kfree(g); mutex_unlock(&nl); if (!s->trusted) guard_bytes(s->gseq, 0, c); return c; }
+        if (s->type == 1 && s->rl) { int was_zero = s->rl == RXS; u32 c = MIN(n, s->rl); for (u32 i = 0; i < c; i++) p[i] = s->rx[(s->rh + i) % RXS]; s->rh = (s->rh + c) % RXS; s->rl -= c; if (was_zero || c > 8192) seg_tx(s, s->nxt, F_ACK, 0, 0); mutex_unlock(&nl); guard_bytes(s->gseq, 0, c); return c; }
         int eof = s->type == 1 && (s->peer_fin || s->st == C), err = s->err; mutex_unlock(&nl);
         if (eof) return err && err != E_TIMEOUT ? err : 0;
         if (to == 0) return E_TIMEOUT;
@@ -238,7 +239,7 @@ i64 sock_recv(file_t *f, void *b, u64 n, int to) {
     }
 }
 i64 sock_sendto(file_t *f, u32 ip, int port, const void *b, u64 n) {
-    sock_t *s = f->priv; if (s->type != 2) return E_INVAL; if (n > 1472) return E_INVAL; if (!s->lport) s->lport = alloc_port();
+    sock_t *s = f->priv; if (s->type != 2) return E_INVAL; if (n > 1472) return E_INVAL; if (!s->trusted) { u32 gs; int g = guard_check(ip, port, 'U', 0, &gs); if (g) return g; guard_bytes(gs, n, 0); } if (!s->lport) s->lport = alloc_port();
     for (int t = 0; t < 15; t++) { mutex_lock(&nl); int r = udp_tx(ip, s->lport, port, b, n); mutex_unlock(&nl); if (!r) return n; if (r != E_TIMEOUT) return r; msleep(100); }
     return E_TIMEOUT;
 }
@@ -263,7 +264,8 @@ void sock_close(file_t *f) {
 int net_dns(const char *h, u32 *ip) {
     if (!dhcp_ok) return E_CONN; int dots = 0, num = 1; u32 v = 0, cur_o = 0; for (const char *p = h; *p; p++) { if (*p == '.') { v |= cur_o << (dots * 8); cur_o = 0; dots++; } else if (*p >= '0' && *p <= '9') cur_o = cur_o * 10 + *p - '0'; else num = 0; }
     if (num && dots == 3) { *ip = v | cur_o << 24; return 0; }
-    file_t *f = sock_file(2); if (!f) return E_NOMEM; u8 q[300], r[600]; u16 id = rdtsc(); memset(q, 0, 12); *(u16 *)q = id; q[2] = 1; q[5] = 1; int n = 12;
+    { int g = guard_check(0, 53, 'D', h, 0); if (g) return g; }   /* el nombre que se busca ya dice adonde quiere ir el programa */
+    file_t *f = sock_file(2); if (!f) return E_NOMEM; ((sock_t *)f->priv)->trusted = 1; u8 q[300], r[600]; u16 id = rdtsc(); memset(q, 0, 12); *(u16 *)q = id; q[2] = 1; q[5] = 1; int n = 12;
     for (const char *p = h; *p;) { const char *e = strchr(p, '.'); int l = e ? e - p : (int)strlen(p); if (l > 63 || n + l + 6 > 290) { sock_close(f); return E_INVAL; } q[n++] = l; memcpy(q + n, p, l); n += l; p += l; if (*p) p++; }
     q[n++] = 0; q[n++] = 0; q[n++] = 1; q[n++] = 0; q[n++] = 1; int res = E_TIMEOUT;
     for (int t = 0; t < 3 && res == E_TIMEOUT; t++) {

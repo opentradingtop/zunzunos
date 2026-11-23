@@ -218,6 +218,11 @@ typedef struct netdev {
 } netdev_t;
 void net_register(netdev_t *); void netdrv_init(void); void net_init(void);
 typedef struct { u8 mac[6]; u8 up, dhcp, local; u32 ip, mask, gw, dns; u64 rxp, txp, rxb, txb; char name[8]; char kind[16]; } znet_t;
+/* guardia de red (guardia.c) */
+typedef struct { u64 t, t0; u32 seq, ip; u16 port; u8 proto, verdict; u32 count; char app[24]; char host[48]; u64 tx, rx; } gl_t;   /* verdict: 1 permitido, 2 bloqueado, 3 red local */
+typedef struct { char name[24]; u32 pol; } zrule_t;
+typedef struct { u32 id; int pid; char name[24], host[48]; u32 ip; u32 port; } zask_t;
+int guard_check(u32 ip, int port, int proto, const char *host, u32 *seq); void guard_bytes(u32 seq, u64 tx, u64 rx); long guard_syscall(int op, u64 a, u64 b); int guard_admin(void);
 int net_info(znet_t *); int sock_from(file_t *f, u32 *ip, u16 *port); int net_dns(const char *, u32 *); int net_ping(u32 ip, int timeout, int seq);
 int sock_new(int type); int sock_connect(file_t *, u32 ip, int port, int timeout); i64 sock_send(file_t *, const void *, u64);
 i64 sock_recv(file_t *, void *, u64, int timeout); int sock_bind(file_t *, int port); int sock_accept(file_t *, int timeout, file_t **);
