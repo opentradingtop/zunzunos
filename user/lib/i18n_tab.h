@@ -1227,4 +1227,6 @@ static const char *const TRT[][3] = {
     {"BLOQUEADO", 0, "BLOCKED"},
     {"red local", 0, "local network"},
     {"Solo el administrador puede cambiar los permisos", 0, "Only the administrator can change the permissions"},
+    {"Añadir a la red", 0, "Add to network"},
+    {"Este equipo dejará la red \"%s\".", 0, "This computer will leave the network \"%s\"."},
 };

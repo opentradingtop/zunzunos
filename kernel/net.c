@@ -18,7 +18,8 @@ typedef struct sock {
 static sock_t *socks; static u16 next_port = 49200;
 
 static netdev_t *devs[4]; static int ndevs; static netdev_t *want;
-void net_register(netdev_t *n) { kprintf("red: %s (%s) %02x:%02x:%02x:%02x:%02x:%02x\n", n->name, n->kind, n->mac[0], n->mac[1], n->mac[2], n->mac[3], n->mac[4], n->mac[5]); if (ndevs < 4) devs[ndevs++] = n; if (!nic) nic = n; else if (n->gone) want = n; }
+u8 net_first_mac[6];   /* la primera tarjeta que se registra (la integrada, antes que las USB): identifica al equipo */
+void net_register(netdev_t *n) { static int got; if (!got) { memcpy(net_first_mac, n->mac, 6); got = 1; } kprintf("red: %s (%s) %02x:%02x:%02x:%02x:%02x:%02x\n", n->name, n->kind, n->mac[0], n->mac[1], n->mac[2], n->mac[3], n->mac[4], n->mac[5]); if (ndevs < 4) devs[ndevs++] = n; if (!nic) nic = n; else if (n->gone) want = n; }
 static u16 csum(const void *d, u32 n, u32 s) { const u8 *p = d; while (n > 1) { s += p[0] << 8 | p[1]; p += 2; n -= 2; } if (n) s += p[0] << 8; while (s >> 16) s = (s & 0xFFFF) + (s >> 16); return ~s; }
 static u32 sum_add(const void *d, u32 n, u32 s) { const u8 *p = d; while (n > 1) { s += p[0] << 8 | p[1]; p += 2; n -= 2; } if (n) s += p[0] << 8; return s; }
 static void eth_tx(const u8 *dst, u16 type, const void *pl, u32 n) {

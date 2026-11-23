@@ -6,7 +6,7 @@ y sacar a B de la red. Con "router", A recibe 192.168.50.20 de un router falso y
 y el Edge con cable directo; despues A pierde el cable y lo recupera sin router y debe pasar a 169.254.
 Uso: red_test.py DIR_SALIDA [explorar|router]"""
 import os, re, shutil, subprocess, sys, threading, time
-out = sys.argv[1]; mode = sys.argv[2] if len(sys.argv) > 2 else ''; explore = mode == 'explorar'; router = mode == 'router'; os.makedirs(out, exist_ok=True)
+out = sys.argv[1]; mode = sys.argv[2] if len(sys.argv) > 2 else ''; explore = mode == 'explorar'; router = mode == 'router'; otra = mode == 'otra'; os.makedirs(out, exist_ok=True)
 MH = 42 + 9 * 28 + 14; MY = 800 - 36 - MH - 2
 FAM = [['rescate', 'files', 'discos', 'papelera', 'restaurar', 'instalar'], ['escritor', 'hoja', 'diapos', 'agenda', 'editor', 'calc', 'pdf'], ['browser', 'apps', 'correo', 'lumen', 'redlocal'], ['viewer', 'player', 'grabadora', 'paint', 'pantalla', 'video'], ['snake', 'mines', 'blocks', 'enjambre'], ['config', 'impresoras', 'term', 'sysmon', 'acerca']]
 def M(b):
@@ -24,7 +24,8 @@ def stick(name, docs=None):
                 if x.startswith('.'): subprocess.run(['rm', '-rf', os.path.join(mnt, x)])
         finally: subprocess.run(['hdiutil', 'detach', dev], capture_output=True)
     return p
-A = stick('a.img', {'nota.txt': 'Nota de prueba de la red local de ZunzunOS.\n', 'ZUNZUN/IMPRESORAS.TXT': 'Samsung ML-1640|file:/sys/DOCS/impreso.qpdl|qpdl|0|0|1|600|Samsung ML-1640 Series\n'}); B = stick('b.img')
+B_OLD = {'ZUNZUN/RED-ID.TXT': 'id=aaaaaaaa\nnombre=Equipo-COPIA\nmac=525400aa0001\n', 'ZUNZUN/RED.TXT': 'ZRED1\nred=12345678\nnombre=Copiada\nclave=' + '00' * 32 + '\nadmin=aaaaaaaa\nversion=1\nequipo=aaaaaaaa|Equipo-COPIA\n'}
+A = stick('a.img', {'nota.txt': 'Nota de prueba de la red local de ZunzunOS.\n', 'ZUNZUN/IMPRESORAS.TXT': 'Samsung ML-1640|file:/sys/DOCS/impreso.qpdl|qpdl|0|0|1|600|Samsung ML-1640 Series\n'}); B = stick('b.img', B_OLD if otra else None)
 def q(img, mac, net): return (f'-device usb-ehci,id=e -device usb-kbd,bus=e.0 -device usb-tablet,bus=e.0 -drive if=none,id=st,format=raw,file={img} -device usb-storage,bus=e.0,drive=st,bootindex=0 '
                               f'-netdev socket,id=n1,{net} -device e1000,netdev=n1,mac={mac}')
 # ventana de Red local (920x640): marco en (88, 50), contenido 26 mas abajo; los menus emergentes no tienen barra
@@ -34,11 +35,15 @@ def menu_item(sx, sy, i): return f'click:{RX + sx + 30},{RY + sy + 15 + i * 26}'
 def LOGIN(addr='wait:sin DHCP, direccion local'): return ['wait:escritorio listo', 'wait:HID puntero', 'wait:vfs: /sys', 'sleep:2', 'move:640,400', 'wait:sesion: escritorio', addr, 'wait:red servicio listo', 'sleep:1']
 SA = LOGIN('wait:red: IP 192.168.50.20' if router else 'wait:sin DHCP, direccion local') + M('redlocal') + ['wait:red local abierta', 'sleep:6', 'shot:a-inicio']
 SB = LOGIN() + ['sleep:1', 'shot:b-inicio']
+if otra:
+    # B arranca con la identidad copiada de A (otra MAC): tiene que hacerse una propia; crea su red y A lo anade a la suya
+    SB += M('redlocal') + ['wait:red local abierta', 'sleep:1', at(106, 195), 'sleep:0.8', 'key:ctrl-x', 'type:RedB\n', 'wait:red creada', 'sleep:1', 'key:alt-f4', 'wait:red invitacion recibida', 'sleep:1.5', 'shot:b-otra', 'click:700,480', 'wait:red unido', 'sleep:2']
+    SA += [at(106, 195), 'sleep:0.8', 'key:ctrl-x', 'type:Casa\n', 'wait:red creada', 'wait:red encontrado', 'sleep:12', 'shot:a-otra', at(825, 320), 'wait:red invitado', 'sleep:2']
 if router:
     SA += [at(106, 195), 'sleep:0.8', 'key:ctrl-x', 'type:Casa\n', 'wait:red creada', 'wait:red encontrado', 'sleep:7', 'shot:a-creada', at(825, 320), 'wait:red codigo', 'wait:red invitado', 'sleep:1', at(229, 20), 'sleep:0.8', at(300, 94), 'type:Hola\n', 'sleep:0.8', menu_item(720, 530, 0), 'wait:red mensaje enviado 1/1', 'sleep:0.5',
            'hmp:set_link n1 off', 'sleep:3', 'hmp:set_link n1 on', 'wait:cable conectado de nuevo', 'wait:sin DHCP, direccion local', 'sleep:1']
     SB += ['wait:red invitacion recibida', 'sleep:1.5', 'click:700,480', 'wait:red unido', 'wait:red MENSAJE de', 'sleep:1']
-if not explore and not router:
+if not explore and not router and not otra:
     # A crea la red "Casa" e invita a B
     SA += [at(106, 195), 'sleep:0.8', 'key:ctrl-x', 'type:Casa\n', 'wait:red creada', 'wait:red encontrado', 'sleep:1', 'shot:a-creada', at(825, 320), 'wait:red codigo', 'sleep:1', 'shot:a-codigo', 'wait:red invitado', 'sleep:2', 'shot:a-invitado']
     # B ve la invitacion con el mismo codigo y acepta
@@ -69,11 +74,12 @@ ta.join(); tb.join()
 if rt: rt.kill()
 la = open(os.path.join(out, 'a', 'serial-bios.log'), errors='replace').read(); lb = open(os.path.join(out, 'b', 'serial-bios.log'), errors='replace').read()
 ok = res.get('a') == 0 and res.get('b') == 0
-CHK = ((la, ('red: IP 192.168.50.20', 'red creada', 'red invitado', 'red mensaje enviado 1/1', 'cable conectado de nuevo', 'sin DHCP, direccion local')), (lb, ('sin DHCP, direccion local', 'red unido', 'red MENSAJE de'))) if router else ((la, ('red creada', 'red codigo', 'red invitado', 'red carpeta Fotos', 'red subido nota.txt', 'red descargado /sys/DOCS/Red/nota.txt', 'red mensaje enviado 1/1', 'red impresora compartida', 'red impresion de')), (lb, ('red invitacion recibida', 'red unido', 'red MENSAJE de', 'red lista Fotos/: 1', 'red trabajo enviado', 'red sacado de la red')))
+CHK = ((la, ('red creada', 'red invitado')), (lb, ('red creada', 'red invitacion recibida', 'red unido'))) if otra else ((la, ('red: IP 192.168.50.20', 'red creada', 'red invitado', 'red mensaje enviado 1/1', 'cable conectado de nuevo', 'sin DHCP, direccion local')), (lb, ('sin DHCP, direccion local', 'red unido', 'red MENSAJE de'))) if router else ((la, ('red creada', 'red codigo', 'red invitado', 'red carpeta Fotos', 'red subido nota.txt', 'red descargado /sys/DOCS/Red/nota.txt', 'red mensaje enviado 1/1', 'red impresora compartida', 'red impresion de')), (lb, ('red invitacion recibida', 'red unido', 'red MENSAJE de', 'red lista Fotos/: 1', 'red trabajo enviado', 'red sacado de la red')))
 for log, what in CHK:
     for w in what:
         if w not in log: print('FALLO: falta', repr(w)); ok = False
-if not router:
+if otra and ('red servicio listo: aaaaaaaa' in lb or 'servicio listo' not in lb): print('FALLO: B se quedo con la identidad copiada de A'); ok = False
+if not router and not otra:
     m = re.search(r'red trabajo enviado a .*: (\d+) bytes, (-?\d+)', lb); m2 = re.search(r'red impresion de .* en Samsung ML-1640: (\d+) bytes, (-?\d+)', la)
     if not m or m.group(2) != '0' or not m2 or m2.group(2) != '0' or m.group(1) != m2.group(1): print('FALLO: impresion por la red', m and m.group(0), m2 and m2.group(0)); ok = False
     a = subprocess.run(['hdiutil', 'attach', '-readonly', '-imagekey', 'diskimage-class=CRawDiskImage', '-mountrandom', '/tmp', A], capture_output=True, text=True, timeout=60).stdout

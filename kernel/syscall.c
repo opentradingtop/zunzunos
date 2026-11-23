@@ -5,7 +5,7 @@
 /* portapapeles: texto o imagen ("ZIMG" + ancho + alto + pixeles), hasta 32 MB */
 static u8 *clip; static u32 clip_n, clip_cap;
 
-typedef struct { u64 mem_total, mem_free, uptime_ms; u32 scr_w, scr_h, nproc, boot_mode; char cpu[49]; char pad[7]; u64 tsc_khz; int layout; } zsys_t;
+typedef struct { u64 mem_total, mem_free, uptime_ms; u32 scr_w, scr_h, nproc, boot_mode; char cpu[49]; char pad[7]; u64 tsc_khz; int layout; u8 hwmac[6], pad2[2]; } zsys_t;
 typedef struct { u8 bus, dev, fn, cls, sub, pif; u16 vendor, device; } zpci_t;
 typedef struct { char name[16]; char model[41]; u64 sectors; u32 ssize; u32 removable; } zdisk_t;
 typedef struct { char name[16]; u64 start, sectors; } zpart_t;
@@ -27,7 +27,7 @@ u64 syscall_dispatch(regs_t *r) {
     case 6: if (a == 1 && cur->proc->pid != 1) return E_ACCES; return proc_kill(a);
     case 7: { UCHK(a, b * sizeof(zproc_t)); return proc_list((zproc_t *)a, b); }
     case 8: { UCHK(a, sizeof(zsys_t)); zsys_t *s = (zsys_t *)a; zproc_t t[64];
-        s->mem_total = pmm_total_pages() * 4096; s->mem_free = pmm_free_pages() * 4096; s->uptime_ms = ticks * 1000 / HZ; s->scr_w = scr_w; s->scr_h = scr_h;
+        { extern u8 net_first_mac[6]; memcpy(s->hwmac, net_first_mac, 6); } s->mem_total = pmm_total_pages() * 4096; s->mem_free = pmm_free_pages() * 4096; s->uptime_ms = ticks * 1000 / HZ; s->scr_w = scr_w; s->scr_h = scr_h;
         s->nproc = proc_list(t, 64); s->boot_mode = bi.boot_mode; memcpy(s->cpu, cpu_brand, 49); s->tsc_khz = tsc_khz; s->layout = key_layout; return 0; }
     case 9: { proc_t *p = cur->proc; u64 o = p->brk; i64 inc = a; if (inc < 0 || o + inc > 0x1000000000UL) return 0; p->brk = o + ALIGN(inc, 16); return o; }
     case 10: UCHK(b - 8, 8); return thread_create(a, b, c);

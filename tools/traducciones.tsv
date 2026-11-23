@@ -1230,3 +1230,5 @@ hace %lu min	-	%lu min ago
 BLOQUEADO	-	BLOCKED
 red local	-	local network
 Solo el administrador puede cambiar los permisos	-	Only the administrator can change the permissions
+Añadir a la red	-	Add to network
+Este equipo dejará la red "%s".	-	This computer will leave the network "%s".

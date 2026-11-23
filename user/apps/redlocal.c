@@ -15,8 +15,11 @@
 #include "../lib/zcrypto.h"
 #define PUDP 7140
 #define PTCP 7141
-#define CFG "/sys/ZUNZUN/RED.TXT"
-#define IDF "/sys/ZUNZUN/RED-ID.TXT"
+/* identidad y configuracion por equipo (la MAC de la tarjeta integrada en el nombre): una misma memoria USB usada en
+   varios equipos guarda la de cada uno y ninguno se hace pasar por otro */
+static char CFG[64], IDF[64];
+#define OLD_CFG "/sys/ZUNZUN/RED.TXT"
+#define OLD_IDF "/sys/ZUNZUN/RED-ID.TXT"
 #define INBOX "/sys/ZUNZUN/RED-MENSAJES.TXT"
 #define MAXM 64
 #define MAXS 64
@@ -41,13 +44,15 @@ static void kvs(const char *t, const char *k, char *o, int cap) { int l = strlen
 /* identidad del equipo: id de 8 cifras ligado a la MAC de la tarjeta de red. Si los datos se copian a otro
    equipo (otra MAC), ese equipo se hace un id nuevo; asi dos equipos nunca comparten id */
 static char mymac[16];
-static void ident(void) { znet ni; memset(&ni, 0, sizeof ni); z_netinfo(&ni); char mac[16]; hex(ni.mac, 6, mac); char *t = z_readfile(IDF, 0), smac[16] = "";
-    if (t) { kvs(t, "id", myid, 12); kvs(t, "nombre", myname, 32); kvs(t, "mac", smac, 16); free(t); }
-    zdirent dd; int innet = !z_stat(CFG, &dd);   /* ya en una red: se conserva el id aunque cambie la tarjeta (cable o anclaje USB) */
-    int fresh = strlen(myid) != 8 || (!innet && strcmp(smac, mac));
-    if (fresh) { u8 r[40], h[32]; zc_random(r, 32); memcpy(r + 32, ni.mac, 6); zc_hash(256, r, 38, h); hex(h, 4, myid); if (smac[0] && strcmp(smac, mac)) myname[0] = 0; }
+static void ident(void) { zsys sy; z_sysinfo(&sy); u8 *hm = sy.hwmac; static const u8 z6[6]; if (!memcmp(hm, z6, 6)) { znet ni; memset(&ni, 0, sizeof ni); z_netinfo(&ni); memcpy(sy.hwmac, ni.mac, 6); }
+    hex(sy.hwmac, 6, mymac); snprintf(CFG, 64, "/sys/ZUNZUN/RED-%s.TXT", mymac); snprintf(IDF, 64, "/sys/ZUNZUN/RED-ID-%s.TXT", mymac);
+    char *t = z_readfile(IDF, 0);
+    if (!t) { /* archivos de la version anterior: son de este equipo si tienen su MAC o no tienen ninguna */
+        char *o = z_readfile(OLD_IDF, 0); if (o) { char om[16]; kvs(o, "mac", om, 16); if (!om[0] || !strcmp(om, mymac)) { kvs(o, "id", myid, 12); kvs(o, "nombre", myname, 32); z_rename(OLD_CFG, CFG); z_unlink(OLD_IDF); z_log("[prueba] red identidad anterior adoptada"); } free(o); } }
+    else { kvs(t, "id", myid, 12); kvs(t, "nombre", myname, 32); free(t); }
+    if (strlen(myid) != 8) { u8 r[40], h[32]; zc_random(r, 32); memcpy(r + 32, sy.hwmac, 6); zc_hash(256, r, 38, h); hex(h, 4, myid); }
     if (!myname[0]) snprintf(myname, 32, "Equipo-%c%c%c%c", toupper(myid[4]), toupper(myid[5]), toupper(myid[6]), toupper(myid[7]));
-    strcpy(mymac, mac); if (fresh) { char b[100]; snprintf(b, 100, "id=%s\nnombre=%s\nmac=%s\n", myid, myname, mymac); z_mkdir("/sys/ZUNZUN"); z_writefile(IDF, b, strlen(b)); z_sync(); } }
+    char b[100]; snprintf(b, 100, "id=%s\nnombre=%s\nmac=%s\n", myid, myname, mymac); z_mkdir("/sys/ZUNZUN"); z_writefile(IDF, b, strlen(b)); z_sync(); }
 static void ident_save(void) { char b[100]; snprintf(b, 100, "id=%s\nnombre=%s\nmac=%s\n", myid, myname, mymac); z_writefile(IDF, b, strlen(b)); z_sync(); }
 
 static int cfg_text(sb_t *b) { char k[65]; hex(R.key, 32, k); sb_f(b, "ZRED1\nred=%s\nnombre=%s\nclave=%s\nadmin=%s\nversion=%d\n", R.net, R.netname, k, R.admin, R.ver);
@@ -137,19 +142,19 @@ static void note_draw(void) { if (!note) return; g_clear(note, UI_PANEL); g_fram
     while (*p && y < note->h - 20) { int k = 0; while (p[k] && p[k] != '\n' && k < 54) k++; if (p[k] && p[k] != '\n') { int b = k; while (b > 0 && p[b] != ' ') b--; if (b > 10) k = b; } memcpy(l, p, k); l[k] = 0; g_text(note, 14, y, l, UI_TEXT); y += 18; p += k; while (*p == ' ' || *p == '\n') p++; } zw_present(note); }
 static void notify(const char *t) { strncpy0(note_t, t, 600); zsys s; z_sysinfo(&s); if (!note) note = zw_new("Red local", s.scr_w - 470, s.scr_h - 220, 460, 150, WF_POPUP); note_until = z_ms() + 12000; note_draw(); }
 /* invitacion: este equipo (sin red) recibe la invitacion del administrador y el usuario acepta o no */
-static int ask_accept(const char *who, const char *net, const char *code) { zsys s; z_sysinfo(&s); zwin *w = zw_new("Invitación a una red local", (s.scr_w - 520) / 2, (s.scr_h - 250) / 2, 520, 250, WF_DECOR); if (!w) return 0;
+static int ask_accept(const char *who, const char *net, const char *code, const char *oldnet) { zsys s; z_sysinfo(&s); zwin *w = zw_new("Invitación a una red local", (s.scr_w - 520) / 2, (s.scr_h - 250) / 2, 520, 250, WF_DECOR); if (!w) return 0;
     int r = -1; u64 t0 = z_ms(); zevent e;
     while (r < 0 && z_ms() - t0 < 120000) { g_clear(w, UI_BG); char b[200]; snprintf(b, 200, tr_("%s te invita a la red \"%s\"."), who, net); g_textb(w, 20, 20, b, UI_TEXT);
-        g_text(w, 20, 50, tr_("Comprueba que el administrador ve el mismo código:"), UI_MUTED); g_text2(w, 150, 80, code, UI_ACC, 3); g_text(w, 20, 140, tr_("Si es el mismo, acepta para unir este equipo a la red."), UI_MUTED);
+        g_text(w, 20, 50, tr_("Comprueba que el administrador ve el mismo código:"), UI_MUTED); g_text2(w, 150, 80, code, UI_ACC, 3); g_text(w, 20, 140, tr_("Si es el mismo, acepta para unir este equipo a la red."), UI_MUTED); if (oldnet[0]) { snprintf(b, 200, tr_("Este equipo dejará la red \"%s\"."), oldnet); g_text(w, 20, 160, b, 0xB45309); }
         ui_button(w, 260, 190, 120, 32, "Aceptar", 2); ui_button(w, 390, 190, 110, 32, "Rechazar", 0); zw_present(w);
         if (!z_event(&e, 1000) || e.win != (u32)w->id) continue; if (e.type == EV_CLOSE) r = 0; else if (e.type == EV_DOWN && e.y >= 190 && e.y < 222) { if (e.x >= 260 && e.x < 380) r = 1; else if (e.x >= 390 && e.x < 500) r = 0; } else if (e.type == EV_KEY && e.ch == 27) r = 0; }
     zw_close(w); return r == 1; }
 static void sas(const u8 *sh, const u8 *a, const u8 *b, char *o) { zsha256 c; u8 h[32]; sha256_init(&c); sha256_up(&c, sh, 32); sha256_up(&c, a, 32); sha256_up(&c, b, 32); sha256_end(&c, h); u32 v = ((u32)h[0] << 24 | h[1] << 16 | h[2] << 8 | h[3]) % 1000000; snprintf(o, 12, "%03u %03u", v / 1000, v % 1000); }
 static void pair_key(const u8 *sh, u8 *k) { u8 prk[32]; zc_hkdf_extract(256, (const u8 *)"zred1", 5, sh, 32, prk); zc_hkdf_expand(256, prk, (const u8 *)"zred1 invitacion", 16, k, 16); }
 static void srv_invite(conn_t *c, char **f, int k) {
-    if (in_net() || k < 7) { lsend(c, "NO|ya estoy en una red"); return; } u8 apub[32], priv[32], pub[32], sh[32]; if (unhex(f[6], apub, 32)) return;
+    if (k < 7 || (in_net() && !strcmp(R.net, f[2]))) { lsend(c, "NO|ya estoy en esa red"); return; } char oldnet[40] = ""; if (in_net()) strcpy(oldnet, R.netname); u8 apub[32], priv[32], pub[32], sh[32]; if (unhex(f[6], apub, 32)) return;
     zc_random(priv, 32); x25519_base(pub, priv); x25519(sh, priv, apub); char ph[65], l[200], code[12]; hex(pub, 32, ph); char nm[32]; strcpy(nm, myname); safe(nm); snprintf(l, 200, "PUB|%s|%s|%s", ph, myid, nm); lsend(c, l); sas(sh, apub, pub, code);
-    z_log("[prueba] red invitacion recibida"); int ok = ask_accept(f[5], f[3], code); lsend(c, ok ? "ACEPTO" : "RECHAZO"); if (!ok) { z_log("[prueba] red invitacion rechazada"); return; } z_log("[prueba] red invitacion aceptada");
+    z_log("[prueba] red invitacion recibida"); int ok = ask_accept(f[5], f[3], code, oldnet); lsend(c, ok ? "ACEPTO" : "RECHAZO"); if (!ok) { z_log("[prueba] red invitacion rechazada"); return; } z_log("[prueba] red invitacion aceptada");
     u8 h[4]; if (raw_recv(c, h, 4, 15000)) { z_log("[prueba] red invitacion: no llego la configuracion"); return; } long n = h[0] | h[1] << 8 | h[2] << 16 | (long)h[3] << 24; if (n <= 0 || n > 200000) { z_log("[prueba] red invitacion: tamano mal"); return; } u8 *b = malloc(n + 16), *pl = malloc(n + 1);
     if (raw_recv(c, b, n + 16, 15000)) { free(b); free(pl); return; } u8 kk[16], iv[12] = {0}; pair_key(sh, kk); zgcm g; gcm_init(&g, kk, 16);
     if (gcm_open(&g, iv, h, 4, b, n, pl, b + n)) { free(b); free(pl); lsend(c, "MAL"); z_log("[prueba] red invitacion: no se pudo descifrar"); return; } pl[n] = 0; free(b);
@@ -295,7 +300,7 @@ static void draw(void) { nhz = 0; g_clear(W, UI_WHITE); g_rect(W, 0, 0, W->w, 40
         g_textb(W, X, y, is_admin() ? tr_("Equipos encontrados que no están en la red") : tr_("Otros equipos encontrados"), UI_TEXT); y += 24; if (!nf) { g_text(W, X, y, tr_("Ninguno todavía. Comprueba el cable y que el otro equipo tenga ZunzúnOS encendido."), UI_MUTED); y += 24; }
         for (int i = 0; i < np; i++) { peer_t *p = &P[i]; if (z_ms() - p->seen >= 45000 || (in_net() && !strcmp(p->net, R.net))) continue; char ip2[20]; z_fmt_ip(p->ip, ip2);
             if (p->role == 'L') snprintf(b, 300, "%s   %s   %s", p->name, ip2, tr_("sin red")); else snprintf(b, 300, "%s   %s   %s \"%s\"", p->name, ip2, tr_("en la red"), p->netname); g_text(W, X + 18, y + 2, b, UI_TEXT);
-            if (is_admin() && p->role == 'L') btn(X + w - bw("Invitar a la red"), y - 4, "Invitar a la red", 2, B_INV + i); y += 30; } }
+            if (is_admin()) btn(X + w - bw("Añadir a la red"), y - 4, "Añadir a la red", 2, B_INV + i); y += 30; } }
     else if (tab == 3) { if (!in_net()) g_text(W, X, y, tr_("Primero une este equipo a una red local (pestaña Equipos)."), UI_MUTED);
         else { g_textb(W, X, y, tr_("Impresoras compartidas de la red"), UI_TEXT); if (is_admin()) btn(X + w - bw("Compartir una impresora"), y - 6, "Compartir una impresora", 2, B_ADDP); y += 30;
             g_text(W, X, y, tr_("Aparecen en el diálogo Imprimir de todos los equipos de la red."), UI_MUTED); y += 18; g_text(W, X, y, tr_("El equipo que tiene la impresora tiene que estar encendido."), UI_MUTED); y += 30;

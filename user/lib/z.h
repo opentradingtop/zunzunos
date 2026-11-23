@@ -45,7 +45,7 @@ typedef struct { i32 x, y, w, h; u32 flags; u64 title; } zwincfg;
 typedef struct { u32 id; i32 x, y, w, h; u32 flags, state; u64 canvas; char title[64]; int pid; } zwininfo;
 typedef struct { u64 size; u32 is_dir; u32 mtime; char name[256]; } zdirent;
 typedef struct { int pid; int threads; char name[32]; u64 mem_kb; u64 cpu; } zproc;
-typedef struct { u64 mem_total, mem_free, uptime_ms; u32 scr_w, scr_h, nproc, boot_mode; char cpu[49]; char pad[7]; u64 tsc_khz; int layout; } zsys;
+typedef struct { u64 mem_total, mem_free, uptime_ms; u32 scr_w, scr_h, nproc, boot_mode; char cpu[49]; char pad[7]; u64 tsc_khz; int layout; u8 hwmac[6], pad2[2]; } zsys;   /* hwmac: tarjeta de red integrada, identifica al equipo */
 typedef struct { char name[16]; char fstype[8]; char label[16]; u64 total, free_b; char dev[16]; u32 ro, pad; } zmount;
 typedef struct { u8 mac[6]; u8 up, dhcp, local; u32 ip, mask, gw, dns; u64 rxp, txp, rxb, txb; char name[8]; char kind[16]; } znet;
 typedef struct { u8 bus, dev, fn, cls, sub, pif; u16 vendor, device; } zpci;
@@ -135,7 +135,7 @@ static inline int z_rename(const char *a, const char *b) { return SC2(49, a, b);
 static inline int z_mounts(zmount *o, int n) { return SC2(50, o, n); }
 static inline void z_sync(void) { SC0(51); }
 void *z_readfile(const char *p, long *size);
-int z_writefile(const char *p, const void *b, long n);
+int z_writefile(const char *p, const void *b, long n); int z_recover_tmp(const char *dir, int depth);
 const char *z_errstr(int e);
 
 /* red */

@@ -151,11 +151,25 @@ void *z_readfile(const char *p, long *size) {
     b[got] = 0; z_close(f); if (size) *size = got;
     return b;
 }
-int z_writefile(const char *p, const void *b, long n) {
+static int write_raw(const char *p, const void *b, long n) {
     int f = z_open(p, O_WRITE | O_CREATE | O_TRUNC); if (f < 0) return f;
     long r = z_write(f, b, n); z_close(f); z_sync();
     return r == n ? 0 : (r < 0 ? (int)r : -5);
 }
+/* escritura segura en la memoria o el disco (/sys): se escribe entera en NOMBRE.zztmp, se guarda, y solo entonces
+   sustituye al archivo. Si se va la luz a medias, queda el archivo viejo entero o el nuevo entero; nunca uno a medias.
+   z_recover_tmp (al arrancar) termina un cambio que se quedo a mitad. En /rd (memoria) se escribe directamente. */
+int z_writefile(const char *p, const void *b, long n) {
+    if (strncmp(p, "/sys/", 5) || strlen(p) > 280) return write_raw(p, b, n);
+    char t[300]; snprintf(t, 300, "%s.zztmp", p); int e = write_raw(t, b, n); if (e) { z_unlink(t); z_sync(); return e; }
+    zdirent d; if (!z_stat(p, &d)) { if (d.is_dir) { z_unlink(t); return -21; } e = z_unlink(p); if (e) { z_unlink(t); z_sync(); return e; } z_sync(); }
+    e = z_rename(t, p); z_sync(); return e; }
+/* tras un corte: NOMBRE.zztmp con NOMBRE presente = escritura a medias (se borra); sin NOMBRE = el nuevo ya estaba
+   entero y faltaba ponerle el nombre. Devuelve cuantos arreglo */
+int z_recover_tmp(const char *dir, int depth) { zdirent e; int fixed = 0; char names[64][256]; int nn = 0;
+    for (int i = 0; nn < 64 && !z_readdir(dir, i, &e); i++) { if (e.name[0] == '.') continue; if (e.is_dir) { if (depth > 0) { char sub[400]; snprintf(sub, 400, "%s/%s", dir, e.name); fixed += z_recover_tmp(sub, depth - 1); } continue; } if (z_ends(e.name, ".zztmp")) strncpy0(names[nn++], e.name, 256); }
+    for (int i = 0; i < nn; i++) { char t[400], p[400]; snprintf(t, 400, "%s/%s", dir, names[i]); strcpy(p, t); p[strlen(p) - 6] = 0; zdirent d; if (!z_stat(p, &d)) z_unlink(t); else z_rename(t, p); fixed++; char lg[460]; snprintf(lg, 460, "[prueba] escritura recuperada %s", p); z_log(lg); }
+    if (fixed) z_sync(); return fixed; }
 const char *z_errstr(int e) {
     switch (e) { case -2: return "no existe"; case -5: return "error de E/S"; case -13: return "acceso denegado"; case -12: return "sin memoria"; case -17: return "ya existe"; case -20: return "no es una carpeta"; case -21: return "es una carpeta"; case -22: return "parametro no valido"; case -28: return "disco lleno"; case -30: return "solo lectura"; case -39: return "carpeta no vacia"; case -38: return "no disponible"; case -110: return "tiempo agotado"; case -111: return "conexion rechazada"; }
     return "error";

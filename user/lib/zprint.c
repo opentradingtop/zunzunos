@@ -247,7 +247,8 @@ int zp_printers(zprinter *o, int max) { char *t = z_readfile(PFILE, 0); if (!t) 
     free(t); return n + zp_net_printers(o + n, max - n); }
 /* impresoras que el administrador de la Red local ha compartido (en /sys/ZUNZUN/RED.TXT), menos las de este equipo:
    "impresora=id|nombre|equipo|impresora_del_equipo|lenguaje|papel|ppp|color|modelo" */
-int zp_net_printers(zprinter *o, int max) { char *t = z_readfile("/sys/ZUNZUN/RED.TXT", 0), *idf = z_readfile("/sys/ZUNZUN/RED-ID.TXT", 0); int n = 0; char me[16] = "";
+int zp_net_printers(zprinter *o, int max) { zsys sy; z_sysinfo(&sy); char mac[13]; for (int i = 0; i < 6; i++) { mac[2 * i] = "0123456789abcdef"[sy.hwmac[i] >> 4]; mac[2 * i + 1] = "0123456789abcdef"[sy.hwmac[i] & 15]; } mac[12] = 0;
+    char fc[64], fi[64]; snprintf(fc, 64, "/sys/ZUNZUN/RED-%s.TXT", mac); snprintf(fi, 64, "/sys/ZUNZUN/RED-ID-%s.TXT", mac); char *t = z_readfile(fc, 0), *idf = z_readfile(fi, 0); int n = 0; char me[16] = "";
     if (idf) { char *p = strstr(idf, "id="); if (p) { int i = 0; p += 3; while (p[i] && p[i] != '\n' && i < 15) { me[i] = p[i]; i++; } me[i] = 0; } free(idf); }
     for (char *p = t; p && *p && n < max; ) { char *e = strchr(p, '\n'); if (e) *e = 0;
         if (!strncmp(p, "impresora=", 10)) { char *f[10]; int k = 0; f[k++] = p + 10; for (char *q = p + 10; *q && k < 10; q++) if (*q == '|') { *q = 0; f[k++] = q + 1; }
