@@ -94,7 +94,8 @@ static void clean_key(char *k) { char o[256]; int n = 0; for (const char *p = k;
 typedef struct { char *s; short kind, blk; u8 st; } dl_t;
 enum { K_TXT, K_H, K_CODE, K_REAS, K_META, K_USER, K_ERR, K_GAP, K_TOGGLE, K_RETRY, K_CODEH, K_HR, K_QUOTE, K_TABLE, K_WHO, K_THINK };
 typedef struct { int role; sb_t t, r; char model[128]; int tin, tout, stopped, open; long ms; dl_t *L; int nL, cols, dirty; } msg_t; /* role: 0 tu, 1 IA, 2 error */
-typedef struct { char file[32], title[96], model[128]; char *sys; long upd; msg_t **m; int n, cap; } conv_t;
+#define MAXATT 8
+typedef struct { char file[32], title[96], model[128]; char *sys; long upd; msg_t **m; int n, cap; char att[MAXATT][200]; int natt; } conv_t;
 static conv_t **CV; static int ncv, cur = -1;
 static conv_t *CC(void) { return cur >= 0 && cur < ncv ? CV[cur] : 0; }
 static void lines_free(msg_t *m) { for (int i = 0; i < m->nL; i++) free(m->L[i].s); free(m->L); m->L = 0; m->nL = 0; }
@@ -105,12 +106,14 @@ static void conv_free(conv_t *c) { for (int i = 0; i < c->n; i++) msg_free(c->m[
 static void put_block(sb_t *b, const char *s) { for (const char *p = s; *p; ) { const char *e = strchr(p, '\n'); long n = e ? e - p : (long)strlen(p); if (n >= 2 && p[0] == '@' && p[1] == '@') sb_s(b, "@"); sb_add(b, p, n); sb_s(b, "\n"); if (!e) break; p = e + 1; } }
 static int conv_save(conv_t *c) { if (!c->file[0]) { long t = now_num(); for (int k = 0; k < 100; k++) { snprintf(c->file, 32, "%ld%02d.TXT", t % 10000000000L, k); char p[128]; snprintf(p, 128, "%s/LUMEN/%s", base, c->file); zdirent d; if (z_stat(p, &d)) break; } }
     sb_t b = {0}; sb_f(&b, "LUMEN1\ntitulo=%s\nmodelo=%s\nfecha=%ld\nsistema=", c->title, c->model, c->upd); esc_nl(&b, c->sys ? c->sys : ""); sb_s(&b, "\n");
+    if (c->natt) { sb_s(&b, "adjuntos="); for (int i = 0; i < c->natt; i++) { if (i) sb_s(&b, "|"); sb_s(&b, c->att[i]); } sb_s(&b, "\n"); }
     for (int i = 0; i < c->n; i++) { msg_t *m = c->m[i]; if (m->role == 0) sb_s(&b, "@@tu\n"); else if (m->role == 1) sb_f(&b, "@@ia %s|%d|%d|%ld|%d\n", m->model, m->tin, m->tout, m->ms, m->stopped); else sb_s(&b, "@@error\n"); put_block(&b, m->t.p);
         if (m->role == 1 && m->r.n) { sb_s(&b, "@@razonamiento\n"); put_block(&b, m->r.p); } }
     char d[96]; snprintf(d, 96, "%s/LUMEN", base); z_mkdir(base); z_mkdir(d); char p[128]; snprintf(p, 128, "%s/%s", d, c->file); int e = z_writefile(p, b.p, b.n); free(b.p); z_sync(); return e; }
 static void trim_nl(sb_t *s) { if (s->n && s->p[s->n - 1] == '\n') s->p[--s->n] = 0; }
 static conv_t *conv_load(const char *file) { char p[128]; snprintf(p, 128, "%s/LUMEN/%s", base, file); char *t = z_readfile(p, 0); if (!t) return 0; if (strncmp(t, "LUMEN1\n", 7)) { free(t); return 0; }
     conv_t *c = calloc(1, sizeof *c); strncpy0(c->file, file, 32); char v[1100]; kv(t, "titulo", c->title, 96); kv(t, "modelo", c->model, 128); v[0] = 0; kv(t, "fecha", v, 32); c->upd = atol(v); v[0] = 0; kv(t, "sistema", v, 1100); unesc_nl(v); c->sys = strdup(v);
+    { char a[MAXATT * 201]; a[0] = 0; kv(t, "adjuntos", a, sizeof a); for (char *q = a; *q && c->natt < MAXATT; ) { char *e = strchr(q, '|'); if (e) *e = 0; strncpy0(c->att[c->natt++], q, 200); if (!e) break; q = e + 1; } }
     msg_t *m = 0; sb_t *dst = 0; for (char *l = t; l && *l; ) { char *e = strchr(l, '\n'); if (e) *e = 0;
         if (l[0] == '@' && l[1] == '@' && l[2] != '@') { if (dst) trim_nl(dst); dst = 0;
             if (!strcmp(l, "@@tu")) { m = msg_add(c, 0); dst = &m->t; } else if (!strcmp(l, "@@error")) { m = msg_add(c, 2); dst = &m->t; } else if (!strcmp(l, "@@razonamiento") && m && m->role == 1) dst = &m->r;
@@ -154,7 +157,7 @@ static void api_url(char *o, int cap, const char *path) { snprintf(o, cap, "%s",
 static void net_err(int e, zhttp_info *inf, char *o, int cap) { if (e == -125) strncpy0(o, tr("Cancelado"), cap); else if (e == -110) strncpy0(o, tr("El servidor tardó demasiado en responder"), cap); else if (e == -1004 && inf->err[0]) snprintf(o, cap, "%s (%s)", z_http_err(e), inf->err); else if (e == -111 || e == -2 || e == -5) snprintf(o, cap, "%s (%s)", tr("No hay conexión con el servidor de la API: revisa la red"), z_http_err(e)); else snprintf(o, cap, "%s", z_http_err(e)); }
 static void api_msg(char *body, char *o, int cap) { o[0] = 0; if (!body) return; jd_t d; int r = jparse(&d, body); int er = jget(&d, r, "error"); const char *m = js(&d, jget(&d, er, "message")); if (!m) m = js(&d, er); if (!m) m = js(&d, jget(&d, r, "message")); if (m) dnorm_str(m, o, cap); jfree(&d); }
 static void err_text(int st, const char *am, char *o, int cap) { const char *t;
-    if (st == 401 || st == 403) t = strcasestr(am, "management") ? "Esa es una clave de gestión: crea una clave normal en openrouter.ai/keys" : "La API key no es válida o no tiene permiso. Revísala en Ajustes."; else if (st == 402) t = "La cuenta no tiene saldo para este modelo. Elige un modelo gratuito o añade crédito en OpenRouter.";
+    if (st == 401 || st == 403) t = strcasestr(am, "management") ? "Esa es una clave de gestión: crea una clave normal en openrouter.ai/keys" : "OpenRouter no acepta esta API key para chatear. En Ajustes pulsa Probar de nuevo para ver la causa."; else if (st == 402) t = "La cuenta no tiene saldo para este modelo. Elige un modelo gratuito o añade crédito en OpenRouter.";
     else if (st == 429) t = "Demasiadas peticiones o el modelo gratuito está saturado. Espera un momento o cambia de modelo."; else if (st == 404) t = "Este modelo no está disponible ahora. Elige otro en Modelo.";
     else if (st == 400 && (strcasestr(am, "model") || strcasestr(am, "context") || strcasestr(am, "token"))) t = "El modelo no acepta esta petición (modelo o tamaño del contexto)."; else if (st >= 500) t = "El servidor de la API tiene un problema. Prueba de nuevo en un momento."; else t = "No se pudo obtener respuesta.";
     if (am[0]) snprintf(o, cap, "%s (HTTP %d: %s)", tr(t), st, am); else snprintf(o, cap, "%s (HTTP %d)", tr(t), st); }
@@ -170,19 +173,28 @@ static void fetch_models(void) { if (busy) return; busy = 1; md_loading = 1; str
     jfree(&d); free(body); if (!n) { md_fallback(); snprintf(msg, 300, "%s", tr("El servidor no devolvió modelos; se muestra la lista básica")); return; }
     qsort(MD, nmd, sizeof *MD, md_cmp); md_at = now_num(); md_save(); int fr = 0; for (int i = 0; i < nmd; i++) fr += MD[i].fr; snprintf(msg, 300, tr("%d modelos, %d gratuitos"), nmd, fr); char lg[80]; snprintf(lg, 80, "[prueba] lumen modelos %d gratis %d", nmd, fr); z_log(lg); }
 
-/* comprobar la clave: /key y, si lo rechaza, una peticion real de 1 token (como la version web) */
-static void probe(int *st, char *am, int cap) { char u[260]; api_url(u, 260, "/chat/completions"); sb_t b = {0}; sb_s(&b, "{\"model\":"); jesc(&b, C.model); sb_s(&b, ",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1,\"stream\":false}");
+/* comprobar la clave: /key dice si OpenRouter la conoce, pero eso no basta (las claves de gestion, desactivadas o
+   caducadas pasan /key y el chat responde 401 "User not found"); por eso siempre se hace ademas una peticion
+   real de 1 token, con el modelo gratuito en OpenRouter para no gastar saldo */
+static void probe(int *st, char *am, int cap) { char u[260]; api_url(u, 260, "/chat/completions"); sb_t b = {0}; sb_s(&b, "{\"model\":"); jesc(&b, is_or() ? DEF_MODEL : C.model); sb_s(&b, ",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":1,\"stream\":false}");
     sb_t h = {0}; sb_s(&h, ""); hdrs(&h); zhttp_opt o = {h.p, 0, pump, 0, 40000}; zhttp_info inf; char *body = 0; long bl; int e = z_http_ex("POST", u, b.p, b.n, "application/json", &o, &body, &bl, &inf); free(h.p); free(b.p); *st = e ? 0 : inf.status; am[0] = 0; if (e) net_err(e, &inf, am, cap); else api_msg(body, am, cap); free(body); }
+static int jtrue(jd_t *d, int o, const char *k) { int i = jget(d, o, k); return i >= 0 && d->n[i].t == 5; }
 static void check_key(void) { if (busy) return; clean_key(C.key); if (!C.key[0]) { kst = 0; kdet[0] = 0; return; } busy = 1; kst = 1; kdet[0] = 0; strcpy(msg, tr("Comprobando la clave...")); draw();
     char u[260]; api_url(u, 260, "/key"); sb_t h = {0}; sb_s(&h, ""); hdrs(&h); zhttp_opt o = {h.p, 0, pump, 0, 30000}; zhttp_info inf; char *body = 0; long bl; int e = z_http_ex("GET", u, 0, 0, 0, &o, &body, &bl, &inf); free(h.p);
     const char *shape = is_or() && strncmp(C.key, "sk-or-", 6) ? tr("Las claves de OpenRouter empiezan por sk-or-v1-.") : "";
+    char l[64]; snprintf(l, 64, "sk-or-...%s", C.key + MAX(0, (int)strlen(C.key) - 4)); int ps = -1, mg = 0;
     if (e) { char t[200]; net_err(e, &inf, t, 200); kst = e == -125 ? 0 : 4; snprintf(kdet, 300, "%s %s", t, shape); }
     else if (inf.status == 200) { jd_t d; int r = jparse(&d, body); int dd = jget(&d, r, "data"); const char *lb = js(&d, jget(&d, dd, "label")); double us = jn(&d, jget(&d, dd, "usage")); int lim = jget(&d, dd, "limit"); kst = 2;
-        char l[64]; if (lb) dnorm_str(lb, l, 40); else snprintf(l, 64, "sk-or-...%s", C.key + MAX(0, (int)strlen(C.key) - 4)); if (lim >= 0 && d.n[lim].t == 4) snprintf(kdet, 300, tr("Clave %s. Gastado: $%.4f de $%.2f."), l, us, d.n[lim].n); else snprintf(kdet, 300, tr("Clave %s. Gastado: $%.4f (sin límite)."), l, us); jfree(&d); }
-    else { char am[160]; api_msg(body, am, 160); int st = inf.status, ps; char pm[160]; probe(&ps, pm, 160);
+        if (lb) dnorm_str(lb, l, 40); mg = jtrue(&d, dd, "is_management_key") || jtrue(&d, dd, "is_provisioning_key");
+        if (lim >= 0 && d.n[lim].t == 4) snprintf(kdet, 300, tr("Clave %s. Gastado: $%.4f de $%.2f."), l, us, d.n[lim].n); else snprintf(kdet, 300, tr("Clave %s. Gastado: $%.4f (sin límite)."), l, us); jfree(&d);
+        if (mg) { kst = 3; snprintf(kdet, 300, tr("La clave %s es de gestión: sirve para administrar claves, no para chatear. Crea una clave normal en openrouter.ai/keys."), l); }
+        else { char pm[160]; probe(&ps, pm, 160);
+            if (ps == 401 || ps == 403) { kst = 3; snprintf(kdet, 300, tr("OpenRouter reconoce la clave %s pero no deja chatear con ella (HTTP %d: %s). Mira en openrouter.ai/keys que esté activa y sin caducar, o crea otra."), l, ps, pm); } } }
+    else { char am[160]; api_msg(body, am, 160); int st = inf.status; char pm[160]; probe(&ps, pm, 160);
         if (ps && ps != 401 && ps != 403) { kst = 2; snprintf(kdet, 300, "%s", tr("La clave funciona (comprobada con una petición real).")); }
         else if (!ps) { kst = 4; snprintf(kdet, 300, "%s %s", pm, shape); } else { kst = 3; char t[260]; err_text(ps ? ps : st, pm[0] ? pm : am, t, 260); snprintf(kdet, 300, "%s %s", t, shape); } }
-    free(body); busy = 0; stop_req = 0; strcpy(msg, kst == 2 ? tr("Clave válida") : kst == 3 ? tr("Clave no válida") : kst == 4 ? tr("Clave sin verificar: no se pudo contactar con el servidor") : ""); char lg[80]; snprintf(lg, 80, "[prueba] lumen clave %d", kst); z_log(lg); }
+    free(body); busy = 0; stop_req = 0; strcpy(msg, kst == 2 ? tr("Clave válida") : kst == 3 ? tr("Clave no válida") : kst == 4 ? tr("Clave sin verificar: no se pudo contactar con el servidor") : "");
+    char lg[160]; snprintf(lg, 160, "[prueba] lumen clave %d: /key %d, chat %d, gestion %d, %s (largo %d)", kst, e ? e : inf.status, ps, mg, l, (int)strlen(C.key)); z_log(lg); }
 
 /* ---------- enviar y recibir ---------- */
 typedef struct { msg_t *m; sb_t line, raw; int done, got, sse; char err[240]; } sse_t;
@@ -201,21 +213,47 @@ static int sse_cb(const char *d, long n, void *ctx) { sse_t *x = ctx; sb_add(&x-
         if (!strncmp(l, "data:", 5)) { char *p = l + 5; while (*p == ' ') p++; if (!strcmp(p, "[DONE]")) x->done = 1; else if (*p) sse_json(x, p); }
         long rest = x->line.n - (e + 1 - x->line.p); memmove(x->line.p, e + 1, rest); x->line.n = rest; x->line.p[rest] = 0; }
     if (z_ms() - last_draw > 60) draw(); return stop_req || quit; }
+/* ---------- archivos adjuntos (RAG): se leen una vez, se trocean y en cada pregunta van los fragmentos que
+   mas tienen que ver con ella, delante de la pregunta ---------- */
+static zrdoc RD[24]; static int nrd; static char rd_err[24][80];
+static int RAG_OK(const char *n) { static const char *E[] = {".txt", ".md", ".csv", ".html", ".htm", ".rtf", ".docx", ".odt", ".xlsx", ".pdf", ".json", ".xml", ".log", ".ini", ".c", ".h", ".py", ".js", ".css", ".tsv"}; for (unsigned i = 0; i < sizeof E / sizeof *E; i++) if (z_ends(n, E[i])) return 1; return 0; }
+static zrdoc *rag_doc(const char *path, char *err, int ecap) { err[0] = 0; for (int i = 0; i < nrd; i++) if (!strcmp(RD[i].path, path)) { strncpy0(err, rd_err[i], ecap); return RD[i].txt ? &RD[i] : 0; }
+    if (nrd == 24) { zr_free(&RD[0]); memmove(RD, RD + 1, 23 * sizeof *RD); memmove(rd_err, rd_err + 1, 23 * sizeof *rd_err); nrd--; }
+    zrdoc *d = &RD[nrd]; memset(d, 0, sizeof *d); strncpy0(d->path, path, 200); const char *b = strrchr(path, '/'); strncpy0(d->name, b ? b + 1 : path, 64);
+    snprintf(msg, 300, "%s %s...", tr("Leyendo"), d->name); draw(); d->txt = zr_read(path, &d->n, rd_err[nrd], 80, pump, 0); stop_req = 0; if (d->txt) zr_chunk(d); strncpy0(err, rd_err[nrd], ecap); nrd++;
+    char lg[300]; snprintf(lg, 300, "[prueba] lumen adjunto %s: %ld letras, %d fragmentos%s%s", d->name, d->n, d->nch, err[0] ? ", error: " : "", err); z_log(lg); return d->txt ? d : 0; }
+static void rag_add(const char *path) { conv_t *c = CC(); if (!c) c = conv_new(); for (int i = 0; i < c->natt; i++) if (!strcmp(c->att[i], path)) { strcpy(msg, tr("Ese archivo ya está adjunto")); return; }
+    if (c->natt == MAXATT) { snprintf(msg, 300, tr("Como mucho %d archivos por chat"), MAXATT); return; } char er[80]; zrdoc *d = rag_doc(path, er, 80);
+    if (!d) { snprintf(msg, 300, "%s: %s", tr("No se pudo usar el archivo"), er); return; } if (!d->n) { strcpy(msg, tr("El archivo está vacío")); return; }
+    strncpy0(c->att[c->natt++], path, 200); if (c->n) conv_save(c); snprintf(msg, 300, tr("Adjunto: %s (%d fragmentos)"), d->name, d->nch); }
+static void rag_del(int i) { conv_t *c = CC(); if (!c || i < 0 || i >= c->natt) return; memmove(c->att[i], c->att[i + 1], (c->natt - i - 1) * sizeof c->att[0]); c->natt--; if (c->n) conv_save(c); strcpy(msg, tr("Archivo quitado del chat")); }
+/* texto que va delante de la ultima pregunta; budget en letras segun el contexto del modelo */
+static sb_t RAGT; static int rag_n, rag_docs;
+static void rag_build(conv_t *c, const char *q) { free(RAGT.p); RAGT = (sb_t){0}; rag_n = rag_docs = 0; if (!c->natt) return; zrdoc tmp[MAXATT]; int nd = 0;
+    for (int i = 0; i < c->natt; i++) { char er[80]; zrdoc *d = rag_doc(c->att[i], er, 80); if (d) tmp[nd++] = *d; }
+    if (!nd) return; model_t *md = md_find(C.model); long budget = md && md->ctx ? MIN(24000L, md->ctx * 4 / 3) : 16000; budget = MAX(budget, 3000L);
+    sb_t f = {0}; sb_s(&f, ""); rag_n = zr_search(tmp, nd, q, budget, &f, &rag_docs);
+    for (int i = 0; i < nd; i++) for (int k = 0; k < nrd; k++) if (!strcmp(RD[k].path, tmp[i].path)) { RD[k].co = tmp[i].co; RD[k].cl = tmp[i].cl; RD[k].nch = tmp[i].nch; }
+    sb_s(&RAGT, tr("Fragmentos de archivos que he adjuntado. Úsalos para responder y cita el archivo entre corchetes; si la respuesta no está en ellos, dilo.")); sb_s(&RAGT, "\n"); sb_add(&RAGT, f.p, f.n); free(f.p);
+    char lg[160]; snprintf(lg, 160, "[prueba] lumen rag %d fragmentos de %d archivos, %ld letras", rag_n, rag_docs, RAGT.n); z_log(lg); }
 static void build_req(conv_t *c, sb_t *b) { sb_s(b, "{\"model\":"); jesc(b, C.model); sb_s(b, ",\"messages\":["); const char *sys = c->sys && c->sys[0] ? c->sys : C.sys; int first = 1;
     if (sys[0]) { sb_s(b, "{\"role\":\"system\",\"content\":"); jesc(b, sys); sb_s(b, "}"); first = 0; }
     model_t *md = md_find(C.model); long budget = md && md->ctx ? md->ctx * 6 / 10 * 4 : 480000, sz = 0; int start = 0; /* ~4 letras por token: se quitan los mensajes mas antiguos si no caben */
     for (int i = c->n - 1; i >= 0; i--) { if (c->m[i]->role == 2 || c->m[i] == SM) continue; sz += c->m[i]->t.n; if (sz > budget && c->n - i > 4) { start = i + 1; break; } }
-    for (int i = start; i < c->n; i++) { msg_t *m = c->m[i]; if (m->role == 2 || m == SM || !m->t.n) continue; if (!first) sb_s(b, ","); first = 0; sb_s(b, m->role ? "{\"role\":\"assistant\",\"content\":" : "{\"role\":\"user\",\"content\":"); jesc(b, m->t.p); sb_s(b, "}"); }
+    int lastu = -1; for (int i = c->n - 1; i >= 0; i--) if (c->m[i]->role == 0) { lastu = i; break; }
+    for (int i = start; i < c->n; i++) { msg_t *m = c->m[i]; if (m->role == 2 || m == SM || !m->t.n) continue; if (!first) sb_s(b, ","); first = 0; sb_s(b, m->role ? "{\"role\":\"assistant\",\"content\":" : "{\"role\":\"user\",\"content\":");
+        if (i == lastu && RAGT.n) { sb_t q = {0}; sb_add(&q, RAGT.p, RAGT.n); sb_s(&q, "\n---\n"); sb_s(&q, m->t.p); jesc(b, q.p); free(q.p); } else jesc(b, m->t.p); sb_s(b, "}"); }
     sb_f(b, "],\"temperature\":%d.%d,\"stream\":%s", C.temp / 10, C.temp % 10, C.stream ? "true" : "false"); if (C.maxtok > 0) sb_f(b, ",\"max_tokens\":%d", C.maxtok);
     if (C.stream) sb_s(b, ",\"stream_options\":{\"include_usage\":true}"); if (is_or()) sb_s(b, ",\"usage\":{\"include\":true}"); sb_s(b, "}"); }
 static int mode, stick = 1, scy, tot_h, view_h; static te_t CT;
 static void ask(void) { conv_t *c = CC(); if (!c || busy) return; while (c->n && c->m[c->n - 1]->role == 2) msg_del(c, c->n - 1); if (!c->n || c->m[c->n - 1]->role != 0) return;
     msg_t *m = msg_add(c, 1); strncpy0(m->model, C.model, 128); strncpy0(c->model, C.model, 128); SM = m; busy = 1; stop_req = 0; stick = 1; t_send = z_ms();
+    { free(RAGT.p); RAGT = (sb_t){0}; rag_n = 0; int lu = -1; for (int i = c->n - 1; i >= 0; i--) if (c->m[i]->role == 0) { lu = i; break; } if (c->natt && lu >= 0) rag_build(c, c->m[lu]->t.p); }
     char u[260]; api_url(u, 260, "/chat/completions"); sb_t b = {0}; build_req(c, &b); sb_t h = {0}; sb_s(&h, ""); hdrs(&h);
     sse_t x = {0}; x.m = m; zhttp_opt o = {h.p, C.stream ? sse_cb : 0, pump, &x, 120000}; zhttp_info inf; char *body = 0; long bl = 0;
-    snprintf(msg, 300, "%s %s...  (%s)", tr("Preguntando a"), model_name(C.model), tr("Esc para detener")); draw();
+    if (rag_n) snprintf(msg, 300, tr("Preguntando a %s con %d fragmentos de %d archivos...  (Esc para detener)"), model_name(C.model), rag_n, rag_docs); else snprintf(msg, 300, "%s %s...  (%s)", tr("Preguntando a"), model_name(C.model), tr("Esc para detener")); draw();
     int e = z_http_ex("POST", u, b.p, b.n, "application/json", &o, &body, &bl, &inf); m->ms = z_ms() - t_send; char er[300] = "";
-    if (e == -125 || stop_req) m->stopped = 1; else if (e) net_err(e, &inf, er, 300); else if (inf.status < 200 || inf.status > 299) { char am[160]; api_msg(body, am, 160); err_text(inf.status, am, er, 300); }
+    if (e == -125 || stop_req) m->stopped = 1; else if (e) net_err(e, &inf, er, 300); else if (inf.status < 200 || inf.status > 299) { char am[160]; api_msg(body, am, 160); err_text(inf.status, am, er, 300); if (inf.status == 401 || inf.status == 403) { kst = 3; snprintf(kdet, 300, "%s", er); } char lg[200]; snprintf(lg, 200, "[prueba] lumen chat HTTP %d: %s (clave de %d letras)", inf.status, am, (int)strlen(C.key)); z_log(lg); }
     else if (!C.stream && body) { sse_json(&x, body); }
     if (x.err[0] && !er[0]) strcpy(er, x.err); free(body); free(b.p); free(h.p); free(x.line.p); SM = 0;
     if (C.stream && !x.sse && x.raw.n && !er[0]) sse_json(&x, x.raw.p); /* servidores que ignoran "stream" y responden de una vez */
@@ -295,7 +333,7 @@ static void build(msg_t *m, int cols, int last) { lines_free(m); m->cols = cols;
 /* ---------- pantalla ---------- */
 #define CH_H (4 * LH + 22)
 enum { B_NEW = 1, B_SIDE, B_MODEL, B_SET, B_EXP, B_PRINT, B_SEND, B_CLOSE, B_KPASTE, B_KSHOW, B_KSAVE, B_KTEST, B_KDEL, B_TMINUS, B_TPLUS, B_MMINUS, B_MPLUS, B_LIVE1, B_LIVE0, B_APIRESET, B_WIPE, B_ADDKEY, B_TABFREE, B_TABALL, B_REFRESH,
-    F_KEY = 50, F_SYS, F_CSYS, F_API, F_SEARCH, B_SUG = 70, B_MROW = 100 };
+    F_KEY = 50, F_SYS, F_CSYS, F_API, F_SEARCH, B_FILES = 60, B_FUP, B_FPATH, B_FDOCS, B_FDESK, B_FSYS, B_FROOT, B_SUG = 70, B_MROW = 100, B_FDEL = 4000, B_FROW = 4100 };
 typedef struct { int x, y, w, h, id; } hz_t; static hz_t HZ[200]; static int nhz, need, sb_top, sf = -1, scur, show_key, qcur; static char s_key[256], s_sys[1024], s_csys[1024], s_api[200];
 static void hz(int x, int y, int w, int h, int id) { if (nhz < 200) HZ[nhz++] = (hz_t){x, y, w, h, id}; }
 static void btn(int x, int y, int w, int h, const char *s, int st, int id) { ui_button(W, x, y, w, h, s, st); hz(x, y, w, h, id); }
@@ -350,14 +388,14 @@ static void draw_empty(int x0, int y0, int w, int h) { int cx = x0 + w / 2, y = 
 static void draw_chat(void) { int x0 = CX0(), cw = W->w - x0, y0 = TB, y1 = W->h - SBH - CH_H; conv_t *c = CC(); view_h = y1 - y0;
     if (!c || !c->n) { tot_h = 0; scy = 0; draw_empty(x0, y0, cw, y1 - y0); return; }
     int cols = MAX(20, (cw - 56) / 8), tot = 20; ensure(c, cols); for (int i = 0; i < c->n; i++) tot += c->m[i]->nL * LH; tot_h = tot; if (stick) scy = tot - view_h; scy = MAX(0, MIN(scy, tot - view_h));
-    zw_clip(W, x0, y0, cw, view_h); int y = y0 + 12 - scy, lx = x0 + 28, rw = cw - 56;
+    zw_clip(W, x0, y0, cw, view_h); zs_area(W, x0, y0, cw, view_h, scy); int y = y0 + 12 - scy, lx = x0 + 28, rw = cw - 56;
     for (int i = 0; i < c->n; i++) { msg_t *m = c->m[i]; if (y + m->nL * LH < y0 || y > y1) { y += m->nL * LH; continue; } for (int k = 0; k < m->nL; k++, y += LH) if (y + LH > y0 && y < y1) dline(m, &m->L[k], lx, y, rw); }
-    zw_noclip(W); if (tot > view_h) { int bh = MAX(24, view_h * view_h / tot); g_round(W, W->w - 7, y0 + 2 + (view_h - bh - 4) * scy / MAX(1, tot - view_h), 4, bh, 2, UI_LINE); } }
+    zs_stop(W); zw_noclip(W); if (tot > view_h) { int bh = MAX(24, view_h * view_h / tot); g_round(W, W->w - 7, y0 + 2 + (view_h - bh - 4) * scy / MAX(1, tot - view_h), 4, bh, 2, UI_LINE); } }
 static void draw_comp(void) { int x0 = CX0(), cw = W->w - x0, y = W->h - SBH - CH_H; g_rect(W, x0, y, cw, CH_H, UI_BG); g_rect(W, x0, y, cw, 1, UI_LINE);
     int bx = x0 + 12, by = y + 10, bww = cw - 24 - 106, bh = CH_H - 20; g_rect(W, bx, by, bww, bh, UI_WHITE); g_frame(W, bx, by, bww, bh, UI_ACC); hz(bx, by, bww, bh, 0);
     CT.cols = MAX(10, (bww - 16) / 8); if (!CT.len) { g_text(W, bx + 9, by + 7, "Escribe un mensaje...", UI_MUTED); g_text(W, bx + 9, by + 7 + LH * 2, "Intro envía  \xC2\xB7  Mayús+Intro, nueva línea", UI_LINE); }
     zw_clip(W, bx + 1, by + 1, bww - 2, bh - 2); te_draw(W, &CT, bx + 8, by + 7, bh - 12, 1, UI_TEXT, UI_ACC2, UI_ACC, 0); zw_noclip(W);
-    btn(bx + bww + 10, by, 96, 34, busy && SM ? "Detener" : "Enviar", 2, B_SEND); if (busy && SM) { char t[40]; snprintf(t, 40, "%ld s", (long)((z_ms() - t_send) / 1000)); ctext(bx + bww + 58, by + 44, t, UI_MUTED); } }
+    btn(bx + bww + 10, by, 96, 34, busy && SM ? "Detener" : "Enviar", 2, B_SEND); if (!busy) { conv_t *c = CC(); char t[40]; if (c && c->natt) snprintf(t, 40, "%s (%d)", tr("Archivos"), c->natt); else strcpy(t, tr("Archivos")); btn(bx + bww + 10, by + 40, 96, 28, t, c && c->natt ? 1 : 0, B_FILES); } if (busy && SM) { char t[40]; snprintf(t, 40, "%ld s", (long)((z_ms() - t_send) / 1000)); ctext(bx + bww + 58, by + 44, t, UI_MUTED); } }
 static void fld(int x, int y, int w, int id, const char *v, int foc) { ui_input(W, x, y, w, 26, v, foc ? scur : 0, foc); hz(x, y, w, 26, id); }
 static void spin(int x, int y, const char *val, int idm, int idp) { btn(x, y, 28, 26, "-", 0, idm); g_rect(W, x + 32, y, 74, 26, UI_WHITE); g_frame(W, x + 32, y, 74, 26, UI_LINE); ctext(x + 69, y + 5, val, UI_TEXT); btn(x + 110, y, 28, 26, "+", 0, idp); }
 static void draw_settings(void) { int x0 = 28, w = MIN(W->w - 56, 760), y = TB + 14; g_rect(W, 0, TB, W->w, W->h - TB - SBH, UI_BG);
@@ -386,9 +424,32 @@ static void draw_models(void) { int x0 = 28, w = W->w - 56, y = TB + 14; g_rect(
         char pr[80], cx[24], rt[120]; fmt_price(m, pr, 80); fmt_ctx(m->ctx, cx, 24); if (m->ctx) snprintf(rt, 120, "%s  \xC2\xB7  %s %s", pr, cx, tr("contexto")); else strcpy(rt, pr); int rtw = g_textw(rt);
         zw_clip(W, x0 + 12, y, w - rtw - 36, 38); g_textb(W, x0 + 12, y + 2, m->name, UI_TEXT); g_text(W, x0 + 12, y + 19, m->id, UI_MUTED); zw_noclip(W); g_text(W, x0 + w - rtw - 12, y + 11, rt, m->fr ? 0x16A34A : UI_MUTED); hz(x0, y, w, 37, B_MROW + fl[r]); }
     free(fl); }
-void draw(void) { nhz = 0; need = 0; last_draw = z_ms(); g_clear(W, UI_WHITE); draw_tb(); if (mode == 1) draw_settings(); else if (mode == 2) draw_models(); else { if (side_on()) draw_side(); draw_chat(); draw_comp(); }
+/* panel Archivos: los adjuntos del chat y un explorador sencillo para anadir mas */
+static char fb_dir[200]; static int fb_top; static zdirent FBE[300]; static int nfbe;
+static int fb_cmp(const void *a, const void *b) { const zdirent *x = a, *y = b; if (x->is_dir != y->is_dir) return y->is_dir - x->is_dir; return strcasecmp(x->name, y->name); }
+static void fb_load(const char *d) { if (d != fb_dir) strncpy0(fb_dir, d, 200); nfbe = 0; fb_top = 0; zdirent e; for (int i = 0; nfbe < 300 && !z_readdir(fb_dir, i, &e); i++) { if (e.name[0] == '.' || (!e.is_dir && !RAG_OK(e.name))) continue; FBE[nfbe++] = e; } qsort(FBE, nfbe, sizeof *FBE, fb_cmp); }
+static void fb_go(const char *d) { zdirent e; if (d[0] && (!strcmp(d, "/") || !z_stat(d, &e))) fb_load(d); else snprintf(msg, 300, "%s: %s", tr("No existe"), d); }
+static int fb_rows(void) { return MAX(3, (W->h - SBH - (TB + 14 + 300)) / 26); }
+static void draw_files(void) { int x0 = 28, w = MIN(W->w - 56, 860), y = TB + 14; conv_t *c = CC(); g_rect(W, 0, TB, W->w, W->h - TB - SBH, UI_BG);
+    g_text2(W, x0, y, "Archivos del chat", UI_TEXT, 2); btn(W->w - 28 - bw("Cerrar"), y, bw("Cerrar"), 28, "Cerrar", 0, B_CLOSE); y += 42;
+    y += para(x0, y, w, tr("LUMEN busca en estos archivos los fragmentos que tienen que ver con cada pregunta y se los manda al modelo junto con ella. Sirven TXT, MD, CSV, HTML, RTF, DOCX, ODT, XLSX y PDF con texto."), UI_MUTED) * 18 + 10;
+    if (!c || !c->natt) { g_text(W, x0, y, "Este chat no tiene archivos todavía.", UI_MUTED); y += 26; }
+    else for (int i = 0; i < c->natt; i++) { const char *b = strrchr(c->att[i], '/'); b = b ? b + 1 : c->att[i]; char t[200]; int nf = 0; long nl = 0; for (int k = 0; k < nrd; k++) if (!strcmp(RD[k].path, c->att[i])) { nf = RD[k].nch; nl = RD[k].n; }
+        g_textb(W, x0, y + 5, b, UI_TEXT); if (nl) { snprintf(t, 200, tr("%ld letras, %d fragmentos"), nl, nf); g_text(W, x0 + g_textw(b) + 16, y + 5, t, UI_MUTED); } btn(x0 + w - bw("Quitar"), y, bw("Quitar"), 26, "Quitar", 0, B_FDEL + i); y += 30; }
+    y += 10; g_rect(W, x0, y, w, 1, UI_LINE); y += 12; g_textb(W, x0, y, "Añadir un archivo", UI_TEXT); y += 24;
+    int x = x0; static const char *PL[] = {"Documentos", "Escritorio", "Memoria", "Discos", "Escribir ruta..."}; static const int PI[] = {B_FDOCS, B_FDESK, B_FSYS, B_FROOT, B_FPATH};
+    for (int i = 0; i < 5; i++) { btn(x, y, bw(PL[i]), 26, PL[i], 0, PI[i]); x += bw(PL[i]) + 6; } y += 34;
+    if (!fb_dir[0]) { char d[120]; z_docdir(d); fb_load(d); }
+    btn(x0, y, 30, 24, "..", 0, B_FUP); g_text(W, x0 + 40, y + 4, fb_dir, UI_TEXT); y += 30; int rows = fb_rows(); fb_top = MAX(0, MIN(fb_top, nfbe - rows));
+    g_rect(W, x0, y, w, rows * 26 + 4, UI_WHITE); g_frame(W, x0, y, w, rows * 26 + 4, UI_LINE);
+    if (!nfbe) g_text(W, x0 + 10, y + 8, "Aquí no hay carpetas ni documentos que se puedan usar.", UI_MUTED);
+    for (int i = 0; i < rows && fb_top + i < nfbe; i++) { zdirent *e = &FBE[fb_top + i]; int ry = y + 2 + i * 26; char t[160]; if (e->is_dir) snprintf(t, 160, "[%s]  %s", tr("carpeta"), e->name); else snprintf(t, 160, "%s   (%lu KB)", e->name, (unsigned long)((e->size + 1023) / 1024));
+        g_text(W, x0 + 10, ry + 5, t, e->is_dir ? UI_ACC : UI_TEXT); hz(x0 + 1, ry, w - 2, 26, B_FROW + fb_top + i); }
+    if (nfbe > rows) { char t[60]; snprintf(t, 60, tr("%d de %d (rueda para ver más)"), MIN(rows, nfbe - fb_top), nfbe); g_text(W, x0, y + rows * 26 + 10, t, UI_MUTED); } }
+static void fb_pick(int i) { if (i < 0 || i >= nfbe) return; char p[260]; snprintf(p, 260, "%s%s%s", fb_dir, strcmp(fb_dir, "/") ? "/" : "", FBE[i].name); if (FBE[i].is_dir) { fb_go(p); return; } rag_add(p); }
+void draw(void) { nhz = 0; need = 0; last_draw = z_ms(); g_clear(W, UI_WHITE); zs_area(W, 0, 0, 0, 0, 0); zs_stop(W); draw_tb(); if (mode == 1) draw_settings(); else if (mode == 2) draw_models(); else if (mode == 3) draw_files(); else { if (side_on()) draw_side(); draw_chat(); draw_comp(); }
     g_rect(W, 0, W->h - SBH, W->w, SBH, UI_PANEL); g_rect(W, 0, W->h - SBH, W->w, 1, UI_LINE); zw_clip(W, 0, W->h - SBH, W->w - 200, SBH); g_text(W, 8, W->h - 19, msg, UI_TEXT); zw_noclip(W);
-    conv_t *c = CC(); if (c && c->n) { char t[60]; snprintf(t, 60, tr("%d mensajes"), c->n); g_text(W, W->w - 8 - g_textw(t), W->h - 19, t, UI_MUTED); } zw_present(W); }
+    conv_t *c = CC(); if (c && c->n) { char t[60]; snprintf(t, 60, tr("%d mensajes"), c->n); g_text(W, W->w - 8 - g_textw(t), W->h - 19, t, UI_MUTED); } if (mode == 0) zs_show(W); zw_present(W); }
 
 /* ---------- acciones ---------- */
 static int wait_busy(void) { if (!busy) return 0; strcpy(msg, tr("Espera a que termine (Esc para detener)")); return 1; }
@@ -414,8 +475,13 @@ static void wipe(void) { if (wait_busy() || !ncv || !ui_confirm("Borrar todos lo
 static void pick_model(int i) { if (i < 0 || i >= nmd) return; strncpy0(C.model, MD[i].id, 128); cfg_save(); mode = 0; snprintf(msg, 300, "%s: %s (%s)", tr("Modelo"), MD[i].name, MD[i].id); char lg[200]; snprintf(lg, 200, "[prueba] lumen modelo %s", MD[i].id); z_log(lg); }
 static int models_stale(void) { return !md_at || now_num() - md_at > 60000; }
 static void act(int id) {
+    if (id >= B_FROW) { fb_pick(id - B_FROW); return; } if (id >= B_FDEL) { rag_del(id - B_FDEL); return; }
     if (id >= B_MROW) { pick_model(id - B_MROW); return; } if (id >= B_SUG && id < B_SUG + 4) { te_set(&CT, tr(SUG[id - B_SUG]), strlen(tr(SUG[id - B_SUG]))); send_text(); return; }
     switch (id) {
+    case B_FILES: if (wait_busy()) break; if (mode == 1) apply_settings(); mode = mode == 3 ? 0 : 3; if (mode == 3 && !fb_dir[0]) { char d[120]; z_docdir(d); fb_load(d); } else if (mode == 3) fb_load(fb_dir); break;
+    case B_FUP: { char d[200]; strcpy(d, fb_dir); char *q = strrchr(d, '/'); if (q && q > d) *q = 0; else strcpy(d, "/"); fb_go(d); break; }
+    case B_FDOCS: { char d[120]; z_docdir(d); fb_go(d); break; } case B_FDESK: fb_go("/sys/ESCRITORIO"); break; case B_FSYS: fb_go("/sys"); break; case B_FROOT: fb_go("/"); break;
+    case B_FPATH: { char p[200]; strcpy(p, fb_dir); if (ui_prompt("Añadir archivo", "Ruta del archivo o de la carpeta:", p, 190) && p[0]) { zdirent e; if (!z_stat(p, &e) && e.is_dir) fb_go(p); else rag_add(p); } break; }
     case B_NEW: new_chat(); break; case B_SIDE: C.side = !side_on(); if (C.side && W->w < 640) C.side = 1; cfg_save(); break;
     case B_MODEL: if (mode == 1) apply_settings(); mode = mode == 2 ? 0 : 2; if (mode == 2) { md_q[0] = 0; qcur = 0; md_top = 0; model_t *m = md_find(C.model); md_tab = m && !m->fr ? 1 : 0; md_cur = 0; int fl[2048], n = nmd < 2048 ? md_filter(fl) : 0; for (int k = 0; k < n; k++) if (!strcmp(MD[fl[k]].id, C.model)) md_cur = k; if (models_stale() && !busy) { draw(); fetch_models(); } } break;
     case B_SET: if (mode == 1) close_panel(); else open_settings(); break; case B_ADDKEY: open_settings(); sf = 0; break;
@@ -440,8 +506,9 @@ static void msg_menu(zevent *e, int mi, int li) { conv_t *c = CC(); msg_t *m = c
 static void side_menu(zevent *e, int i) { static const char *it[] = {"Renombrar", "Guardar como Markdown", "Copiar todo el chat", "Borrar"}; int sx, sy; zw_screen(W, e->x, e->y, &sx, &sy); int r = ui_menu(sx, sy, it, 4); conv_t *c = CV[i];
     if (r == 0) { char t[96]; strncpy0(t, c->title, 96); if (ui_prompt("Renombrar", "Nuevo nombre del chat:", t, 90) && t[0]) { strncpy0(c->title, t, 96); conv_save(c); } } else if (r == 1) export_md(c); else if (r == 2) { sb_t b = {0}; conv_md(c, &b); z_clip_set(b.p, b.n); free(b.p); strcpy(msg, tr("Chat copiado al portapapeles")); }
     else if (r == 3) { char q[200]; snprintf(q, 200, tr("¿Borrar \"%.60s\"?"), c->title); if (ui_confirm("Borrar", q)) conv_remove(i); } }
+static int comp_drag, comp_x, comp_y;
 static void click(zevent *e) { int right = e->btn & 2;
-    for (int i = nhz - 1; i >= 0; i--) if (ui_in(e->x, e->y, HZ[i].x, HZ[i].y, HZ[i].w, HZ[i].h)) { if (HZ[i].id == 0) { if (mode == 0) { te_click(&CT, e->x - HZ[i].x - 8, e->y - HZ[i].y - 7, 1, e->mods & M_SHIFT); } return; } if (!right) act(HZ[i].id); return; }
+    for (int i = nhz - 1; i >= 0; i--) if (ui_in(e->x, e->y, HZ[i].x, HZ[i].y, HZ[i].w, HZ[i].h)) { if (HZ[i].id == 0) { if (mode == 0) { if (right) te_menu(W, &CT, e); else { te_click(&CT, e->x - HZ[i].x - 8, e->y - HZ[i].y - 7, 1, e->mods & M_SHIFT); comp_drag = 1; comp_x = HZ[i].x; comp_y = HZ[i].y; } } return; } if (!right) act(HZ[i].id); return; }
     if (mode) { sf = -1; return; }
     if (side_on() && e->x < SW && e->y > TB + 34 && e->y < W->h - SBH) { int i = sb_top + (e->y - TB - 34) / 40; if (i >= ncv) return; if (busy) { wait_busy(); return; } if (right) side_menu(e, i); else { cur = i; stick = 1; } return; }
     int mi, li; if (!locate(e->y, &mi, &li)) return; msg_t *m = CC()->m[mi]; if (li >= m->nL) return; dl_t *l = &m->L[li];
@@ -452,14 +519,19 @@ static void key(zevent *e) {
     if (e->ch == 14) { act(B_NEW); return; } if (e->ch == 16 && !mode) { print_conv(CC()); return; } if (e->ch == 12) { act(B_MODEL); return; }
     if (mode == 1) { if (e->key == K_TAB) { int n = CC() ? 4 : 3; do sf = (sf + 1) % 4; while (sf == 2 && !CC()); (void)n; int cap; scur = strlen(sfield(sf, &cap)); return; } if (e->ch == '\n') { if (!wait_busy()) { apply_settings(); if (sf == 0) check_key(); else mode = 0; } return; } if (sf >= 0) { int cap; ui_input_key(sfield(sf, &cap), cap, &scur, e); } return; }
     if (mode == 2) { int fl[2048], n = nmd < 2048 ? md_filter(fl) : 0, rows = md_rows(); if (e->key == K_DOWN) md_cur++; else if (e->key == K_UP) md_cur--; else if (e->key == K_PGDN) md_cur += rows; else if (e->key == K_PGUP) md_cur -= rows; else if (e->ch == '\n') { if (n) pick_model(fl[MAX(0, MIN(md_cur, n - 1))]); } else if (ui_input_key(md_q, 70, &qcur, e)) { md_cur = md_top = 0; } md_cur = MAX(0, MIN(md_cur, n - 1)); return; }
+    if (mode == 3) return;
     if (e->ch == 19) { export_md(CC()); return; } if (e->ch == 18) { retry(); return; }
     if (e->key == K_PGUP || e->key == K_PGDN) { scy += (e->key == K_PGUP ? -1 : 1) * MAX(LH, view_h - 3 * LH); stick = scy >= tot_h - view_h; return; }
     if (e->ch == '\n' && !(e->mods & M_SHIFT)) { send_text(); return; } te_key(&CT, e, 4); }
 static void handle(zevent *e) {
     if (e->type == EV_REDRAW) { dirty_all(); need = 1; return; } if (e->win != (u32)W->id) return;
     if (e->type == EV_CLOSE) { quit = 1; stop_req = 1; return; } if (e->type == EV_RESIZE) { zw_resized(W, e->x, e->y); need = 1; return; }
+    /* seleccionar con el raton: en la conversacion (zsel) y en el cuadro de escribir (arrastrando dentro) */
+    if (mode == 0 && zs_event(W, e)) { need = 1; return; }
+    if (e->type == EV_MOVE && comp_drag) { if (!e->btn) comp_drag = 0; else { te_click(&CT, e->x - comp_x - 8, e->y - comp_y - 7, 1, 1); need = 1; } return; }
+    if (e->type == EV_UP) { comp_drag = 0; return; }
     if (e->type == EV_KEY) { key(e); need = 1; } else if (e->type == EV_DOWN) { click(e); need = 1; }
-    else if (e->type == EV_WHEEL) { int d = (int)e->key; if (mode == 2) md_cur -= d * 3; else if (mode == 0 && side_on() && e->x < SW) sb_top -= d; else if (mode == 0) { scy -= d * 3 * LH; stick = scy >= tot_h - view_h; } need = 1; } }
+    else if (e->type == EV_WHEEL) { int d = (int)e->key; if (mode == 2) md_cur -= d * 3; else if (mode == 3) fb_top -= d * 3; else if (mode == 0 && side_on() && e->x < SW) sb_top -= d; else if (mode == 0) { scy -= d * 3 * LH; stick = scy >= tot_h - view_h; } need = 1; } }
 int main(const char *a) { zdirent d; if (!z_stat("/sys", &d)) strcpy(base, "/sys/ZUNZUN"); else { z_mkdir("/rd/tmp"); strcpy(base, "/rd/tmp/ZUNZUN"); } z_mkdir(base);
     cfg_load(); md_load(); conv_load_all(); te_init(&CT); if (C.key[0]) kst = 5;
     zsys s; z_sysinfo(&s); W = zw_new("LUMEN", -1, 0, MIN(1000, (int)s.scr_w - 40), MIN(680, (int)s.scr_h - 80), WF_DECOR | WF_RESIZE); if (!W) return 1;

@@ -960,7 +960,7 @@ precio variable	-	variable price
 El servidor tardó demasiado en responder	-	The server took too long to respond
 No hay conexión con el servidor de la API: revisa la red	-	Cannot reach the API server: check the network
 Esa es una clave de gestión: crea una clave normal en openrouter.ai/keys	-	That is a management key: create a regular key at openrouter.ai/keys
-La API key no es válida o no tiene permiso. Revísala en Ajustes.	-	The API key is not valid or lacks permission. Check it in Settings.
+OpenRouter no acepta esta API key para chatear. En Ajustes pulsa Probar de nuevo para ver la causa.	-	OpenRouter does not accept this API key for chat. In Settings, press Test again to see why.
 La cuenta no tiene saldo para este modelo. Elige un modelo gratuito o añade crédito en OpenRouter.	-	The account has no credit for this model. Pick a free model or add credit on OpenRouter.
 Demasiadas peticiones o el modelo gratuito está saturado. Espera un momento o cambia de modelo.	-	Too many requests or the free model is busy. Wait a moment or switch models.
 Este modelo no está disponible ahora. Elige otro en Modelo.	-	This model is not available right now. Pick another one in Model.
@@ -1059,3 +1059,144 @@ Código copiado	-	Code copied
 Nuevo nombre del chat:	-	New chat name:
 ¿Borrar "%.60s"?	-	Delete "%.60s"?
 Bienvenido a LUMEN. Añade tu API key de OpenRouter en Ajustes.	-	Welcome to LUMEN. Add your OpenRouter API key in Settings.
+La clave %s es de gestión: sirve para administrar claves, no para chatear. Crea una clave normal en openrouter.ai/keys.	-	Key %s is a management key: it manages keys but cannot chat. Create a regular key at openrouter.ai/keys.
+OpenRouter reconoce la clave %s pero no deja chatear con ella (HTTP %d: %s). Mira en openrouter.ai/keys que esté activa y sin caducar, o crea otra.	-	OpenRouter knows key %s but will not chat with it (HTTP %d: %s). Check at openrouter.ai/keys that it is enabled and not expired, or create another.
+%d de %d (rueda para ver más)	-	%d of %d (scroll for more)
+%ld letras, %d fragmentos	-	%ld characters, %d excerpts
+Adjunto: %s (%d fragmentos)	-	Attached: %s (%d excerpts)
+Aquí no hay carpetas ni documentos que se puedan usar.	-	There are no folders or usable documents here.
+Archivo quitado del chat	-	File removed from the chat
+Archivos del chat	-	Chat files
+Añadir archivo	-	Add file
+Añadir un archivo	-	Add a file
+Como mucho %d archivos por chat	-	At most %d files per chat
+El archivo está vacío	-	The file is empty
+Ese archivo ya está adjunto	-	That file is already attached
+Este chat no tiene archivos todavía.	-	This chat has no files yet.
+Fragmentos de archivos que he adjuntado. Úsalos para responder y cita el archivo entre corchetes; si la respuesta no está en ellos, dilo.	-	Excerpts from files I attached. Use them to answer and cite the file in square brackets; if the answer is not in them, say so.
+LUMEN busca en estos archivos los fragmentos que tienen que ver con cada pregunta y se los manda al modelo junto con ella. Sirven TXT, MD, CSV, HTML, RTF, DOCX, ODT, XLSX y PDF con texto.	-	LUMEN searches these files for the excerpts related to each question and sends them to the model along with it. Works with TXT, MD, CSV, HTML, RTF, DOCX, ODT, XLSX and PDF with text.
+Leyendo	-	Reading
+No existe	-	Does not exist
+No se pudo usar el archivo	-	Could not use the file
+Preguntando a %s con %d fragmentos de %d archivos...  (Esc para detener)	-	Asking %s with %d excerpts from %d files...  (Esc to stop)
+carpeta	-	folder
+Escribir ruta...	-	Type a path...
+Ruta del archivo o de la carpeta:	-	File or folder path:
+el PDF tarda demasiado	-	the PDF is taking too long
+fragmento	-	excerpt
+no es un documento de texto	-	not a text document
+no se pudo abrir el Lector PDF	-	could not open the PDF Reader
+no se pudo leer	-	could not be read
+no tiene texto legible	-	has no readable text
+Atajos de teclado	-	Keyboard shortcuts
+Win: menú Inicio   Win+E: Archivos   Win+D: escritorio   Win+L: bloquear	-	Win: Start menu   Win+E: Files   Win+D: desktop   Win+L: lock
+Alt+Tab: cambiar de ventana   Alt+F4 o Ctrl+W: cerrar   Ctrl+Mayús+Esc: Monitor	-	Alt+Tab: switch window   Alt+F4 or Ctrl+W: close   Ctrl+Shift+Esc: Monitor
+Ctrl+N: nuevo   Ctrl+O: abrir   Ctrl+S: guardar   Ctrl+P: imprimir	-	Ctrl+N: new   Ctrl+O: open   Ctrl+S: save   Ctrl+P: print
+Ctrl+Z: deshacer   Ctrl+Y: rehacer   Ctrl+A: seleccionar todo	-	Ctrl+Z: undo   Ctrl+Y: redo   Ctrl+A: select all
+Ctrl+C: copiar   Ctrl+X: cortar   Ctrl+V: pegar   Mayús+flechas: seleccionar	-	Ctrl+C: copy   Ctrl+X: cut   Ctrl+V: paste   Shift+arrows: select
+Arrastra con el ratón para seleccionar texto; el botón derecho ofrece Copiar.	-	Drag with the mouse to select text; right-click offers Copy.
+Impr Pant: captura de pantalla   Navegador: Ctrl+L dirección, F5 recargar	-	Print Screen: screenshot   Browser: Ctrl+L address, F5 reload
+Mantén pulsada una tecla para que se repita.	-	Hold a key down to repeat it.
+Batería baja: %d %%. Conecta el cargador.	-	Low battery: %d %%. Plug in the charger.
+Batería	-	Battery
+cargando	-	charging
+con la batería	-	on battery
+cargada y con el cargador	-	charged, on the charger
+con el cargador	-	on the charger
+Dirección local	-	Local address
+Tipo	-	Type
+cable directo, sin router	-	direct cable, no router
+el equipo no está en línea	-	the computer is not online
+no se pudo conectar	-	could not connect
+el otro equipo no acepta esta red	-	the other computer does not accept this network
+clave de red distinta: el equipo necesita otra invitación	-	different network key: the computer needs a new invitation
+se cortó la conexión	-	the connection was lost
+sin respuesta	-	no answer
+Red local	-	Local network
+%s te invita a la red "%s".	-	%s invites you to the network "%s".
+Comprueba que el administrador ve el mismo código:	-	Check that the administrator sees the same code:
+Si es el mismo, acepta para unir este equipo a la red.	-	If it is the same, accept to join this computer to the network.
+Rechazar	-	Decline
+Este equipo ya forma parte de la red "%s".	-	This computer is now part of the network "%s".
+Mensaje de	-	Message from
+El administrador ha sacado este equipo de la red local.	-	The administrator has removed this computer from the local network.
+Cambios enviados a %d equipos%s	-	Changes sent to %d computers%s
+ (algunos no respondieron; los recibirán al volver)	-	 (some did not answer; they will get them when they come back)
+Crear una red local	-	Create a local network
+Red "%s" creada. Ahora invita a los demás equipos.	-	Network "%s" created. Now invite the other computers.
+ya está en otra red	-	is already in another network
+Esperando a que %s acepte. Su pantalla debe mostrar este código:	-	Waiting for %s to accept. Its screen must show this code:
+%s no aceptó la invitación	-	%s did not accept the invitation
+no se completó la invitación	-	the invitation was not completed
+%s ya forma parte de la red	-	%s is now part of the network
+¿Sacar a %s de la red? Se cambiará la clave de la red.	-	Remove %s from the network? The network key will change.
+Sacar de la red	-	Remove from network
+Equipo sacado de la red. Clave nueva enviada a %d equipos (los apagados necesitarán otra invitación).	-	Computer removed. New key sent to %d computers (those switched off will need a new invitation).
+Carpeta compartida	-	Shared folder
+Carpeta en el equipo %s:	-	Folder on computer %s:
+Leyendo la carpeta...	-	Reading the folder...
+%d elementos	-	%d items
+No se pudo leer	-	Could not read
+Recibiendo	-	Receiving
+Subir un archivo	-	Upload a file
+No se pudo subir	-	Could not upload
+Subido	-	Uploaded
+Mensaje entregado a %d de %d	-	Message delivered to %d of %d
+Sin red local	-	No local network
+Este equipo	-	This computer
+id	-	id
+Dirección	-	Address
+ (cable directo, sin router)	-	 (direct cable, no router)
+Crea una red para ser su administrador, o espera a que el administrador de una red invite a este equipo.	-	Create a network to be its administrator, or wait for a network administrator to invite this computer.
+Crear una red nueva	-	Create a new network
+ (este equipo)	-	 (this computer)
+ (en línea)	-	 (online)
+ (no está en línea)	-	 (not online)
+Equipos de la red	-	Computers in the network
+en línea	-	online
+apagado o sin cable	-	off or unplugged
+Borrar la red	-	Delete the network
+Salir de la red	-	Leave the network
+Equipos encontrados que no están en la red	-	Computers found that are not in the network
+Otros equipos encontrados	-	Other computers found
+Ninguno todavía. Comprueba el cable y que el otro equipo tenga ZunzúnOS encendido.	-	None yet. Check the cable and that the other computer is running ZunzúnOS.
+sin red	-	no network
+en la red	-	in the network
+Invitar a la red	-	Invite to network
+Primero une este equipo a una red local (pestaña Equipos).	-	First join this computer to a local network (Computers tab).
+Carpetas compartidas de la red	-	Shared folders of the network
+Compartir una carpeta	-	Share a folder
+Todavía no hay carpetas. Pulsa Compartir una carpeta.	-	No folders yet. Press Share a folder.
+El administrador todavía no ha compartido carpetas.	-	The administrator has not shared any folders yet.
+en	-	on
+lectura y escritura	-	read and write
+Dejar de compartir	-	Stop sharing
+Subir de nivel	-	Up one level
+Subir un archivo...	-	Upload a file...
+Carpeta vacía.	-	Empty folder.
+Escribe un mensaje para los equipos de la red	-	Write a message for the computers in the network
+Enviar a...	-	Send to...
+Mensajes recibidos	-	Received messages
+Ninguno.	-	None.
+Nombre del equipo	-	Computer name
+Este equipo ya no está en la red	-	This computer is no longer in the network
+Red borrada	-	Network deleted
+Abierto	-	Opened
+¿Borrar %s del otro equipo?	-	Delete %s from the other computer?
+¿Dejar de compartir %s? Los archivos no se borran.	-	Stop sharing %s? The files are not deleted.
+Solo lectura	-	Read only
+Lectura y escritura	-	Read and write
+Equipos	-	Computers
+Carpetas	-	Folders
+Mensajes	-	Messages
+Guardar en Documentos	-	Save in Documents
+Invitación a una red local	-	Invitation to a local network
+Nombre de la red:	-	Network name:
+Nombre que verán los demás:	-	Name the others will see:
+Archivo de este equipo:	-	File on this computer:
+Nombre de este equipo en la red:	-	Name of this computer in the network:
+¿Sacar este equipo de la red local? Necesitará otra invitación para volver.	-	Remove this computer from the local network? It will need a new invitation to come back.
+¿Borrar esta red? Los terminales dejarán de poder usarla.	-	Delete this network? The terminals will no longer be able to use it.
+Nombre nuevo:	-	New name:
+La red local solo se puede usar en la sesión del administrador.	-	The local network can only be used in the administrator session.
+Cambiar nombre	-	Rename

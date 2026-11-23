@@ -37,5 +37,5 @@ int main(const char *a) {
             blit(); zw_present(W);
         } else if (e.type == EV_MOVE && down) { cx = MAX(0, MIN(cx, CW_ - 1)); cy = MAX(0, MIN(cy, CH_ - 1)); if (tool == 0) line(lx, ly, cx, cy, color); else if (tool == 5) line(lx, ly, cx, cy, 0xFFFFFF); else shape(cx, cy); lx = cx; ly = cy; blit(); zw_present(W); }
         else if (e.type == EV_UP) down = 0;
-        else if (e.type == EV_KEY && e.ch == 22) { paste_img(); blit(); zw_present(W); } else if (e.type == EV_KEY && e.ch == 3) z_clip_set_img(C, CW_, CH_); else if (e.type == EV_KEY && e.ch == 16) { print_(); ui(); blit(); zw_present(W); } else if (e.type == EV_KEY && e.ch == 26) { memcpy(C, undo, CW_ * CH_ * 4); blit(); zw_present(W); } }
+        else if (e.type == EV_KEY && e.ch == 22) { paste_img(); blit(); zw_present(W); } else if (e.type == EV_KEY && e.ch == 3) z_clip_set_img(C, CW_, CH_); else if (e.type == EV_KEY && e.ch == 16) { print_(); ui(); blit(); zw_present(W); } else if (e.type == EV_KEY && e.ch == 19) { save(); ui(); blit(); zw_present(W); } else if (e.type == EV_KEY && e.ch == 26) { memcpy(C, undo, CW_ * CH_ * 4); blit(); zw_present(W); } }
 }

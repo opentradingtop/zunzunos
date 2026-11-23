@@ -3,7 +3,7 @@
 
   vm.py --mode bios|uefi --img X --out DIR [--qemu "args"] paso paso ...
 
-Pasos: wait:TEXTO  sleep:SEG  shot:NOMBRE  key:ctrl-a  type:texto
+Pasos: wait:TEXTO  sleep:SEG  shot:NOMBRE  key:ctrl-a  hold:a,1.5  type:texto
        move:X,Y  click:X,Y  rclick:X,Y  dclick:X,Y  drag:X,Y,X2,Y2  hmp:COMANDO
 
 Antes de la primera accion con teclado o raton, si el escritorio muestra la pantalla de inicio de
@@ -106,7 +106,7 @@ ok = True
 try:
     for st in a.steps:
         k, _, v = st.partition(':')
-        if k in ('key', 'type', 'move', 'click', 'rclick', 'dclick', 'drag'): ensure_login()
+        if k in ('key', 'hold', 'type', 'move', 'click', 'rclick', 'dclick', 'drag'): ensure_login()
         if k == 'wait':
             t0 = time.time()
             while v not in serial():
@@ -120,6 +120,8 @@ try:
         elif k == 'shot':
             r = qmp('screendump', filename=os.path.abspath(os.path.join(a.out, v + '.png')), format='png'); print('shot', v, r.get('error', ''))
         elif k == 'key': keys(v.split('-'))
+        elif k == 'hold':   # hold:TECLA,SEGUNDOS mantiene pulsada una tecla (para la repeticion)
+            n, sec = v.split(','); qmp('send-key', keys=[{'type': 'qcode', 'data': x} for x in n.split('-')], **{'hold-time': int(float(sec) * 1000)}); time.sleep(float(sec) + 0.2)
         elif k == 'type': typ(v.replace('\\n', '\n'))
         elif k == 'move': goto(*map(int, v.split(',')))
         elif k in ('click', 'rclick', 'dclick'):

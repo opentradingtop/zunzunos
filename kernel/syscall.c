@@ -71,6 +71,7 @@ u64 syscall_dispatch(regs_t *r) {
     case 67: { FD(f, a); return sock_bind(f, b); }
     case 68: { FD(f, a); file_t *n; int x = sock_accept(f, (int)b, &n); if (x) return x; x = fd_alloc(n); if (x < 0) sock_close(n); return x; }
     case 69: { FD(f, a); UCHK(d, e); return sock_sendto(f, b, c, (void *)d, e); }
+    case 70: { FD(f, a); UCHK(b, c); UCHK(e, 8); i64 r = sock_recv(f, (void *)b, c, (int)d); if (r >= 0) { u32 ip; u16 pt; sock_from(f, &ip, &pt); ((u32 *)e)[0] = ip; ((u32 *)e)[1] = pt; } return r; }
 
     case 80: UCHK(a, b); return snd_write((void *)a, b);
     case 81: UCHK(a, b); return snd_info((char *)a, b);
@@ -97,6 +98,7 @@ u64 syscall_dispatch(regs_t *r) {
     case 110: { extern volatile u64 last_input; return (ticks - last_input) * 1000 / HZ; }
     case 112: { UCHK(a, b * 4); extern int wm_capture(u32 *, u64); return wm_capture((u32 *)a, b); }
     case 111: { extern int screen_power(int); return screen_power(a); }
+    case 113: { int o[5]; int r = acpi_battery(o); if (r) return r; UCHK(a, sizeof o); memcpy((void *)a, o, sizeof o); return 0; }
     case 109: { char pb[8] = "", pc[8] = ""; if (b && user_str((char *)b, pb, 8) < 0) return E_INVAL; if (c && user_str((char *)c, pc, 8) < 0) return E_INVAL; return sess_syscall(a, b ? pb : 0, c ? pc : 0); }
     case 108: { UCHK(b, c); extern long usbprn_write(int, const void *, long); return usbprn_write(a, (const void *)b, c); }
     case 106: { char n[16]; if (user_str((char *)a, n, 16) < 0) return E_INVAL; return blk_eject(n); }

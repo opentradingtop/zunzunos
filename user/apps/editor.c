@@ -32,7 +32,7 @@ int main(const char *a) { int wp; a = z_print_arg(a, &wp);
     if (!strcmp(a, "--dmesg")) { len = z_dmesg(T, cap - 1); T[len] = 0; long w = 0; for (long i = 0; i < len; i++) if (T[i] != '\r') T[w++] = T[i]; len = w; T[len] = 0; zw_title(W->id, "Registro del sistema"); } else if (a[0]) load(a); else title();
     draw(); if (wp) { print_(); draw(); } zevent e; int drag = 0;
     for (;;) {
-        if (!z_event(&e, -1)) continue; if (e.win != (u32)W->id) continue; ui_edit_menu(W, &e); if (e.type == EV_KEY && e.ch == 16) { print_(); draw(); continue; } if (e.type == EV_REDRAW) { draw(); continue; }
+        if (!z_event(&e, -1)) continue; if (e.win != (u32)W->id) continue; if (e.type == EV_KEY && (e.ch == 14 || e.ch == 15)) { e.type = EV_DOWN; e.btn = 1; e.y = 4; e.x = 6 + (e.ch == 15) * 76 + 20; } ui_edit_menu(W, &e); if (e.type == EV_KEY && e.ch == 16) { print_(); draw(); continue; } if (e.type == EV_REDRAW) { draw(); continue; }
         if (e.type == EV_CLOSE) { if (!dirty || ui_confirm("Salir", "Hay cambios sin guardar. Salir?")) return 0; }
         else if (e.type == EV_RESIZE) zw_resized(W, e.x, e.y);
         else if (e.type == EV_WHEEL) { for (int i = 0; i < 3; i++) { if ((int)e.key > 0) { if (top > 0) top = ls(top - 1); } else { long n = le(top); if (n < len) top = n + 1; } } draw(); continue; }

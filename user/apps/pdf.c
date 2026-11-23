@@ -172,14 +172,14 @@ static zpdoc *build_page(int i, const zpset *s0) {
     if (all) { run(all, tot, rs, id, 0); free(all); } return d;
 }
 /* ---------- interfaz ---------- */
-static int cur, zoom = 100, scy; static zpdoc *CD; static u32 *IMG; static int iw_, ih_, fit = 1;
+static int cur, zoom = 100, scy; static zpdoc *CD; static u32 *IMG; static int iw_, ih_, fit = 1, pdpi;
 #define TB 36
 static const char *BT[] = {"Abrir", "<", ">", "-", "+", "Ajustar", "Imprimir", "Guardar texto"};
 static int bx(int i) { int x = 6; for (int k = 0; k < i; k++) x += g_textw(_(BT[k])) + 18; return x; }
-static void render(void) { free(IMG); IMG = 0; if (!NPG) return; zp_free(CD); CD = build_page(cur, 0); double pw = zp_pw(CD); int dpi = fit ? (int)((W->w - 30) * 72 / pw) : 96 * zoom / 100; dpi = MAX(20, MIN(dpi, 300)); IMG = zp_raster(CD, 0, 1, dpi, &iw_, &ih_); }
+static void render(void) { free(IMG); IMG = 0; if (!NPG || !W) return; zp_free(CD); CD = build_page(cur, 0); double pw = zp_pw(CD); int dpi = fit ? (int)((W->w - 30) * 72 / pw) : 96 * zoom / 100; dpi = MAX(20, MIN(dpi, 300)); pdpi = dpi; zs_clear(W); IMG = zp_raster(CD, 0, 1, dpi, &iw_, &ih_); }
 static void draw(void) { g_clear(W, 0x525659); g_rect(W, 0, 0, W->w, TB, UI_PANEL); for (int i = 0; i < 8; i++) ui_button(W, bx(i), 5, g_textw(_(BT[i])) + 14, 26, BT[i], i == 5 && fit ? 2 : 0);
     char t[120]; snprintf(t, 120, "%s %d / %d", _("Página"), NPG ? cur + 1 : 0, NPG); g_text(W, bx(8) + 4, 10, t, UI_TEXT);
-    if (IMG) { int x = MAX(10, (W->w - iw_) / 2), y = TB + 10 - scy; zw_clip(W, 0, TB, W->w, W->h - TB - 22); g_rect(W, x + 4, y + 4, iw_, ih_, 0x2A2C2E); g_image(W, x, y, iw_, ih_, IMG); zw_noclip(W); }
+    if (IMG) { int x = MAX(10, (W->w - iw_) / 2), y = TB + 10 - scy; zw_clip(W, 0, TB, W->w, W->h - TB - 22); g_rect(W, x + 4, y + 4, iw_, ih_, 0x2A2C2E); g_image(W, x, y, iw_, ih_, IMG); zs_area(W, 0, TB, W->w, W->h - TB - 22, scy); zp_sel_runs(CD, 1, pdpi, W, x, y); zs_stop(W); zs_show(W); zw_noclip(W); }
     else g_text(W, 20, TB + 20, NPG ? _("Esta página no tiene contenido legible.") : _("Abre un archivo PDF con el botón Abrir."), 0xFFFFFF);
     g_rect(W, 0, W->h - 22, W->w, 22, UI_PANEL); g_text(W, 8, W->h - 19, msg, UI_TEXT); zw_present(W); }
 static void pbuild(zpdoc *d, const zpset *s, void *c) { /* cada pagina del PDF, escalada al papel */
@@ -188,12 +188,17 @@ static void save_text(void) { char p[320]; strcpy(p, path); char *dot = strrchr(
 static int open_(const char *p) { long n; u8 *d = z_readfile(p, &n); if (!d) { snprintf(msg, 200, "%s %s", _("No se puede abrir"), p); return -1; } if (n < 8 || memcmp(d, "%PDF", 4)) { free(d); strcpy(msg, _("No es un archivo PDF")); return -1; }
     F = d; FN = n; strncpy0(path, p, 300); index_objs(); NPG = 0; po *cat = 0; for (int i = 1; i < NOB && !cat; i++) if (OT[i].base) { po *o = getobj(i); if (o && isname(dget(o, "Type"), "Catalog")) cat = o; }
     po *pages = cat ? dget(cat, "Pages") : 0; if (pages) collect(pages, 0); if (!NPG) for (int i = 1; i < NOB && NPG < 3000; i++) if (OT[i].base) { po *o = getobj(i); if (o && isname(dget(o, "Type"), "Page")) PG[NPG++] = i; }
-    cur = 0; scy = 0; render(); const char *b = strrchr(p, '/'); zw_title(W->id, b ? b + 1 : p); snprintf(msg, 200, "%d %s, %d %s", NPG, _("páginas"), NOB - 1, _("objetos")); char m[400]; snprintf(m, 400, "[prueba] pdf abierto %s: %d paginas", p, NPG); z_log(m); return 0; }
-int main(const char *a) { int wp; a = z_print_arg(a, &wp);
+    cur = 0; scy = 0; render(); const char *b = strrchr(p, '/'); if (W) zw_title(W->id, b ? b + 1 : p); snprintf(msg, 200, "%d %s, %d %s", NPG, _("páginas"), NOB - 1, _("objetos")); char m[400]; snprintf(m, 400, "[prueba] pdf abierto %s: %d paginas", p, NPG); z_log(m); return 0; }
+/* sin ventana: pdf --texto ENTRADA|SALIDA guarda el texto de todas las paginas (lo usa LUMEN para leer PDF) */
+static int text_only(const char *a) { char in[300]; const char *bar = strchr(a, '|'); if (!bar || bar - a >= 300) return 2; memcpy(in, a, bar - a); in[bar - a] = 0;
+    if (open_(in)) return 1; sb_t b = {0}; sb_s(&b, ""); for (int i = 0; i < NPG; i++) { zpdoc *pd = build_page(i, 0); extern int zp_text_dump(zpdoc *, sb_t *); zp_text_dump(pd, &b); sb_s(&b, "\n\f\n"); zp_free(pd); }
+    int e = z_writefile(bar + 1, b.p, b.n); free(b.p); return e ? 1 : 0; }
+int main(const char *a) { int wp; if (!strncmp(a, "--texto ", 8)) return text_only(a + 8); a = z_print_arg(a, &wp);
     zsys sy; z_sysinfo(&sy); W = zw_new("Lector PDF", -1, 0, MIN(860, (int)sy.scr_w - 40), MIN(720, (int)sy.scr_h - 80), WF_DECOR | WF_RESIZE); if (a[0]) open_(a); draw(); if (wp && NPG) { zp_dialog(strrchr(path, '/') ? strrchr(path, '/') + 1 : path, pbuild, 0); draw(); } zevent e;
     for (;;) { if (!z_event(&e, -1)) continue; if (e.type == EV_REDRAW) { draw(); continue; } if (e.win != (u32)W->id) continue; if (e.type == EV_CLOSE) return 0; if (e.type == EV_RESIZE) { zw_resized(W, e.x, e.y); render(); draw(); continue; }
+        if (IMG && zs_event(W, &e)) { draw(); continue; }
         int b = -1; if (e.type == EV_DOWN && e.y < TB) { for (int i = 7; i >= 0; i--) if (e.x >= bx(i)) { if (e.x < bx(i) + g_textw(_(BT[i])) + 14) b = i; break; } }
-        if (e.type == EV_KEY) { if (e.key == K_PGDN || e.key == K_RIGHT) b = 2; else if (e.key == K_PGUP || e.key == K_LEFT) b = 1; else if (e.key == K_DOWN) scy += 40; else if (e.key == K_UP) scy = MAX(0, scy - 40); else if (e.ch == 16) b = 6; else if (e.ch == '+') b = 4; else if (e.ch == '-') b = 3; }
+        if (e.type == EV_KEY) { if (e.key == K_PGDN || e.key == K_RIGHT) b = 2; else if (e.key == K_PGUP || e.key == K_LEFT) b = 1; else if (e.key == K_DOWN) scy += 40; else if (e.key == K_UP) scy = MAX(0, scy - 40); else if (e.ch == 16) b = 6; else if (e.ch == 15) b = 0; else if (e.ch == '+') b = 4; else if (e.ch == '-') b = 3; }
         if (e.type == EV_WHEEL) { scy = MAX(0, MIN(scy - (int)e.key * 60, MAX(0, ih_ - (W->h - TB - 40)))); }
         if (b == 0) { char p[300]; strcpy(p, path[0] ? path : "/sys/DOCS/"); if (ui_prompt("Abrir", "Ruta del archivo PDF:", p, 290)) open_(p); }
         else if (b == 1 && cur > 0) { cur--; scy = 0; render(); } else if (b == 2 && cur + 1 < NPG) { cur++; scy = 0; render(); }

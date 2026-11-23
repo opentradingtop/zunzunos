@@ -7,6 +7,8 @@ Cada peticion se anota en DIR/peticiones.txt (ruta, Authorization y cuerpo). Uso
 import gzip, http.server, json, os, sys, time
 OUT = sys.argv[1]; os.makedirs(OUT, exist_ok=True); LOG = os.path.join(OUT, 'peticiones.txt'); open(LOG, 'w').close()
 KEY = 'sk-or-v1-prueba'
+# claves que /key conoce pero el chat rechaza con 401 "User not found" (desactivada o de gestion), como en OpenRouter
+SOLOKEY = {'sk-or-v1-solokey': {'label': 'sk-or-v1-sol...key'}, 'sk-or-v1-gestion': {'label': 'sk-or-v1-ges...ion', 'is_management_key': True}}
 MODELS = {'data': [
     {'id': 'openrouter/free', 'name': 'Free Models Router', 'context_length': 200000, 'pricing': {'prompt': '0', 'completion': '0'}, 'architecture': {'output_modalities': ['text']}},
     {'id': 'deepseek/deepseek-v4.1-flash', 'name': 'DeepSeek: DeepSeek V4.1 Flash', 'context_length': 1048576, 'pricing': {'prompt': '0.00000005', 'completion': '2e-7'}, 'architecture': {'output_modalities': ['text']}},
@@ -37,7 +39,9 @@ class H(http.server.BaseHTTPRequestHandler):
         self.log_req()
         if self.path == '/api/v1/models': return self.send_json(200, MODELS, 'gzip' in self.headers.get('Accept-Encoding', ''))
         if self.path == '/api/v1/key':
-            if self.authed(): return self.send_json(200, {'data': {'label': 'sk-or-v1-pru...eba', 'usage': 0.0123, 'limit': None, 'is_free_tier': True}})
+            if self.authed(): return self.send_json(200, {'data': {'label': 'sk-or-v1-pru...eba', 'usage': 0.0123, 'limit': None, 'is_free_tier': True, 'is_management_key': False}})
+            k = self.headers.get('Authorization', '')[7:]
+            if k in SOLOKEY: return self.send_json(200, {'data': dict(SOLOKEY[k], usage=0, limit=None)})
             return self.send_json(401, {'error': {'message': 'No auth credentials found', 'code': 401}})
         self.send_json(404, {'error': {'message': 'no existe', 'code': 404}})
     def do_POST(self):

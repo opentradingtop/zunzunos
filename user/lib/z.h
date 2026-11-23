@@ -20,6 +20,7 @@ static inline long sc5(long n, long a, long b, long c, long d, long e) {
 #define SC2(n, a, b) sc5(n, (long)(a), (long)(b), 0, 0, 0)
 #define SC3(n, a, b, c) sc5(n, (long)(a), (long)(b), (long)(c), 0, 0)
 #define SC4(n, a, b, c, d) sc5(n, (long)(a), (long)(b), (long)(c), (long)(d), 0)
+#define SC5(n, a, b, c, d, e) sc5(n, (long)(a), (long)(b), (long)(c), (long)(d), (long)(e))
 
 typedef struct { u32 acc, inact, border, ttxt, ttxt2, close, d1, d2, panel1, panel2, ui_acc, ui_acc2, ui_bg, ui_panel, ui_line, ui_text, ui_muted, ui_white; u32 title_sc, text_sc, panel_top, menu_grid, icon_sc, show_icons, motif, lang, gen; } ztheme;
 extern ztheme TH;
@@ -46,7 +47,7 @@ typedef struct { u64 size; u32 is_dir; u32 mtime; char name[256]; } zdirent;
 typedef struct { int pid; int threads; char name[32]; u64 mem_kb; u64 cpu; } zproc;
 typedef struct { u64 mem_total, mem_free, uptime_ms; u32 scr_w, scr_h, nproc, boot_mode; char cpu[49]; char pad[7]; u64 tsc_khz; int layout; } zsys;
 typedef struct { char name[16]; char fstype[8]; char label[16]; u64 total, free_b; char dev[16]; u32 ro, pad; } zmount;
-typedef struct { u8 mac[6]; u8 up, dhcp; u32 ip, mask, gw, dns; u64 rxp, txp, rxb, txb; char name[8]; char kind[16]; } znet;
+typedef struct { u8 mac[6]; u8 up, dhcp, local; u32 ip, mask, gw, dns; u64 rxp, txp, rxb, txb; char name[8]; char kind[16]; } znet;
 typedef struct { u8 bus, dev, fn, cls, sub, pif; u16 vendor, device; } zpci;
 typedef struct { char name[16]; char model[41]; u64 sectors; u32 ssize; u32 removable; } zdisk;
 typedef struct { char name[16]; u64 start, sectors; } zpart;
@@ -73,6 +74,8 @@ static inline void z_poweroff(void) { SC1(90, 0); }
 static inline const char *z_print_arg(const char *a, int *p) { const char *k = "--imprimir "; int i = 0; while (k[i] && a[i] == k[i]) i++; *p = !k[i]; return *p ? a + 11 : a; }
 /* sesion: 0 consulta (bits 0-2 modo 1 admin 2 invitado, 8 hay PIN, 16 hay /sys), 1 entrar como admin, 2 invitado, 3 cerrar, 4 cambiar PIN, 5 comprobar PIN */
 static inline int z_sess(int op, const char *a, const char *b) { return SC3(109, op, a, b); }
+/* bateria: o[0] hay, o[1] %, o[2] cargando, o[3] con cargador, o[4] descargando; error si no se puede leer */
+static inline int z_battery(int o[5]) { return SC1(113, o); }
 static inline long z_idle_ms(void) { return SC0(110); } /* tiempo sin tocar teclado ni raton */
 static inline int z_screen(int on) { return SC1(111, on); }
 static inline int z_capture(u32 *px, long npix) { return SC2(112, px, npix); } /* devuelve ancho << 16 | alto */
@@ -139,6 +142,9 @@ static inline int z_ping(u32 ip, int to, int seq) { return SC3(65, ip, to, seq);
 static inline int z_netinfo(znet *n) { return SC1(66, n); }
 static inline int z_bind(int s, int p) { return SC2(67, s, p); }
 static inline int z_accept(int s, int to) { return SC2(68, s, to); }
+static inline long z_sendto(int s, u32 ip, int port, const void *b, long n) { return SC5(69, s, ip, port, b, n); }
+/* recibe un datagrama UDP; from[0] = IP de quien lo envia, from[1] = su puerto */
+static inline long z_recvfrom(int s, void *b, long n, int to, u32 from[2]) { return SC5(70, s, b, n, to, from); }
 int z_parse_ip(const char *s, u32 *ip); void z_fmt_ip(u32 ip, char *o);
 
 /* sonido */
@@ -165,7 +171,10 @@ u32 rnd(void);
 double z_sqrt(double); double z_pow(double, double); double z_sin(double); double z_cos(double); double z_tan(double); double z_atan(double); double z_ln(double); double z_exp(double); double z_floor(double); double z_fabs(double);
 
 /* grafica */
-typedef struct { int id, w, h; u32 *px; int cx0, cy0, cx1, cy1; } zwin;
+typedef struct { int id, w, h; u32 *px; int cx0, cy0, cx1, cy1; void *zs; } zwin;
+/* seleccionar texto con el raton (zsel.c): zs_area al empezar a dibujar la zona, zs_show antes de presentar, zs_event con cada evento */
+void zs_area(zwin *, int x, int y, int w, int h, int scroll); void zs_stop(zwin *); void zs_show(zwin *); int zs_event(zwin *, zevent *); int zs_has(zwin *); int zs_copy(zwin *); char *zs_text(zwin *); void zs_clear(zwin *); void zs_all(zwin *); int zs_dragging(zwin *);
+void zs_rec(zwin *, int x, int y, int sc, const char *s); void zs_add(zwin *, int x, int y, int h, const char *s, const short *cx, int n, int cw);
 zwin *zw_new(const char *title, int x, int y, int w, int h, u32 flags);
 void zw_close(zwin *); void zw_present(zwin *); void zw_present_rect(zwin *, int, int, int, int); void zw_resized(zwin *, int, int);
 void zw_clip(zwin *, int, int, int, int); void zw_noclip(zwin *);
@@ -187,7 +196,7 @@ void g_glyph(zwin *, int x, int y, int cp, u32 c);
 #define UI_WHITE TH.ui_white
 int ui_in(int mx, int my, int x, int y, int w, int h);
 void ui_button(zwin *, int x, int y, int w, int h, const char *, int state);
-int ui_input_key(char *buf, int cap, int *cur, zevent *e);
+int ui_input_key(char *buf, int cap, int *cur, zevent *e); int ui_input_menu(zwin *, char *buf, int cap, int *cur, zevent *e);
 void ui_input(zwin *, int x, int y, int w, int h, const char *txt, int cur, int focus);
 int ui_prompt(const char *title, const char *msg, char *buf, int cap);
 int ui_confirm(const char *title, const char *msg);
@@ -207,9 +216,12 @@ typedef struct { char *p; long n, cap; } sb_t;
 void sb_add(sb_t *, const void *, long); void sb_s(sb_t *, const char *); void sb_f(sb_t *, const char *, ...); void sb_esc(sb_t *, const char *, long);
 long z_inflate(const u8 *in, long n, u8 *out, long cap); u32 z_crc32(const u8 *, long); u32 z_crc_add(u32, const u8 *, long);
 u8 *zip_get(const u8 *z, long n, const char *name, long *out); int zip_save(const char *path, int cnt, const char **names, const char **data, const long *lens);
-char *doc_import(const char *path, long *len); int z_theme_save(const ztheme *); int z_theme_load(ztheme *); void z_docdir(char *o); int z_ends(const char *s, const char *e);
-typedef struct { char *t; long len, cap, cur, sel; long *ln; int nl, lcap, cols, top, changed; } te_t;
-void te_init(te_t *); void te_set(te_t *, const char *, long); void te_layout(te_t *, int cols); int te_key(te_t *, zevent *, int page); void te_draw(zwin *, te_t *, int x, int y, int h, int sc, u32 fg, u32 selc, u32 curc, int center); void te_click(te_t *, int rx, int ry, int sc, int extend); int te_words(const char *, long); int te_line_of(te_t *, long);
+char *doc_import(const char *path, long *len);
+/* busqueda en documentos para la IA (zrag.c) */
+typedef struct { char name[64], path[200]; char *txt; long n; int nch; long *co; int *cl; } zrdoc;
+char *zr_read(const char *path, long *len, char *err, int ecap, int (*pump)(void *), void *ctx); int zr_chunk(zrdoc *d); int zr_search(zrdoc *D, int nd, const char *q, long budget, sb_t *out, int *docs); void zr_free(zrdoc *d); int z_theme_save(const ztheme *); int z_theme_load(ztheme *); void z_docdir(char *o); int z_ends(const char *s, const char *e);
+typedef struct { char *t; long len, cap, cur, sel; long *ln; int nl, lcap, cols, top, changed; void *undo; } te_t;
+void te_init(te_t *); void te_set(te_t *, const char *, long); void te_layout(te_t *, int cols); int te_key(te_t *, zevent *, int page); void te_draw(zwin *, te_t *, int x, int y, int h, int sc, u32 fg, u32 selc, u32 curc, int center); void te_click(te_t *, int rx, int ry, int sc, int extend); int te_menu(zwin *, te_t *, zevent *); int te_words(const char *, long); int te_line_of(te_t *, long);
 /* discos: formateo e instalacion */
 enum { DK_FAT32, DK_FAT16, DK_EXFAT, DK_EXT2 };
 typedef void (*dk_cb)(int pct, const char *msg);
@@ -229,7 +241,7 @@ typedef struct { zpdoc *d; double x0, x1, y, ytop, ybot; int started, num; } zpf
 typedef struct { char name[64], uri[160], lang[8], model[64]; int paper, color, def, dpi; } zprinter;
 typedef struct { char id[16], devid[240]; } zusbprn;
 zpdoc *zp_new(const zpset *s); void zp_free(zpdoc *d); void zp_page(zpdoc *d); int zp_npages(zpdoc *d); double zp_pw(zpdoc *d); double zp_ph(zpdoc *d);
-void zp_text(zpdoc *d, double x, double y, int font, double size, u32 col, const char *s);
+void zp_text(zpdoc *d, double x, double y, int font, double size, u32 col, const char *s); void zp_sel_runs(zpdoc *d, int pg, int dpi, zwin *w, int ox, int oy);
 void zp_rect(zpdoc *d, double x, double y, double w, double h, u32 fill, u32 stroke, double lw);
 void zp_line(zpdoc *d, double x0, double y0, double x1, double y1, u32 col, double lw);
 void zp_image(zpdoc *d, double x, double y, double w, double h, const u32 *px, int iw, int ih);

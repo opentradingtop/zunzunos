@@ -130,7 +130,7 @@ void pci_enable(const pci_t *, int mem, int io, int master); u64 pci_bar(const p
 u16 pci_read16(const pci_t *, int); void pci_write16(const pci_t *, int, u16);
 
 /* --- acpi --- */
-void acpi_init(void); void acpi_poweroff(void); void acpi_reboot(void);
+void acpi_init(void); void acpi_poweroff(void); void acpi_reboot(void); int acpi_battery(int *o);
 
 /* --- bloques --- */
 typedef struct blkdev {
@@ -217,8 +217,8 @@ typedef struct netdev {
     u64 rxp, txp, rxb, txb;
 } netdev_t;
 void net_register(netdev_t *); void netdrv_init(void); void net_init(void);
-typedef struct { u8 mac[6]; u8 up, dhcp; u32 ip, mask, gw, dns; u64 rxp, txp, rxb, txb; char name[8]; char kind[16]; } znet_t;
-int net_info(znet_t *); int net_dns(const char *, u32 *); int net_ping(u32 ip, int timeout, int seq);
+typedef struct { u8 mac[6]; u8 up, dhcp, local; u32 ip, mask, gw, dns; u64 rxp, txp, rxb, txb; char name[8]; char kind[16]; } znet_t;
+int net_info(znet_t *); int sock_from(file_t *f, u32 *ip, u16 *port); int net_dns(const char *, u32 *); int net_ping(u32 ip, int timeout, int seq);
 int sock_new(int type); int sock_connect(file_t *, u32 ip, int port, int timeout); i64 sock_send(file_t *, const void *, u64);
 i64 sock_recv(file_t *, void *, u64, int timeout); int sock_bind(file_t *, int port); int sock_accept(file_t *, int timeout, file_t **);
 void sock_close(file_t *); i64 sock_sendto(file_t *, u32, int, const void *, u64); file_t *sock_file(int type);

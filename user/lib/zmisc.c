@@ -37,7 +37,7 @@ const zapp z_apps[] = {
     {"Imágenes","viewer",0x059669,"::",3},{"Música","player",0xE11D48,"d|",3},{"Grabadora","grabadora",0xBE123C,"(o)",3},{"Pintar","paint",0xDB2777,"~*",3},
     {"Serpiente","snake",0x16A34A,"S~",4},{"Campo minado","mines",0x57534E,"#",4},{"Bloques","blocks",0x9333EA,"==",4},{"Enjambre","enjambre",0xCA8A04,"\\/",4},
     {"Configuración","config",0x475569,"*",5},{"Impresoras","impresoras",0x334155,"[=]",5},{"Terminal","term",0x1F2937,">_",5},{"Monitor","sysmon",0x0F766E,"%",5},{"Acerca de","acerca",0x0F766E,"i",5},
-    {"Correo","correo",0x1D4ED8,"@>",2},{"LUMEN","lumen",0x7C3AED,"IA",2},
+    {"Correo","correo",0x1D4ED8,"@>",2},{"LUMEN","lumen",0x7C3AED,"IA",2},{"Red local","redlocal",0x0E7490,"<>",2},
     {"Grabar pantalla","pantalla",0xDC2626,"(*)",3},{"Vídeos","video",0x7C3AED,"|>|",3},
 };
 const int z_napps = sizeof z_apps / sizeof z_apps[0];

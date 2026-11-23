@@ -162,6 +162,8 @@ void zc_random(u8 *out, int n) {
     if (!seeded) { zsha256 c; sha256_init(&c); for (int i = 0; i < 4096; i++) { u64 a = tsc(); volatile u32 k = 0; for (int j = 0; j < (int)(a & 63); j++) k += j; u64 b = tsc(); u64 d = b - a; sha256_up(&c, &d, 8); sha256_up(&c, &a, 8); }
 #ifndef ZC_HOST
         u64 ms = z_ms(); sha256_up(&c, &ms, 8);
+        /* lo que cambia de un equipo a otro: la MAC de la tarjeta de red y la hora (dos equipos iguales arrancados a la vez daban lo mismo) */
+        znet ni; if (!z_netinfo(&ni)) sha256_up(&c, &ni, sizeof ni); u32 t6[6]; z_time(t6); sha256_up(&c, t6, sizeof t6);
 #endif
         sha256_end(&c, pool); seeded = 1; }
     while (n > 0) { u8 b[48], o[32]; zcpy(b, pool, 32); u64 t = tsc(); zcpy(b + 32, &t, 8); rcnt++; zcpy(b + 40, &rcnt, 8); zc_hash(256, b, 48, o); b[47] ^= 0x5a; zc_hash(256, b, 48, pool); int k = n < 32 ? n : 32; zcpy(out, o, k); out += k; n -= k; } }

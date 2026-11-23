@@ -57,9 +57,9 @@ void g_glyph(zwin *w, int x, int y, int cp, u32 c) {
     const u8 *g = font8x16 + (cp & 255) * 16;
     for (int j = 0; j < 16; j++) { u8 b = g[j]; if (b) for (int i = 0; i < 8; i++) if (b & (0x80 >> i)) g_pixel(w, x + i, y + j, c); }
 }
-int g_text(zwin *w, int x, int y, const char *s, u32 c) { s = trl(s); int x0 = x, ch; while ((ch = utf8_next(&s))) { g_glyph(w, x, y, cp437(ch), c); x += 8; } return x - x0; }
-int g_textb(zwin *w, int x, int y, const char *s, u32 c) { g_text(w, x + 1, y, s, c); return g_text(w, x, y, s, c); }
-int g_text2(zwin *w, int x, int y, const char *s, u32 c, int sc) { s = trl(s);
+int g_text(zwin *w, int x, int y, const char *s, u32 c) { s = trl(s); if (w->zs) zs_rec(w, x, y, 1, s); int x0 = x, ch; while ((ch = utf8_next(&s))) { g_glyph(w, x, y, cp437(ch), c); x += 8; } return x - x0; }
+int g_textb(zwin *w, int x, int y, const char *s, u32 c) { void *z = w->zs; w->zs = 0; g_text(w, x + 1, y, s, c); w->zs = z; return g_text(w, x, y, s, c); }
+int g_text2(zwin *w, int x, int y, const char *s, u32 c, int sc) { s = trl(s); if (w->zs) zs_rec(w, x, y, sc, s);
     int x0 = x, ch;
     while ((ch = utf8_next(&s))) {
         const u8 *g = font8x16 + cp437(ch) * 16;
@@ -79,30 +79,47 @@ void ui_button(zwin *w, int x, int y, int a, int b, const char *s, int st) {
     g_round(w, x, y, a, b, 3, UI_LINE); g_round(w, x + 1, y + 1, a - 2, b - 2, 2, bg); s = tr(s);
     g_text(w, x + (a - g_textw(s)) / 2, y + (b - 16) / 2, s, fg);
 }
+/* casillas de una linea: el ancla de la seleccion se guarda aparte, por direccion del texto, para no cambiar
+   la forma de llamar a ui_input/ui_input_key en todos los programas */
+static struct { const char *b; int a; } ANC[24];
+static int anc_get(const char *b) { for (int i = 0; i < 24; i++) if (ANC[i].b == b) return ANC[i].a; return -1; }
+static void anc_set(const char *b, int a) { int f = -1; for (int i = 0; i < 24; i++) { if (ANC[i].b == b) { if (a < 0) ANC[i].b = 0; else ANC[i].a = a; return; } if (!ANC[i].b && f < 0) f = i; }
+    if (a < 0) return; if (f < 0) { f = 0; memmove(ANC, ANC + 1, 23 * sizeof ANC[0]); f = 23; } ANC[f].b = b; ANC[f].a = a; }
+static int colx(const char *t, int n) { int cx = 0; for (int i = 0; t[i] && i < n; ) { const char *q = t + i; utf8_next(&q); i = q - t; cx += 8; } return cx; }
 void ui_input(zwin *w, int x, int y, int a, int b, const char *t, int cur, int focus) {
     g_rect(w, x, y, a, b, UI_WHITE); g_frame(w, x, y, a, b, focus ? UI_ACC : UI_LINE);
-    int ty = y + (b - 16) / 2, len = g_textw(t), sx = x + 5; const char *p = t; int cx = 0; for (int i = 0; p[i] && i < cur; ) { const char *q = p + i; utf8_next(&q); i = q - p; cx += 8; }
+    int ty = y + (b - 16) / 2, len = g_textw(t), sx = x + 5, cx = colx(t, cur);
     if (cx > a - 14) sx -= cx - (a - 14); (void)len;
-    zw_clip(w, x + 2, y + 1, a - 4, b - 2); g_text(w, sx, ty, t, UI_TEXT);
+    zw_clip(w, x + 2, y + 1, a - 4, b - 2); int an = focus ? anc_get(t) : -1;
+    if (an >= 0 && an != cur) { int p = colx(t, MIN(an, cur)), q = colx(t, MAX(an, cur)); g_rect(w, sx + p, ty, q - p, 16, 0xBFDBFE); }
+    g_text(w, sx, ty, t, UI_TEXT);
     if (focus) g_rect(w, sx + cx, ty, 1, 16, UI_TEXT);
     zw_noclip(w);
 }
+/* borra lo seleccionado (si hay) y deja el cursor en su lugar */
+static int del_sel(char *b, int *c) { int an = anc_get(b), l = strlen(b); anc_set(b, -1); if (an < 0 || an == *c) return 0; an = MIN(an, l); int p = MIN(an, *c), q = MAX(an, *c); memmove(b + p, b + q, l - q + 1); *c = p; return 1; }
 int ui_input_key(char *b, int cap, int *cur, zevent *e) {
-    int l = strlen(b), c = *cur;
-    if (e->key == K_LEFT) { while (c > 0) { c--; if ((b[c] & 0xC0) != 0x80) break; } }
-    else if (e->key == K_RIGHT) { if (c < l) { c++; while (c < l && (b[c] & 0xC0) == 0x80) c++; } }
-    else if (e->key == K_HOME) c = 0;
-    else if (e->key == K_END) c = l;
-    else if (e->ch == 22) { char t[512]; int n = z_clip_get(t, MIN(cap - l - 1, 511)); int k = 0; for (int i = 0; i < n; i++) if ((u8)t[i] >= 32) t[k++] = t[i]; if (k > 0 && l + k < cap) { memmove(b + c + k, b + c, l - c + 1); memcpy(b + c, t, k); c += k; } }
-    else if (e->ch == 3) { z_clip_set(b, l); }
-    else if (e->ch == 24) { z_clip_set(b, l); b[0] = 0; c = 0; }
-    else if (e->ch == 8) { if (c > 0) { int s = c; while (--s > 0 && (b[s] & 0xC0) == 0x80); memmove(b + s, b + c, l - c + 1); c = s; } }
-    else if (e->ch == 127) { if (c < l) { int t = c + 1; while (t < l && (b[t] & 0xC0) == 0x80) t++; memmove(b + c, b + t, l - t + 1); } }
-    else if (e->ch == 22) { char t[256]; int n = z_clip_get(t, MIN(255, cap - l - 1)); for (int i = 0; i < n; i++) if (t[i] == '\n' || t[i] == '\r') t[i] = ' '; memmove(b + c + n, b + c, l - c + 1); memcpy(b + c, t, n); c += n; }
-    else if (e->ch >= 32) { char u[4]; int n = utf8_put(e->ch, u); if (l + n >= cap) return 0; memmove(b + c + n, b + c, l - c + 1); memcpy(b + c, u, n); c += n; }
+    int l = strlen(b), c = MIN(*cur, l), sh = e->mods & M_SHIFT, an = anc_get(b); if (an > l) { an = -1; anc_set(b, -1); }
+    int mv = e->key == K_LEFT || e->key == K_RIGHT || e->key == K_HOME || e->key == K_END;
+    if (mv) { if (sh) { if (an < 0) anc_set(b, c); } else anc_set(b, -1);
+        if (e->key == K_LEFT) { if (!sh && an >= 0 && an != c) c = MIN(an, c); else while (c > 0) { c--; if ((b[c] & 0xC0) != 0x80) break; } }
+        else if (e->key == K_RIGHT) { if (!sh && an >= 0 && an != c) c = MAX(an, c); else if (c < l) { c++; while (c < l && (b[c] & 0xC0) == 0x80) c++; } }
+        else if (e->key == K_HOME) c = 0; else c = l; }
+    else if (e->ch == 1) { anc_set(b, 0); c = l; }                                   /* Ctrl+A: todo */
+    else if (e->ch == 3 || e->ch == 24) { int p = an >= 0 && an != c ? MIN(an, c) : 0, q = an >= 0 && an != c ? MAX(an, c) : l;   /* Ctrl+C / Ctrl+X: lo seleccionado o todo */
+        if (q > p) z_clip_set(b + p, q - p); if (e->ch == 24) { memmove(b + p, b + q, l - q + 1); c = p; anc_set(b, -1); } }
+    else if (e->ch == 22) { char t[512]; del_sel(b, &c); l = strlen(b); int n = z_clip_get(t, MIN(cap - l - 1, 511)), k = 0;   /* Ctrl+V */
+        for (int i = 0; i < n; i++) { if (t[i] == '\n' || t[i] == '\r' || t[i] == '\t') t[k++] = ' '; else if ((u8)t[i] >= 32) t[k++] = t[i]; } while (k && (t[k - 1] & 0xC0) == 0x80) { int s = k - 1; while (s && (t[s] & 0xC0) == 0x80) s--; if (k - s < ((u8)t[s] >= 0xF0 ? 4 : (u8)t[s] >= 0xE0 ? 3 : 2)) k = s; else break; }
+        if (k > 0 && l + k < cap) { memmove(b + c + k, b + c, l - c + 1); memcpy(b + c, t, k); c += k; } }
+    else if (e->ch == 8) { if (!del_sel(b, &c) && c > 0) { int s = c; while (--s > 0 && (b[s] & 0xC0) == 0x80); memmove(b + s, b + c, l - c + 1); c = s; } }
+    else if (e->ch == 127) { if (!del_sel(b, &c) && c < l) { int t = c + 1; while (t < l && (b[t] & 0xC0) == 0x80) t++; memmove(b + c, b + t, l - t + 1); } }
+    else if (e->ch >= 32) { char u[4]; int n = utf8_put(e->ch, u); del_sel(b, &c); l = strlen(b); if (l + n >= cap) { *cur = c; return 1; } memmove(b + c + n, b + c, l - c + 1); memcpy(b + c, u, n); c += n; }
     else return 0;
     *cur = c; return 1;
 }
+/* boton derecho en una casilla: cortar, copiar, pegar y seleccionar todo */
+int ui_input_menu(zwin *w, char *b, int cap, int *cur, zevent *e) { static const char *it[] = {"Cortar", "Copiar", "Pegar", "Seleccionar todo"}; int sx, sy; zw_screen(w, e->x, e->y, &sx, &sy);
+    int r = ui_menu(sx, sy, it, 4); if (r < 0) return 0; static const int ch[] = {24, 3, 22, 1}; zevent k = {0}; k.type = EV_KEY; k.ch = ch[r]; k.mods = M_CTRL; return ui_input_key(b, cap, cur, &k); }
 /* dialogos modales: ventana propia con su bucle */
 static int dialog(const char *title, const char *msg, char *buf, int cap) {
     msg = tr(msg);

@@ -364,3 +364,10 @@ int zp_print_image(const char *title, const u32 *px, int w, int h) { zpq_t q = {
 static int cmp_it(const void *a, const void *b) { const zpi *x = *(zpi **)a, *y = *(zpi **)b; if (z_fabs(x->y - y->y) > x->size * 0.4) return x->y < y->y ? -1 : 1; return x->x < y->x ? -1 : x->x > y->x; }
 int zp_text_dump(zpdoc *d, sb_t *b) { zpi **v = malloc(d->n * sizeof *v); int n = 0; for (int i = 0; i < d->n; i++) if (d->it[i].t == IT_TEXT) v[n++] = &d->it[i]; qsort(v, n, sizeof *v, cmp_it);
     for (int i = 0; i < n; i++) { if (i && z_fabs(v[i]->y - v[i - 1]->y) > v[i]->size * 0.4) sb_s(b, "\n"); else if (i && v[i]->x > v[i - 1]->x + zp_textw(v[i - 1]->font, v[i - 1]->size, v[i - 1]->s) + v[i]->size * 0.2) sb_s(b, " "); sb_s(b, v[i]->s); } sb_s(b, "\n"); free(v); return n; }
+/* para seleccionar texto en pantalla (Lector PDF): anota en la ventana donde cae cada letra de la pagina pg
+   dibujada a dpi con su esquina en (ox, oy) */
+void zp_sel_runs(zpdoc *d, int pg, int dpi, zwin *w, int ox, int oy) { double k = dpi / 72.0;
+    for (int i = page_start(d, pg); i >= 0 && i < d->n && d->it[i].t != IT_PAGE; i++) { zpi *e = &d->it[i]; if (e->t != IT_TEXT || !e->s) continue;
+        u8 t[1024]; int n = to_win(e->s, t, sizeof t), nu = 0; const char *p = e->s; while (utf8_next(&p)) nu++; if (!n || n != nu || n > 1000) continue;
+        static short cx[1024]; double x = 0, sz = e->size * k, last = 0; for (int j = 0; j < n; j++) { cx[j] = (short)x; last = cw(e->font, t[j]) * sz / 1000.0; x += last; }
+        zs_add(w, ox + (int)(e->x * k), oy + (int)(e->y * k - sz * 0.92), MAX(4, (int)(sz * 1.15)), e->s, cx, n, MAX(1, (int)last)); } }

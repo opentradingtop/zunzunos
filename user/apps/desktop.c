@@ -39,20 +39,31 @@ static int clock_w(void) { return g_textw(clk) * S_; }
 static int tray_x(void) { return bar->w - clock_w() - 16 - TRAY - FLAGW; }
 /* iconos de red e impresora, a la izquierda de brillo/volumen */
 #define ICW (26 * S_)
-static int icons_x(void) { return tray_x() - 2 * ICW - 8; }
+/* bateria (solo si el sistema la encuentra): icono y porcentaje a la derecha de la impresora */
+static int bat[5], bat_ok; static u64 bat_t;
+#define BATW (bat_ok ? 62 * S_ : 0)
+static int icons_x(void) { return tray_x() - 2 * ICW - 8 - BATW; }
 static int net_st, prn_st; /* red: 0 sin tarjeta 1 sin cable 2 sin direccion 3 conectada; impresora: 0 ninguna 1 lista 2 imprimiendo 3 error */
 static char rj_name[24][64];
 static int read_jobs(char (*o)[400], int max) { zdirent e; char nm[24][64]; int c = 0; for (int i = 0; c < 24 && !z_readdir("/rd/tmp/IMPRESION", i, &e); i++) if (e.name[0] != '.') strncpy0(nm[c++], e.name, 64);
     for (int i = 0; i < c; i++) for (int j = i + 1; j < c; j++) if (strcmp(nm[j], nm[i]) > 0) { char x[64]; strcpy(x, nm[i]); strcpy(nm[i], nm[j]); strcpy(nm[j], x); }
     int k = 0; for (int i = 0; i < c && k < max; i++) { char f[120]; snprintf(f, 120, "/rd/tmp/IMPRESION/%s", nm[i]); char *t = z_readfile(f, 0); if (t) { strncpy0(rj_name[k], nm[i], 64); strncpy0(o[k++], t, 400); free(t); } } return k; }
-static int poll_status(void) { int o1 = net_st, o2 = prn_st; znet ni; net_st = z_netinfo(&ni) ? 0 : !ni.up ? 1 : !ni.dhcp ? 2 : 3;
+static u64 toast_until; static char toast[160];
+static int poll_bat(void) { u64 now = z_ms(); if (bat_t && now - bat_t < 10000) return 0; bat_t = now; int o[5]; int was = bat_ok, op = bat[1], oc = bat[2], oa = bat[3];
+    if (z_battery(o) || !o[0]) { bat_ok = 0; return was; } memcpy(bat, o, sizeof o); bat_ok = 1;
+    static int warned = 101; if (bat[4] && bat[1] <= 10 && bat[1] < warned - 4) { warned = bat[1]; snprintf(toast, 160, _("Batería baja: %d %%. Conecta el cargador."), bat[1]); toast_until = now + 8000; } if (!bat[4]) warned = 101;
+    if (!was || op != bat[1] || oc != bat[2] || oa != bat[3]) { char lg[80]; snprintf(lg, 80, "[prueba] bateria %d%% cargando %d cargador %d", bat[1], bat[2], bat[3]); z_log(lg); return 1; } return 0; }
+static const char *bat_text(char *b) { snprintf(b, 120, "%s: %d %%, %s", _("Batería"), bat[1], _(bat[2] ? "cargando" : bat[4] ? "con la batería" : bat[1] >= 99 ? "cargada y con el cargador" : "con el cargador")); return b; }
+static int poll_status(void) { int o1 = net_st, o2 = prn_st; int ob = poll_bat(); znet ni; net_st = z_netinfo(&ni) ? 0 : !ni.up ? 1 : !ni.dhcp && !ni.local ? 2 : 3;
     zprinter pr[12]; int np = zp_printers(pr, 12); char j[1][400]; int nj = read_jobs(j, 1); prn_st = !np && !nj ? 0 : 1; if (nj) { int st = atoi(j[0]); if (st < 2) prn_st = 2; else if (st == 3) prn_st = 3; }
-    return o1 != net_st || o2 != prn_st; }
+    return ob || o1 != net_st || o2 != prn_st; }
 static void draw_icons(zwin *w) { int x = icons_x(), cy = PH / 2;
     u32 nc = net_st == 3 ? 0x4ADE80 : net_st == 2 ? 0xFBBF24 : 0x6B7280; for (int i = 0; i < 3; i++) g_rect(w, x + 5 + i * 6, cy + 6 - (6 + i * 4), 4, 6 + i * 4, nc); if (net_st < 2) g_line(w, x + 3, cy + 7, x + 22, cy - 9, 0xF87171);
+    if (bat_ok) { int bx = icons_x() + 2 * ICW + 6, by = cy - 6, pc = bat[1]; u32 c = bat[2] || bat[3] ? 0x4ADE80 : pc <= 10 ? 0xEF4444 : pc <= 25 ? 0xFBBF24 : 0xE5E7EB;
+        g_frame(w, bx, by, 22, 12, 0xE5E7EB); g_rect(w, bx + 22, by + 3, 2, 6, 0xE5E7EB); g_rect(w, bx + 2, by + 2, MAX(1, 18 * pc / 100), 8, c);
+        if (bat[2]) { g_line(w, bx + 12, by + 1, bx + 9, by + 6, 0x111827); g_line(w, bx + 9, by + 6, bx + 14, by + 6, 0x111827); g_line(w, bx + 14, by + 6, bx + 11, by + 11, 0x111827); }
+        char t[8]; snprintf(t, 8, "%d%%", pc); g_text(w, bx + 27, cy - 8, t, 0xFFFFFF); }
     if (!prn_st) return; x += ICW + 4; u32 pc = prn_st == 3 ? 0xFCA5A5 : 0xE5E7EB; g_rect(w, x + 7, cy - 9, 12, 6, 0xF8FAFC); g_round(w, x + 3, cy - 4, 20, 10, 2, pc); g_rect(w, x + 7, cy + 4, 12, 5, 0xF8FAFC); if (prn_st == 2) g_circle(w, x + 21, cy - 7, 4, 0x38BDF8, 1); if (prn_st == 3) g_circle(w, x + 21, cy - 7, 4, 0xEF4444, 1); }
-static u64 toast_until;
-static char toast[160];
 static void draw_bar(void) { zwin *w = bar; g_grad(w, 0, 0, w->w, PH, TH.panel1, TH.panel2); g_rect(w, 0, TH.panel_top ? PH - 1 : 0, w->w, 1, TH.acc); int th = 16 * S_, ty = (PH - th) / 2, bw = 96 * S_; g_round(w, 6, 5, bw, PH - 10, 4, TH.acc); bird(w, 12, PH / 2 + 1, 12, 0xFFFFFF, TH.ui_acc2); T_(w, 40, ty, _("Inicio"), 0xFFFFFF); nw = zw_list(wl, 32); int x = bw + 16, tx = icons_x(); tb_w = nw ? MIN(170 * S_, (tx - x - 6) / nw) : 170; for (int i = 0; i < nw; i++) { int foc = wl[i].state & 0x100, min = wl[i].state & 1; tb_x[i] = x; g_round(w, x, 5, tb_w - 4, PH - 10, 3, foc ? TH.acc : min ? TH.panel2 : TH.inact); zw_clip(w, x + 6, 5, tb_w - 16, PH - 10); T_(w, x + 8, ty, wl[i].title, min ? 0x9CA3AF : 0xFFFFFF); zw_noclip(w); x += tb_w; } draw_icons(w); if (toast[0] && z_ms() < toast_until) { int tw = g_textw(toast) + 20, x0 = MAX(bw + 16, icons_x() - tw - 8); g_round(w, x0, 4, tw, PH - 8, 4, 0x065F46); g_text(w, x0 + 10, (PH - 16) / 2, toast, 0xFFFFFF); } tx = tray_x(); g_round(w, tx, 5, TRAY - 8, PH - 10, 4, qs ? TH.acc : TH.inact); g_glyph(w, tx + 10 * S_, PH / 2 - 8, 15, 0xFDE68A); g_glyph(w, tx + 40 * S_, PH / 2 - 8, 14, 0xBFDBFE); z_flag(w, tx + TRAY + 2, PH / 2 - 10, TH.lang); T_(w, w->w - clock_w() - 12, ty, clk, 0xE5E7EB); zw_present(w); }
 #define QW 260
 #define QH 104
@@ -75,6 +86,7 @@ static void draw_net(void) { zwin *w = nwin; g_clear(w, TH.panel1); g_frame(w, 0
     g_circle(w, 20, y + 7, 5, net_st == 3 ? 0x4ADE80 : net_st == 2 ? 0xFBBF24 : 0xF87171, 1); g_text(w, 32, y, _(ST[net_st]), 0xFFFFFF); y += 24; if (r) { zw_present(w); return; }
     #define LN(k, v) do { g_text(w, 14, y, _(k), 0x9CA3AF); g_text(w, 160, y, v, 0xFFFFFF); y += 20; } while (0)
     snprintf(b, 200, "%s (%s)", ni.name, ni.kind); LN("Conexión", b); if (ni.dhcp) { z_fmt_ip(ni.ip, a); LN("Dirección IP", a); z_fmt_ip(ni.mask, a); LN("Máscara", a); z_fmt_ip(ni.gw, a); LN("Puerta de enlace", a); z_fmt_ip(ni.dns, a); LN("DNS", a); }
+    else if (ni.local) { z_fmt_ip(ni.ip, a); LN("Dirección local", a); LN("Tipo", _("cable directo, sin router")); }
     snprintf(b, 200, "%02x:%02x:%02x:%02x:%02x:%02x", ni.mac[0], ni.mac[1], ni.mac[2], ni.mac[3], ni.mac[4], ni.mac[5]); LN("MAC", b); snprintf(b, 200, "%lu / %lu", (unsigned long)ni.rxp, (unsigned long)ni.txp); LN("Paquetes rx/tx", b);
     #undef LN
     zw_present(w); }
@@ -158,7 +170,10 @@ static void draw_lock(void) {
     }
     zw_present(w);
 }
-static void lock_done(void) { zw_close(lk); lk = 0; unlocking = 0; cfg_load(); reload(); z_log("[zz] sesion: escritorio"); }
+/* Red local: su servicio corre durante la sesion del administrador (con la del invitado no, sus datos son otros) */
+static void red_stop(void) { zproc p[64]; int n = z_procs(p, 64); for (int i = 0; i < n; i++) if (!strcmp(p[i].name, "redlocal")) z_kill(p[i].pid); }
+static void red_start(void) { if (guest()) return; zproc p[64]; int n = z_procs(p, 64); for (int i = 0; i < n; i++) if (!strcmp(p[i].name, "redlocal")) return; z_spawn("/rd/bin/redlocal", "--servicio"); }
+static void lock_done(void) { zw_close(lk); lk = 0; unlocking = 0; cfg_load(); reload(); z_log("[zz] sesion: escritorio"); red_start(); }
 static void open_lock(int mode) { /* 0 inicio, 1 bloqueo, 2 cambiar PIN */
     pin[0] = lmsg[0] = 0; int st = sess(); unlocking = mode == 1;
     if (mode == 0) lst = L_PICK; else if (mode == 1) lst = (st & 7) == 1 && (st & 8) ? L_PIN : L_CONT; else lst = st & 8 ? L_OLD : L_CHG1;
@@ -200,7 +215,7 @@ static void lock_ev(zevent *e) {
     if (lk) draw_lock();
 }
 static void lock_tick(void) { static u64 last; u64 now = z_ms(); if (now - last < 1000) return; last = now; if (lst == L_WAIT) { if ((sess() & 16) || now - lwait_t >= 30000) { cfg_load(); admin_enter(); if (lst == L_WAIT) return; if (!(sess() & 16)) { z_sess(1, 0, 0); lock_done(); return; } } } draw_lock(); }
-static void logout(void) { close_menu(); z_sess(3, 0, 0); cfg_load(); reload(); open_lock(0); }
+static void logout(void) { close_menu(); red_stop(); z_sess(3, 0, 0); cfg_load(); reload(); open_lock(0); }
 static void sess_menu(int sx, int sy) {
     int g = guest(); static const char *A[] = {"Bloquear", "Cambiar PIN", "Cerrar sesión"}, *G[] = {"Bloquear", "Cerrar sesión"};
     int r = ui_menu(sx, sy, g ? G : A, g ? 2 : 3); if (r < 0) return; if (g && r == 1) r = 2;
@@ -251,7 +266,9 @@ int main(const char *a) {
         else if (cal && e.win == (u32)cal->id) { if (e.type == EV_DOWN && e.y < 30) { if (e.x < 30) { if (--cm_ < 1) { cm_ = 12; cy_--; } } else if (e.x > cal->w - 30) { if (++cm_ > 12) { cm_ = 1; cy_++; } } draw_cal(); } else if (e.type == EV_BLUR || (e.type == EV_KEY && e.ch == 27)) close_cal(); }
         else if (menu && e.win == (u32)menu->id) { if (e.type == EV_MOVE) { int h = menu_at(e.x, e.y); if (h >= 0 && h < z_nfams && h != fsel) { if (fsel >= 0 && e.x > mlast_x) { fpend = h; fpend_t = now; } else { set_fam(h); fpend = -1; } } else if (h == fsel || h >= 200) fpend = -1; else if (h >= 100 && h < 200 && fsel >= 0) { set_fam(-1); fpend = -1; } mlast_x = e.x; if (h != menu_hover) { menu_hover = h; draw_menu(); } } else if (e.type == EV_DOWN) { if (e.y < 42 && e.x >= MW1 - 130 && e.x < MW1) { int sx, sy; zw_screen(menu, e.x, 36, &sx, &sy); close_menu(); sess_menu(sx, sy); continue; } int i = menu_at(e.x, e.y); if ((e.btn & 2) && i >= 200) { int sx, sy; zw_screen(menu, e.x, e.y, &sx, &sy); close_menu(); app_ctx(i - 200, sx, sy); } else menu_act(i); } else if (e.type == EV_BLUR) close_menu(); else if (e.type == EV_KEY && e.ch == 27) close_menu(); }
         else if (e.win == (u32)bar->id && e.type == EV_KEY && e.key == 0x46) screenshot(!!(e.mods & M_ALT));
-        else if (e.win == (u32)bar->id && e.type == EV_DOWN) { int tx = tray_x(); if (e.x < 8 + 96 * S_) { if (menu) close_menu(); else if (now - menu_closed > 200) open_menu(); } else if (e.x >= tx && e.x < tx + TRAY - 8) { if (qs) close_qs(); else if (now - qs_closed > 200) { qs = zw_new("Ajustes rápidos", MIN(tx, (int)si.scr_w - QW - 4), TH.panel_top ? PH + 2 : (int)si.scr_h - PH - QH - 2, QW, QH, WF_POPUP); draw_qs(); draw_bar(); } } else if (e.x >= icons_x() && e.x < icons_x() + ICW) { if (nwin) close_net(); else if (now - nwin_closed > 200) open_net(); } else if (prn_st && e.x >= icons_x() + ICW + 4 && e.x < icons_x() + 2 * ICW + 4) { if (pwin) close_prn(); else if (now - pwin_closed > 200) open_prn(); } else if (e.x >= tx + TRAY && e.x < tx + TRAY + FLAGW) set_lang(!TH.lang); else if (e.x >= bar->w - clock_w() - 16) { if (cal) close_cal(); else if (now - cal_closed > 200) open_cal(); } else for (int i = 0; i < nw; i++) if (e.x >= tb_x[i] && e.x < tb_x[i] + tb_w) { if ((wl[i].state & 0x100) && !(wl[i].state & 1)) zw_op(wl[i].id, 2, 0, 0); else zw_op(wl[i].id, 1, 0, 0); } }
+        /* atajos del sistema (el gestor de ventanas los manda a la barra): Win, Win+E, Win+L, Ctrl+Mayus+Esc */
+        else if (e.win == (u32)bar->id && e.type == EV_KEY && e.key >= 0x100 && e.key <= 0x103) { if (e.key == 0x100) { if (menu) close_menu(); else open_menu(); } else if (e.key == 0x101) launch("files", ""); else if (e.key == 0x102) open_lock(1); else launch("sysmon", ""); char lg[48]; snprintf(lg, 48, "[prueba] atajo %x", e.key); z_log(lg); }
+        else if (e.win == (u32)bar->id && e.type == EV_DOWN) { int tx = tray_x(); if (e.x < 8 + 96 * S_) { if (menu) close_menu(); else if (now - menu_closed > 200) open_menu(); } else if (e.x >= tx && e.x < tx + TRAY - 8) { if (qs) close_qs(); else if (now - qs_closed > 200) { qs = zw_new("Ajustes rápidos", MIN(tx, (int)si.scr_w - QW - 4), TH.panel_top ? PH + 2 : (int)si.scr_h - PH - QH - 2, QW, QH, WF_POPUP); draw_qs(); draw_bar(); } } else if (e.x >= icons_x() && e.x < icons_x() + ICW) { if (nwin) close_net(); else if (now - nwin_closed > 200) open_net(); } else if (bat_ok && e.x >= icons_x() + 2 * ICW + 4 && e.x < tray_x() - 4) { char b[120]; snprintf(toast, 160, "%s", bat_text(b)); toast_until = now + 5000; draw_bar(); } else if (prn_st && e.x >= icons_x() + ICW + 4 && e.x < icons_x() + 2 * ICW + 4) { if (pwin) close_prn(); else if (now - pwin_closed > 200) open_prn(); } else if (e.x >= tx + TRAY && e.x < tx + TRAY + FLAGW) set_lang(!TH.lang); else if (e.x >= bar->w - clock_w() - 16) { if (cal) close_cal(); else if (now - cal_closed > 200) open_cal(); } else for (int i = 0; i < nw; i++) if (e.x >= tb_x[i] && e.x < tb_x[i] + tb_w) { if ((wl[i].state & 0x100) && !(wl[i].state & 1)) zw_op(wl[i].id, 2, 0, 0); else zw_op(wl[i].id, 1, 0, 0); } }
         else if (e.win == (u32)bg->id && e.type == EV_DOWN) { int k = TH.show_icons ? icon_at(e.x, e.y) : -1; (void)ty;
             if (e.btn & 2) { int sx = e.x, sy = e.y; if (k >= 0 && IC[k].kind == 0) app_ctx(IC[k].idx, sx, sy); else if (k >= 0) desk_ctx(IC[k].idx, sx, sy); else { static const char *it[] = {"Nueva carpeta", "Nuevo documento de texto", "Abrir la carpeta Escritorio", "Cambiar el fondo", "Configuración", "Papelera", "Capturar pantalla", "Pegar"}, *ig[] = {"Nueva carpeta", "Nuevo documento de texto", "Abrir la carpeta Escritorio", "Papelera", "Capturar pantalla", "Pegar"}; int gu = guest(); int r = ui_menu(sx, sy, gu ? ig : it, gu ? 6 : 8); if (gu && r >= 3) r = r == 3 ? 5 : r == 4 ? 6 : 7; if (r == 6) { shot_at = z_ms() + 700; continue; } if (r == 7) { char a2[200]; snprintf(a2, 200, "--pegar %s", DESK); z_spawn("/rd/bin/files", a2); continue; } if (r == 0) new_folder(); else if (r == 1) new_doc(); else if (r == 2) z_spawn("/rd/bin/files", DESK); else if (r == 3) launch("config", "fondo"); else if (r == 4) launch("config", 0); else if (r == 5) launch("papelera", 0); } continue; }
             if (k >= 0 && k == last_icon && now - last_click < 500) { if (IC[k].kind == 0) launch(z_apps[vis[IC[k].idx]].bin, 0); else { char p[160]; desk_path(IC[k].idx, p); z_open_path(p); } last_icon = -1; } else { last_icon = k; last_click = now; } if (k != icon_sel) { icon_sel = k; draw_bg(); } }

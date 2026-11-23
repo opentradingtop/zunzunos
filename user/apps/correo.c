@@ -160,9 +160,12 @@ static void draw_compose(void) { zwin *w = CW; g_clear(w, UI_WHITE); g_rect(w, 0
     g_rect(w, 8, 114, w->w - 16, w->h - 122, 0xFFFFFF); g_frame(w, 8, 114, w->w - 16, w->h - 122, c_foc == 2 ? UI_ACC : UI_LINE); CT.cols = (w->w - 32) / 8; te_draw(w, &CT, 14, 118, w->h - 128, 1, UI_TEXT, UI_ACC2, UI_ACC, 0); zw_present(w); }
 static void compose(const char *to, const char *subj, const char *text, const char *inrep) { if (CW) zw_close(CW); strncpy0(c_to, to, 600); strncpy0(c_subj, subj, 300); strncpy0(c_inrep, inrep ? inrep : "", 200); te_init(&CT); te_set(&CT, text, strlen(text)); CT.cur = 0; c_foc = to[0] ? 2 : 0; c_cur = strlen(c_to);
     zsys s; z_sysinfo(&s); CW = zw_new("Mensaje nuevo", -1, 0, MIN(760, (int)s.scr_w - 60), MIN(520, (int)s.scr_h - 100), WF_DECOR | WF_RESIZE); draw_compose(); }
+static int c_drag;
 static void compose_ev(zevent *e) { if (e->type == EV_CLOSE) { zw_close(CW); CW = 0; return; } if (e->type == EV_RESIZE) { zw_resized(CW, e->x, e->y); draw_compose(); return; } if (e->type == EV_REDRAW) { draw_compose(); return; }
     if (e->type == EV_DOWN) { if (e->y < 40) { if (e->x < 100) { if (!smtp_send(c_to, c_subj, CT.t ? CT.t : "", c_inrep)) { zw_close(CW); CW = 0; draw(); return; } draw(); } else if (e->x < 196) { zw_close(CW); CW = 0; return; } }
-        else if (e->y < 76) { c_foc = 0; c_cur = strlen(c_to); } else if (e->y < 108) { c_foc = 1; c_cur = strlen(c_subj); } else { c_foc = 2; te_click(&CT, e->x - 14, e->y - 118, 1, 0); } draw_compose(); return; }
+        else if (e->y < 76) { c_foc = 0; c_cur = strlen(c_to); if (e->btn & 2) ui_input_menu(CW, c_to, 590, &c_cur, e); } else if (e->y < 108) { c_foc = 1; c_cur = strlen(c_subj); if (e->btn & 2) ui_input_menu(CW, c_subj, 290, &c_cur, e); }
+        else { c_foc = 2; if (e->btn & 2) te_menu(CW, &CT, e); else { te_click(&CT, e->x - 14, e->y - 118, 1, e->mods & M_SHIFT); c_drag = 1; } } draw_compose(); return; }
+    if (e->type == EV_MOVE && c_drag) { if (!e->btn) c_drag = 0; else { te_click(&CT, e->x - 14, e->y - 118, 1, 1); draw_compose(); } return; } if (e->type == EV_UP) { c_drag = 0; return; }
     if (e->type == EV_KEY) { if (e->key == K_TAB) c_foc = (c_foc + 1) % 3; else if (c_foc == 0) ui_input_key(c_to, 590, &c_cur, e); else if (c_foc == 1) ui_input_key(c_subj, 290, &c_cur, e); else te_key(&CT, e, 10); if (c_foc < 2 && e->key == K_TAB) c_cur = strlen(c_foc ? c_subj : c_to); draw_compose(); } }
 /* ---------- formulario de la cuenta (dentro de la ventana principal) ---------- */
 static int setup, sf, scur; static char s_imap[96], s_smtp[96], s_sport[8];
@@ -187,14 +190,14 @@ static int bx(int i) { int x = 8; for (int k = 0; k < i; k++) x += g_textw(_(BT[
 static int list_h(void) { return MIN(nh, 12) * LH + 24; }
 /* los errores de conexion tambien van al registro (DIAGNOST.TXT), sin la contrasena */
 static void log_err(void) { static char last[200]; if (!msg[0] || !strcmp(msg, last)) return; strcpy(last, msg); if (strstr(msg, "IMAP") || strstr(msg, "SMTP") || strstr(msg, "TLS") || strstr(msg, _("No se")) || strstr(msg, _("El servidor")) || strstr(msg, _("El certificado"))) { char m[260]; snprintf(m, 260, "[prueba] correo error: %s", msg); z_log(m); } }
-void draw(void) { log_err(); zwin *w = W; g_clear(w, UI_WHITE); g_rect(w, 0, 0, w->w, TB, UI_PANEL); for (int i = 0; i < 7; i++) ui_button(w, bx(i), 7, g_textw(_(BT[i])) + 14, 26, BT[i], i == 1 ? 2 : 0);
+void draw(void) { log_err(); zwin *w = W; g_clear(w, UI_WHITE); zs_area(w, 0, 0, 0, 0, 0); g_rect(w, 0, 0, w->w, TB, UI_PANEL); for (int i = 0; i < 7; i++) ui_button(w, bx(i), 7, g_textw(_(BT[i])) + 14, 26, BT[i], i == 1 ? 2 : 0);
     if (setup) { draw_setup(); } else { int y = TB + 4, lh = list_h(); g_rect(w, 0, y, w->w, 20, UI_PANEL); g_text(w, 26, y + 2, _("De"), UI_TEXT); g_text(w, 260, y + 2, _("Asunto"), UI_TEXT); g_text(w, w->w - 190, y + 2, _("Fecha"), UI_TEXT); y += 22;
         for (int i = topl; i < nh && i < topl + 12; i++) { hdr_t *h = &H[i]; if (i == sel) g_rect(w, 0, y - 1, w->w, LH, UI_ACC2); if (!h->seen) g_circle(w, 12, y + 8, 4, UI_ACC, 1); zw_clip(w, 26, y, 226, LH); (h->seen ? g_text : g_textb)(w, 26, y + 1, h->from, UI_TEXT); zw_clip(w, 260, y, w->w - 460, LH); (h->seen ? g_text : g_textb)(w, 260, y + 1, h->subj[0] ? h->subj : _("(sin asunto)"), UI_TEXT); zw_noclip(w); g_text(w, w->w - 190, y + 1, h->date, UI_MUTED); y += LH; }
         if (!nh) g_text(w, 26, y + 4, _(acct_load_ok() ? "No hay mensajes. Pulsa Recibir." : "Pulsa Cuenta para configurar tu correo."), UI_MUTED);
-        y = TB + 4 + lh + 4; g_rect(w, 0, y, w->w, 1, UI_LINE); y += 6;
+        y = TB + 4 + lh + 4; g_rect(w, 0, y, w->w, 1, UI_LINE); y += 6; zs_area(w, 0, y, w->w, w->h - 22 - y, 0);
         if (sel >= 0 && body.p) { g_textb(w, 16, y, rd_subj, UI_TEXT); y += 20; char b[400]; snprintf(b, 400, "%s: %s", _("De"), rd_from); g_text(w, 16, y, b, UI_MUTED); y += 18; snprintf(b, 400, "%s: %s", _("Para"), rd_to); zw_clip(w, 16, y, w->w - 32, 18); g_text(w, 16, y, b, UI_MUTED); zw_noclip(w); y += 18; snprintf(b, 400, "%s: %s", _("Fecha"), rd_date); g_text(w, 16, y, b, UI_MUTED); y += 18;
             if (rd_att[0]) { snprintf(b, 400, "%s: %s", _("Adjuntos"), rd_att); zw_clip(w, 16, y, w->w - 32, 18); g_text(w, 16, y, b, 0xB45309); zw_noclip(w); y += 18; } y += 6; int vis = (w->h - 24 - y) / 18; rtop = MAX(0, MIN(rtop, nwl - vis)); for (int i = rtop; i < nwl && i < rtop + vis; i++, y += 18) g_text(w, 16, y, wl[i], UI_TEXT); } }
-    g_rect(w, 0, w->h - 22, w->w, 22, UI_PANEL); zw_clip(w, 0, w->h - 22, w->w, 22); g_text(w, 8, w->h - 19, msg, UI_TEXT); zw_noclip(w); zw_present(w); }
+    zs_stop(w); zs_show(w); g_rect(w, 0, w->h - 22, w->w, 22, UI_PANEL); zw_clip(w, 0, w->h - 22, w->w, 22); g_text(w, 8, w->h - 19, msg, UI_TEXT); zw_noclip(w); zw_present(w); }
 static void quote(sb_t *o) { sb_s(o, "\n\n"); sb_f(o, _("El %s, %s escribió:"), rd_date, rd_from); sb_s(o, "\n"); for (int i = 0; i < nwl; i++) sb_f(o, "> %s\n", wl[i]); }
 static void act(int b) { char t[400];
     if (b == 0) { if (acct_load_ok()) refresh(); else setup = 1; }
@@ -208,9 +211,10 @@ int main(const char *a) { zsys s; z_sysinfo(&s); W = zw_new("Correo", -1, 0, MIN
     if (!acct_ok_cache) { strcpy(A.prov, "gmail"); act(6); } draw(); if (acct_ok_cache) { refresh(); draw(); } zevent e;
     for (;;) { if (!z_event(&e, 60000)) { if (ic_ok && !setup) { imap(0, "NOOP"); } continue; } if (e.type == EV_REDRAW) { draw(); if (CW) draw_compose(); continue; }
         if (CW && e.win == (u32)CW->id) { compose_ev(&e); continue; } if (e.win != (u32)W->id) continue; if (e.type == EV_CLOSE) { if (ic_ok) { imap(0, "LOGOUT"); cn_close(&IC); } return 0; } if (e.type == EV_RESIZE) { zw_resized(W, e.x, e.y); wrap((W->w - 32) / 8); draw(); continue; }
-        if (e.type == EV_KEY && e.ch == 16) { act(5); draw(); continue; }
+        if (e.type == EV_KEY && e.ch == 16) { act(5); draw(); continue; } if (e.type == EV_KEY && e.ch == 14) { act(1); draw(); continue; }
         if (e.type == EV_DOWN && e.y < TB) { for (int i = 6; i >= 0; i--) if (e.x >= bx(i)) { if (e.x < bx(i) + g_textw(_(BT[i])) + 14) act(i); break; } draw(); continue; }
         if (setup) { setup_ev(&e); draw(); continue; }
+        if (zs_event(W, &e)) { draw(); continue; } if (e.type == EV_WHEEL) zs_clear(W);
         if (e.type == EV_WHEEL) { int lh = TB + 4 + list_h(); if (e.y < lh) topl = MAX(0, MIN(topl - (int)e.key, nh - 12)); else rtop -= (int)e.key * 3; draw(); continue; }
         if (e.type == EV_KEY) { if (e.key == K_DOWN && sel + 1 < nh) { open_msg(sel + 1); if (sel >= topl + 12) topl = sel - 11; } else if (e.key == K_UP && sel > 0) { open_msg(sel - 1); if (sel < topl) topl = sel; } else if (e.key == K_PGDN || e.ch == ' ') rtop += 20; else if (e.key == K_PGUP) rtop -= 20; else if (e.key == K_DEL) act(4); draw(); continue; }
         if (e.type == EV_DOWN && (e.btn & 2) && sel >= 0 && body.p && e.y > TB + 4 + list_h()) { int sx, sy; zw_screen(W, e.x, e.y, &sx, &sy); static const char *it[] = {"Copiar el mensaje", "Responder", "Reenviar", "Imprimir"}; int r = ui_menu(sx, sy, it, 4); if (r == 0) { sb_t c = {0}; sb_f(&c, "%s: %s\n%s: %s\n%s: %s\n\n%s", _("De"), rd_from, _("Fecha"), rd_date, _("Asunto"), rd_subj, body.p); z_clip_set(c.p, c.n); free(c.p); strcpy(msg, _("Mensaje copiado")); } else if (r > 0) act(r == 1 ? 2 : r == 2 ? 3 : 5); draw(); continue; }

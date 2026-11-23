@@ -8,7 +8,7 @@ typedef struct { u32 ip; u8 mac[6]; u64 t; } arp_t; static arp_t arpt[32];
 #define RXS 65536
 #define TXS 65536
 enum { C, LISTEN, SYN_S, SYN_R, EST, FIN1, FIN2, CLOSE_W, LAST_A, TIME_W };
-typedef struct dg { struct dg *next; u32 len; u8 d[]; } dg_t;
+typedef struct dg { struct dg *next; u32 len, src; u16 sp; u8 d[]; } dg_t;
 typedef struct sock {
     struct sock *next, *parent; int type, st, orphan, accepted, peer_fin, fin_sent, want_fin, err; u16 lport, rport; u32 rip;
     u32 una, nxt, rnxt, wnd; u8 *rx, *tx; u32 rh, rl, th, tl; u64 rto_at; u32 rto; u64 die_at; int retries;
@@ -30,7 +30,7 @@ static int ip_tx(u32 dst, u8 proto, const void *seg, u32 n) {
     u8 p[1520]; u8 mac[6]; if (n > 1480) return E_INVAL; static u16 id;
     if (dst == 0xFFFFFFFF) memcpy(mac, BCAST, 6);
     else {
-        u32 hop = (dst & my_mask) == (my_ip & my_mask) ? dst : my_gw; int ok = 0; if (!hop) return E_CONN;
+        u32 hop = (dst & my_mask) == (my_ip & my_mask) || (dst & 0xFFFF) == (169 | 254 << 8) || (my_ip & 0xFFFF) == (169 | 254 << 8) || !my_gw ? dst : my_gw;   /* 169.254 y sin router: directo por el cable */ int ok = 0; if (!hop) return E_CONN;
         for (int i = 0; i < 32; i++) if (arpt[i].ip == hop && arpt[i].t) { memcpy(mac, arpt[i].mac, 6); ok = 1; break; }
         if (!ok) { static u8 z[6]; arp_send(1, z, BCAST, hop); return E_TIMEOUT; }
     }
@@ -43,7 +43,7 @@ static int udp_tx(u32 dst, u16 sp, u16 dp, const void *d, u32 n) {
     u16 c = l4sum(my_ip, dst, 17, u, n + 8); *(u16 *)(u + 6) = HS16(c ? c : 0xFFFF); return ip_tx(dst, 17, u, n + 8);
 }
 /* --- DHCP --- */
-static u32 xid, offer_ip, offer_srv; static int dh_state; static u64 dh_next;
+static u32 xid, offer_ip, offer_srv; static int dh_state, ll_on; static u64 dh_next;
 static void dhcp_send(int type) {
     u8 b[320]; memset(b, 0, sizeof b); b[0] = 1; b[1] = 1; b[2] = 6; memcpy(b + 4, &xid, 4); *(u16 *)(b + 10) = HS16(0x8000); memcpy(b + 28, nic->mac, 6); *(u32 *)(b + 236) = HL32(0x63825363);
     u8 *o = b + 240; *o++ = 53; *o++ = 1; *o++ = type;
@@ -56,7 +56,7 @@ static void dhcp_rx(const u8 *b, u32 n) {
     int type = 0; u32 mask = 0, gw = 0, dns = 0, srv = 0, yi; memcpy(&yi, b + 16, 4);
     for (u32 i = 240; i + 1 < n && b[i] != 255;) { u8 c = b[i], l = b[i + 1]; if (!c) { i++; continue; } const u8 *v = b + i + 2; if (c == 53) type = v[0]; else if (c == 1) memcpy(&mask, v, 4); else if (c == 3) memcpy(&gw, v, 4); else if (c == 6) memcpy(&dns, v, 4); else if (c == 54) memcpy(&srv, v, 4); i += l + 2; }
     if (type == 2 && dh_state == 1) { offer_ip = yi; offer_srv = srv; dh_state = 2; dhcp_send(3); dh_next = ticks + 2000; }
-    else if (type == 5 && dh_state == 2) { my_ip = yi; my_mask = mask ? mask : 0xFFFFFF; my_gw = gw; my_dns = dns ? dns : gw; dh_state = 3; dhcp_ok = 1;
+    else if (type == 5 && dh_state == 2) { ll_on = 0; my_ip = yi; my_mask = mask ? mask : 0xFFFFFF; my_gw = gw; my_dns = dns ? dns : gw; dh_state = 3; dhcp_ok = 1;
         kprintf("red: IP %d.%d.%d.%d puerta %d.%d.%d.%d dns %d.%d.%d.%d\n", yi & 255, yi >> 8 & 255, yi >> 16 & 255, yi >> 24, gw & 255, gw >> 8 & 255, gw >> 16 & 255, gw >> 24, my_dns & 255, my_dns >> 8 & 255, my_dns >> 16 & 255, my_dns >> 24); }
     else if (type == 6) { dh_state = 0; dh_next = ticks + 1000; }
 }
@@ -149,7 +149,7 @@ static volatile int ping_seq, ping_ok;
 static void udp_rx(u32 src, const u8 *u, u32 n) {
     if (n < 8) return; u16 sp = HS16(*(u16 *)u), dp = HS16(*(u16 *)(u + 2)); u32 l = HS16(*(u16 *)(u + 4)); if (l > n || l < 8) return; l -= 8;
     if (dp == 68 && sp == 67) { dhcp_rx(u + 8, l); return; }
-    for (sock_t *s = socks; s; s = s->next) if (s->type == 2 && s->lport == dp && s->qn < 32) { dg_t *g = kmalloc(sizeof *g + l); if (!g) return; g->next = 0; g->len = l; memcpy(g->d, u + 8, l); if (s->qe) s->qe->next = g; else s->q = g; s->qe = g; s->qn++; s->from_ip = src; s->from_port = sp; return; }
+    for (sock_t *s = socks; s; s = s->next) if (s->type == 2 && s->lport == dp && s->qn < 32) { dg_t *g = kmalloc(sizeof *g + l); if (!g) return; g->next = 0; g->len = l; g->src = src; g->sp = sp; memcpy(g->d, u + 8, l); if (s->qe) s->qe->next = g; else s->q = g; s->qe = g; s->qn++; s->from_ip = src; s->from_port = sp; return; }
 }
 static void rx_frame(u8 *f, int n) {
     if (n < 14) return; u16 t = HS16(*(u16 *)(f + 12)); u8 *p = f + 14; n -= 14;
@@ -158,13 +158,13 @@ static void rx_frame(u8 *f, int n) {
         if (op == 1 && tip == my_ip && my_ip) arp_send(2, p + 8, p + 8, sip);
     } else if (t == 0x800 && n >= 20) {
         u32 hl = (p[0] & 15) * 4, tl = HS16(*(u16 *)(p + 2)); if (tl > (u32)n || hl > tl) return; u32 src, dst; memcpy(&src, p + 12, 4); memcpy(&dst, p + 16, 4);
-        if (dst != my_ip && dst != 0xFFFFFFFF && my_ip) return; if (HS16(*(u16 *)(p + 6)) & 0x3FFF) return;
+        if (dst != my_ip && dst != 0xFFFFFFFF && my_ip && dst != (my_ip | ~my_mask)) return; if (HS16(*(u16 *)(p + 6)) & 0x3FFF) return;
         u8 *l = p + hl; u32 ln = tl - hl;
         if (p[9] == 1 && ln >= 8) { if (l[0] == 8) { u8 r[1480]; if (ln > 1480) return; memcpy(r, l, ln); r[0] = 0; *(u16 *)(r + 2) = 0; *(u16 *)(r + 2) = HS16(csum(r, ln, 0)); ip_tx(src, 1, r, ln); } else if (l[0] == 0 && HS16(*(u16 *)(l + 6)) == ping_seq) ping_ok = 1; }
         else if (p[9] == 17) udp_rx(src, l, ln); else if (p[9] == 6) tcp_rx(src, l, ln);
     }
 }
-static void net_switch(netdev_t *n) { nic = n; my_ip = my_gw = my_mask = my_dns = 0; dhcp_ok = 0; dh_state = 0; dh_next = ticks; memset(arpt, 0, sizeof arpt); kprintf("red: ahora se usa %s (%s)\n", n->name, n->kind); }
+static void net_switch(netdev_t *n) { nic = n; my_ip = my_gw = my_mask = my_dns = 0; dhcp_ok = 0; ll_on = 0; dh_state = 0; dh_next = ticks; memset(arpt, 0, sizeof arpt); kprintf("red: ahora se usa %s (%s)\n", n->name, n->kind); }
 static void net_thread(void *a) {
     static u8 f[2048]; u64 next_tcp = 0, next_log = 0; int last_link = -1; xid = (u32)rdtsc();
     for (;;) {
@@ -173,8 +173,14 @@ static void net_thread(void *a) {
         if (want && !*want->gone) { net_switch(want); want = 0; }
         if (nic->gone && *nic->gone) { netdev_t *b = 0; for (int i = 0; i < ndevs; i++) if (devs[i] != nic && !(devs[i]->gone && *devs[i]->gone)) b = devs[i]; for (int i = 0; i < ndevs; i++) if (devs[i] == nic) { devs[i] = devs[--ndevs]; break; } if (b) net_switch(b); else { nic = 0; mutex_unlock(&nl); continue; } }
         for (int i = 0; i < 32; i++) { int n = nic->rx(nic, f); if (n == 0) break; busy = 1; if (n > 0) { nic->rxp++; nic->rxb += n; rx_frame(f, n); } }
+        /* sin servidor DHCP (dos equipos unidos por un cable): a los 12 s con enlace, direccion local 169.254.x.y sacada de la MAC.
+           Se sigue pidiendo DHCP; si llega, manda la direccion del DHCP. */
+        { static u64 link_at; static int was_down; int l = nic->link(nic); if (!l) { link_at = 0; was_down = 1; } else if (!link_at) { link_at = ticks;
+            if (was_down && (dhcp_ok || ll_on)) { dhcp_ok = 0; ll_on = 0; dh_state = 0; dh_next = ticks; xid++; kprintf("red: cable conectado de nuevo, se pide direccion otra vez\n"); } was_down = 0; }
+          if (l && link_at && !dhcp_ok && !ll_on && ticks - link_at > 12000) { u8 a = 1 + nic->mac[4] % 254, b = nic->mac[5] ? nic->mac[5] : 1; my_ip = 169 | 254 << 8 | (u32)a << 16 | (u32)b << 24; my_mask = 0xFFFF; my_gw = 0; my_dns = 0; ll_on = 1;
+            kprintf("red: sin DHCP, direccion local 169.254.%d.%d\n", a, b); } }
         if (ticks >= dh_next && dh_state < 3) { if (dh_state == 0 || dh_state == 2) dh_state = 1; dhcp_send(1); dh_next = ticks + 2000; }
-        if (ticks >= next_log) { next_log = ticks + 5000; int l = nic->link(nic); if (l != last_link || (!dhcp_ok && ticks < 90000)) kprintf("red: enlace=%d dhcp=%d estado=%d rx=%lu tx=%lu\n", l, dhcp_ok, dh_state, nic->rxp, nic->txp); if (!dhcp_ok && nic->dbg) nic->dbg(nic); last_link = l; }
+        if (ticks >= next_log) { next_log = ticks + 5000; int l = nic->link(nic); if (l != last_link || (!dhcp_ok && ticks < 90000)) kprintf("red: enlace=%d dhcp=%d estado=%d rx=%lu tx=%lu t=%lu\n", l, dhcp_ok, dh_state, nic->rxp, nic->txp, ticks); if (!dhcp_ok && nic->dbg) nic->dbg(nic); last_link = l; }
         if (ticks >= next_tcp) { next_tcp = ticks + 5; tcp_timers(); }
         mutex_unlock(&nl);
         if (!busy) msleep(1);
@@ -182,10 +188,10 @@ static void net_thread(void *a) {
 }
 void net_init(void) { kthread("red", net_thread, 0); }
 int net_info(znet_t *o) {
-    memset(o, 0, sizeof *o); if (!nic) return E_NOENT; memcpy(o->mac, nic->mac, 6); o->up = nic->link(nic); o->dhcp = dhcp_ok; o->ip = my_ip; o->mask = my_mask; o->gw = my_gw; o->dns = my_dns; o->rxp = nic->rxp; o->txp = nic->txp; o->rxb = nic->rxb; o->txb = nic->txb; strncpy0(o->name, nic->name, 8); strncpy0(o->kind, nic->kind, 16); return 0;
+    memset(o, 0, sizeof *o); if (!nic) return E_NOENT; memcpy(o->mac, nic->mac, 6); o->up = nic->link(nic); o->dhcp = dhcp_ok; o->local = ll_on; o->ip = my_ip; o->mask = my_mask; o->gw = my_gw; o->dns = my_dns; o->rxp = nic->rxp; o->txp = nic->txp; o->rxb = nic->rxb; o->txb = nic->txb; strncpy0(o->name, nic->name, 8); strncpy0(o->kind, nic->kind, 16); return 0;
 }
 int net_ping(u32 ip, int to, int seq) {
-    if (!dhcp_ok) return E_CONN; u8 b[64]; memset(b, 0x5A, 64); b[0] = 8; b[1] = 0; *(u16 *)(b + 2) = 0; *(u16 *)(b + 4) = HS16(0x5A5A); *(u16 *)(b + 6) = HS16(seq); *(u16 *)(b + 2) = HS16(csum(b, 64, 0));
+    if (!my_ip) return E_CONN; u8 b[64]; memset(b, 0x5A, 64); b[0] = 8; b[1] = 0; *(u16 *)(b + 2) = 0; *(u16 *)(b + 4) = HS16(0x5A5A); *(u16 *)(b + 6) = HS16(seq); *(u16 *)(b + 2) = HS16(csum(b, 64, 0));
     ping_seq = seq; ping_ok = 0; u64 st = ticks, end = ticks + to; int sent = 0; u64 retry = 0;
     while (ticks < end) { if (!sent && ticks >= retry) { mutex_lock(&nl); sent = !ip_tx(ip, 1, b, 64); mutex_unlock(&nl); retry = ticks + 100; } if (ping_ok) return ticks - st; msleep(1); }
     return E_TIMEOUT;
@@ -197,7 +203,7 @@ file_t *sock_file(int type) {
 }
 static u16 alloc_port(void) { if (++next_port > 65000) next_port = 49200; return next_port; }
 int sock_connect(file_t *f, u32 ip, int port, int to) {
-    sock_t *s = f->priv; if (!dhcp_ok) return E_CONN; if (s->st != C) return E_INVAL;
+    sock_t *s = f->priv; if (!my_ip) return E_CONN; if (s->st != C) return E_INVAL;
     mutex_lock(&nl); s->rip = ip; s->rport = port; if (!s->lport) s->lport = alloc_port();
     if (s->type == 2) { mutex_unlock(&nl); return 0; }
     s->una = s->nxt = (u32)rdtsc(); s->st = SYN_S; s->rto = 300; s->err = 0; s->wnd = 1460; seg_tx(s, s->nxt, F_SYN, 0, 0); s->nxt++; s->rto_at = ticks + 200; mutex_unlock(&nl);
@@ -221,7 +227,7 @@ i64 sock_recv(file_t *f, void *b, u64 n, int to) {
     sock_t *s = f->priv; u64 end = to > 0 ? ticks + to : 0; u8 *p = b;
     for (;;) {
         mutex_lock(&nl);
-        if (s->type == 2 && s->q) { dg_t *g = s->q; s->q = g->next; if (!s->q) s->qe = 0; s->qn--; u32 c = MIN(n, g->len); memcpy(b, g->d, c); kfree(g); mutex_unlock(&nl); return c; }
+        if (s->type == 2 && s->q) { dg_t *g = s->q; s->from_ip = g->src; s->from_port = g->sp; s->q = g->next; if (!s->q) s->qe = 0; s->qn--; u32 c = MIN(n, g->len); memcpy(b, g->d, c); kfree(g); mutex_unlock(&nl); return c; }
         if (s->type == 1 && s->rl) { int was_zero = s->rl == RXS; u32 c = MIN(n, s->rl); for (u32 i = 0; i < c; i++) p[i] = s->rx[(s->rh + i) % RXS]; s->rh = (s->rh + c) % RXS; s->rl -= c; if (was_zero || c > 8192) seg_tx(s, s->nxt, F_ACK, 0, 0); mutex_unlock(&nl); return c; }
         int eof = s->type == 1 && (s->peer_fin || s->st == C), err = s->err; mutex_unlock(&nl);
         if (eof) return err && err != E_TIMEOUT ? err : 0;
@@ -236,6 +242,7 @@ i64 sock_sendto(file_t *f, u32 ip, int port, const void *b, u64 n) {
     for (int t = 0; t < 15; t++) { mutex_lock(&nl); int r = udp_tx(ip, s->lport, port, b, n); mutex_unlock(&nl); if (!r) return n; if (r != E_TIMEOUT) return r; msleep(100); }
     return E_TIMEOUT;
 }
+int sock_from(file_t *f, u32 *ip, u16 *port) { sock_t *s = f->priv; *ip = s->from_ip; *port = s->from_port; return 0; }
 int sock_bind(file_t *f, int port) { sock_t *s = f->priv; s->lport = port; if (s->type == 1) s->st = LISTEN; return 0; }
 int sock_accept(file_t *f, int to, file_t **o) {
     sock_t *l = f->priv; u64 end = to > 0 ? ticks + to : 0; if (l->st != LISTEN) return E_INVAL;

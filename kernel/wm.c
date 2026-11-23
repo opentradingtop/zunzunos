@@ -230,12 +230,35 @@ static void cycle(void) {
     win_t *w = l[0]; w->state &= ~ST_MIN; raise_win(w); set_focus(w);
 }
 static const u8 kpnav[10] = {0x49, 0x4D, 0x51, 0x4E, 0x50, 0, 0x4F, 0x4A, 0x52, 0x4B};
+/* repeticion de teclas: los teclados USB no repiten solos y los PS/2 lo hacen a su ritmo; aqui se hace igual
+   para todos. Tras 450 ms pulsada, la tecla se repite 30 veces por segundo hasta que se suelta. No se repiten
+   los modificadores ni Bloq Mayus, Bloq Num, Impr Pant ni Esc. */
+static int rep_u; static u64 rep_next;
+static int repeatable(int u) { return u >= 4 && u < 0xE0 && u != 0x29 && u != 0x39 && u != 0x53 && u != 0x46 && u != 0x47 && u != 0x48; }
+static void on_key2(int u, int down);
+/* atajos del sistema que hace el escritorio (proceso 1): llegan a su barra como teclas 0x100 y siguientes */
+static void desk_key(int k) { for (int i = 0; i < nz; i++) if ((z[i]->flags & WF_PANEL) && z[i]->proc->pid == 1) { send(z[i], EV_KEY, 0, 0, k, 0, 0); break; } }
 static void on_key(int u, int down) {
+    if (down && u == rep_u) return;   /* repeticion propia del teclado PS/2: ya la hacemos nosotros */
+    if (down && repeatable(u)) { rep_u = u; rep_next = ticks + 450 * HZ / 1000; } else if (!down && u == rep_u) rep_u = 0; else if (down && u < 0xE0) rep_u = 0;
+    on_key2(u, down); }
+static void key_repeat(void) { for (int n = 0; rep_u && ticks >= rep_next && n < 3; n++) { on_key2(rep_u, 1); rep_next += MAX(1, HZ / 30); } if (rep_u && ticks >= rep_next) rep_next = ticks + HZ / 30; }
+static void on_key2(int u, int down) {
     if (down && u == 0x53) { mods ^= M_NUM; kbd_set_leds((mods & M_NUM ? 1 : 0) << 1 | (mods & M_CAPS ? 4 : 0)); return; }
     if (down && u == 0x39) { mods ^= M_CAPS; kbd_set_leds((mods & M_NUM ? 1 : 0) << 1 | (mods & M_CAPS ? 4 : 0)); return; }
     if (!(mods & M_NUM) && u >= 0x59 && u <= 0x63) { if (u == 0x63) u = 0x4C; else { u = kpnav[(u - 0x59 + 1) % 10]; if (!u) return; } }
     int bit = u == 0xE0 || u == 0xE4 ? M_CTRL : u == 0xE1 || u == 0xE5 ? M_SHIFT : u == 0xE2 ? M_ALT : u == 0xE6 ? M_ALTGR : u == 0xE3 || u == 0xE7 ? M_GUI : 0;
+    /* tecla Windows sola: menu Inicio (lo hace el escritorio) */
+    static int gui_only; if (bit == M_GUI) { if (down) gui_only = 1; else if (gui_only && !lockw()) { gui_only = 0; desk_key(0x100); } } else if (down) gui_only = 0;
     if (bit) { if (down) mods |= bit; else mods &= ~bit; return; }
+    if (down && !lockw()) {
+        if ((mods & M_GUI) && u == 0x08) { desk_key(0x101); return; }                       /* Win+E: Archivos */
+        if ((mods & M_GUI) && u == 0x0F) { desk_key(0x102); return; }                       /* Win+L: bloquear */
+        if ((mods & M_CTRL) && (mods & M_SHIFT) && u == 0x29) { desk_key(0x103); return; }  /* Ctrl+Mayus+Esc: Monitor */
+        if ((mods & M_GUI) && u == 0x07) { int any = 0; for (int i = 0; i < nz; i++) if (lay(z[i]) == 1 && !(z[i]->state & ST_MIN)) any = 1;   /* Win+D: escritorio */
+            for (int i = 0; i < nz; i++) if (lay(z[i]) == 1) { if (any) z[i]->state |= ST_MIN; else z[i]->state &= ~ST_MIN; dirty_win(z[i]); } if (any) focus_top(); else cycle(); notify_list(); return; }
+        if ((mods & M_CTRL) && !(mods & (M_ALT | M_SHIFT)) && u == 0x1A && focus && lay(focus) == 1) { send(focus, EV_CLOSE, 0, 0, 0, 0, 0); return; }   /* Ctrl+W: cerrar ventana */
+    }
     if (down && u == 0x46) { for (int i = 0; i < nz; i++) if ((z[i]->flags & WF_PANEL) && z[i]->proc->pid == 1) { send(z[i], EV_KEY, 0, 0, u, 0, 0); break; } return; } /* Impr Pant: al escritorio */
     win_t *lk = lockw(); if (lk) { if (focus != lk) set_focus(lk); send(lk, down ? EV_KEY : EV_KEYUP, 0, 0, u, down ? key_translate(u, mods) : 0, 0); return; }
     if (down && (mods & M_ALT) && u == 0x2B) { cycle(); return; }
@@ -255,9 +278,10 @@ static void wm_thread(void *a) {
             else if (e.kind == 2) on_mouse(mx + e.a, my + e.b, e.c, e.d);
             else on_mouse(e.a, e.b, e.c, e.d);
         }
+        key_repeat();
         compose();
         mutex_unlock(&wm);
-        task_block(12);
+        task_block(rep_u ? 8 : 12);
     }
 }
 void wm_theme_get(ztheme_t *o) { *o = T; }
