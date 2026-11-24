@@ -37,6 +37,7 @@ static long atol(const char *s) { while (*s == ' ') s++; long v = 0; while (*s >
 /* ---------- utilidades ---------- */
 static void hex(const u8 *d, int n, char *o) { for (int i = 0; i < n; i++) { o[2 * i] = "0123456789abcdef"[d[i] >> 4]; o[2 * i + 1] = "0123456789abcdef"[d[i] & 15]; } o[2 * n] = 0; }
 static int unhex(const char *s, u8 *o, int n) { for (int i = 0; i < n; i++) { int a = s[2 * i], b = a ? s[2 * i + 1] : 0; int x = a >= 'a' ? a - 87 : a - '0', y = b >= 'a' ? b - 87 : b - '0'; if (x < 0 || x > 15 || y < 0 || y > 15) return -1; o[i] = x << 4 | y; } return 0; }
+static void strncat0(char *d, const char *s, int cap) { int l = strlen(d); if (l < cap - 1) strncpy0(d + l, s, cap - l); }
 static void safe(char *s) { for (; *s; s++) if (*s == '|' || *s == '\n' || *s == '\r') *s = ' '; }
 static int split(char *s, char **f, int max) { int n = 0; f[n++] = s; for (char *p = s; *p && n < max; p++) if (*p == '|') { *p = 0; f[n++] = p + 1; } return n; }
 static void kvs(const char *t, const char *k, char *o, int cap) { int l = strlen(k); o[0] = 0; for (const char *p = t; p && *p; p = strchr(p, '\n') ? strchr(p, '\n') + 1 : 0) if (!strncmp(p, k, l) && p[l] == '=') { int i = 0; p += l + 1; while (p[i] && p[i] != '\n' && i < cap - 1) { o[i] = p[i]; i++; } o[i] = 0; return; } }
@@ -140,6 +141,19 @@ static int resolve(share_t *s, const char *rel, char *o, int cap) { if (strstr(r
 static zwin *note; static char note_t[600]; static u64 note_until;
 static void note_draw(void) { if (!note) return; g_clear(note, UI_PANEL); g_frame(note, 0, 0, note->w, note->h, UI_ACC); g_textb(note, 14, 12, tr_("Red local"), UI_TEXT); int y = 36; const char *p = note_t; char l[80];
     while (*p && y < note->h - 20) { int k = 0; while (p[k] && p[k] != '\n' && k < 54) k++; if (p[k] && p[k] != '\n') { int b = k; while (b > 0 && p[b] != ' ') b--; if (b > 10) k = b; } memcpy(l, p, k); l[k] = 0; g_text(note, 14, y, l, UI_TEXT); y += 18; p += k; while (*p == ' ' || *p == '\n') p++; } zw_present(note); }
+/* ---------- conversaciones ----------
+   Una conversacion es el grupo de equipos al que se envio su primer mensaje: sus ids ordenados y separados por comas
+   (este equipo incluido). Las respuestas van a todo el grupo. Se guardan en CHATS, una linea por mensaje y en orden:
+   grupo|AAAA-MM-DD HH:MM|id de quien lo envia|entregado (k/n en los propios, vacio en los recibidos)|texto */
+#define CHATS "/sys/ZUNZUN/RED-CHATS.TXT"
+static int conv_has(const char *conv, const char *id) { int l = strlen(id); for (const char *p = conv; p && *p; ) { if (!strncmp(p, id, l) && (p[l] == ',' || !p[l])) return 1; p = strchr(p, ','); if (p) p++; } return 0; }
+static void conv_make(char ids[][12], int n, char *out, int cap) {
+    for (int i = 1; i < n; i++) for (int j = i; j > 0 && strcmp(ids[j - 1], ids[j]) > 0; j--) { char t[12]; strcpy(t, ids[j]); strcpy(ids[j], ids[j - 1]); strcpy(ids[j - 1], t); }
+    out[0] = 0; for (int i = 0; i < n; i++) { if (i && !strcmp(ids[i], ids[i - 1])) continue; if ((int)(strlen(out) + strlen(ids[i]) + 2) >= cap) break; if (out[0]) strcat(out, ","); strcat(out, ids[i]); } }
+static void chat_store(const char *conv, const char *from, const char *text, const char *st) {
+    u32 t[6]; z_time(t); long n = 0; char *old = z_readfile(CHATS, &n); sb_t o = {0}; sb_s(&o, "");
+    if (old) { long k = 0; if (n > 300000) { k = n - 300000; while (k < n && old[k] != '\n') k++; if (k < n) k++; } sb_add(&o, old + k, n - k); free(old); }   /* los mas antiguos se van */
+    sb_f(&o, "%s|%04u-%02u-%02u %02u:%02u|%s|%s|%s\n", conv, t[5], t[4], t[3], t[2], t[1], from, st, text); z_writefile(CHATS, o.p, o.n); free(o.p); z_sync(); }
 static void notify(const char *t) { strncpy0(note_t, t, 600); zsys s; z_sysinfo(&s); if (!note) note = zw_new("Red local", s.scr_w - 470, s.scr_h - 220, 460, 150, WF_POPUP); note_until = z_ms() + 12000; note_draw(); }
 /* invitacion: este equipo (sin red) recibe la invitacion del administrador y el usuario acepta o no */
 static int ask_accept(const char *who, const char *net, const char *code, const char *oldnet) { zsys s; z_sysinfo(&s); zwin *w = zw_new("Invitación a una red local", (s.scr_w - 520) / 2, (s.scr_h - 250) / 2, 520, 250, WF_DECOR); if (!w) return 0;
@@ -166,7 +180,7 @@ static void srv_session(conn_t *c, char **f, int k) {
     u8 nc[16], ns[16]; if (unhex(f[4], nc, 16)) return; zc_random(ns, 16); char h[40], l[200]; hex(ns, 16, h); snprintf(l, 200, "RETO|%s", h); lsend(c, l);
     char want[65]; proof(nc, ns, 'c', want); if (line(c, l, 200, 5000) < 0 || strncmp(l, "PRUEBA|", 7) || strcmp(l + 7, want)) { z_log("[prueba] red prueba incorrecta"); return; }
     char pr[65]; proof(nc, ns, 's', pr); snprintf(l, 200, "BIEN|%s", pr); lsend(c, l); sess_key(c, nc, ns); c->dir = 1;
-    u8 *q; long n; while ((n = crecv(c, &q, 20000)) >= 0) { char *a[6]; char hd[600]; strncpy0(hd, (char *)q, 600); free(q); int na = split(hd, a, 6); char lg[200]; snprintf(lg, 200, "[prueba] red %s de %s", a[0], mname(who)); z_log(lg);
+    u8 *q; long n; while ((n = crecv(c, &q, 20000)) >= 0) { char *a[6]; char hd[1400]; strncpy0(hd, (char *)q, 1400); free(q); int na = split(hd, a, 6); char lg[200]; snprintf(lg, 200, "[prueba] red %s de %s", a[0], mname(who)); z_log(lg);
         if (!strcmp(a[0], "LISTA") && na >= 3) { share_t *s = share(a[1]); char p[400]; if (!s || strcmp(s->host, myid) || resolve(s, a[2], p, 400)) { csends(c, "ERR|carpeta no disponible"); continue; }
             sb_t o = {0}; sb_s(&o, "OK\n"); zdirent e; for (int i = 0; !z_readdir(p, i, &e); i++) { if (e.name[0] == '.') continue; sb_f(&o, "%c|%lu|%s\n", e.is_dir ? 'D' : 'F', (unsigned long)e.size, e.name); } csend(c, o.p, o.n); free(o.p); }
         else if (!strcmp(a[0], "LEE") && na >= 3) { share_t *s = share(a[1]); char p[400]; long fl; u8 *d; if (!s || strcmp(s->host, myid) || resolve(s, a[2], p, 400) || !(d = z_readfile(p, &fl))) { csends(c, "ERR|no se pudo leer"); continue; }
@@ -179,8 +193,10 @@ static void srv_session(conn_t *c, char **f, int k) {
             int e = a[0][0] == 'B' ? z_unlink(p) : z_mkdir(p); z_sync(); csends(c, e ? "ERR|no se pudo" : "OK"); }
         else if (!strcmp(a[0], "RENOMBRA") && na >= 4) { share_t *s = share(a[1]); char p[400], q3[400], r2[400]; char *sl = strrchr(a[2], '/'); snprintf(r2, 400, "%.*s%s%s", sl ? (int)(sl - a[2]) : 0, a[2], sl ? "/" : "", a[3]);
             if (!s || strcmp(s->host, myid) || !s->rw || strchr(a[3], '/') || resolve(s, a[2], p, 400) || resolve(s, r2, q3, 400)) { csends(c, "ERR|no permitido"); continue; } int e = z_rename(p, q3); z_sync(); csends(c, e ? "ERR|no se pudo" : "OK"); }
-        else if (!strcmp(a[0], "MENSAJE") && na >= 2) { u32 t[6]; z_time(t); char *old = z_readfile(INBOX, 0); sb_t o = {0}; sb_f(&o, "%02u/%02u %02u:%02u|%s|", t[3], t[4], t[2], t[1], mname(who)); sb_s(&o, a[1]); sb_s(&o, "\n"); if (old) { sb_s(&o, old); free(old); }
-            z_writefile(INBOX, o.p, MIN(o.n, 200000L)); free(o.p); z_sync(); csends(c, "OK"); char m[600]; snprintf(m, 600, "%s %s:\n%s", tr_("Mensaje de"), mname(who), a[1]); notify(m); }
+        else if ((!strcmp(a[0], "CHAT") && na >= 3) || (!strcmp(a[0], "MENSAJE") && na >= 2)) {   /* MENSAJE: version anterior, conversacion de dos */
+            char conv[700], *text = a[0][0] == 'C' ? a[2] : a[1]; if (a[0][0] == 'C') strncpy0(conv, a[1], 700); else { char ids[2][12]; strcpy(ids[0], who); strcpy(ids[1], myid); conv_make(ids, 2, conv, 700); }
+            if (!conv_has(conv, who) || !conv_has(conv, myid)) { csends(c, "ERR|conversacion no valida"); continue; }
+            safe(text); chat_store(conv, who, text, ""); csends(c, "OK"); char m[600]; snprintf(m, 600, "%s %s:\n%s", tr_("Mensaje de"), mname(who), text); notify(m); }
         else if (!strcmp(a[0], "CONFIG") && na >= 2) { if (strcmp(who, R.admin)) { csends(c, "ERR|solo el administrador"); continue; } u8 *t2; long m = crecv(c, &t2, 20000); if (m < 0) break;
             char key[32]; memcpy(key, R.key, 32); char net[12]; strcpy(net, R.net); int ver = R.ver; if (cfg_parse((char *)t2) || strcmp(R.net, net)) { cfg_load(); csends(c, "ERR|configuracion no valida"); free(t2); continue; }
             if (R.ver < ver) { cfg_load(); csends(c, "OK"); free(t2); continue; } if (!member(myid)) { z_unlink(CFG); memset(&R, 0, sizeof R); z_sync(); z_log("[prueba] red sacado de la red"); notify(tr_("El administrador ha sacado este equipo de la red local.")); csends(c, "OK"); free(t2); break; }
@@ -273,19 +289,85 @@ static void upload(void) { share_t *s = &R.s[sel_sh]; char p[300]; z_docdir(p); 
     if (m < 0 || strncmp((char *)r, "OK", 2)) { snprintf(msg, 300, "%s: %s", tr_("No se pudo subir"), m < 0 ? tr_("sin respuesta") : (char *)r + 4); if (m >= 0) free(r); return; } free(r); char lg[400]; snprintf(lg, 400, "[prueba] red subido %s (%ld)", b, n); z_log(lg); list_dir(); snprintf(msg, 300, "%s: %s", tr_("Subido"), b); }
 static void simple(const char *op, const char *rel, const char *extra) { share_t *s = &R.s[sel_sh]; char h[600], err[120]; u8 *r;
     if (local()) { char p[400], q[400]; if (resolve(s, rel, p, 400)) return; if (op[0] == 'B') z_unlink(p); else if (op[0] == 'C') z_mkdir(p); else { char r2[400]; const char *sl = strrchr(rel, '/'); snprintf(r2, 400, "%.*s%s%s", sl ? (int)(sl - rel) : 0, rel, sl ? "/" : "", extra); if (!resolve(s, r2, q, 400)) z_rename(p, q); } z_sync(); list_dir(); return; } snprintf(h, 600, "%s|%s|%s%s%s", op, s->id, rel, extra ? "|" : "", extra ? extra : ""); if (request(s->host, h, 0, 0, &r, err) < 0) { snprintf(msg, 300, "%s", err); return; } free(r); list_dir(); }
-static void send_msg(void) { if (!compose[0]) return; const char *it[MAXM + 1]; int map[MAXM], n = 0; it[n] = "Todos"; map[n++] = -1; for (int i = 0; i < R.nm; i++) if (strcmp(R.m[i].id, myid)) { map[n] = i; it[n++] = R.m[i].name; }
-    int sx, sy; zw_screen(W, W->w - 200, W->h - 110, &sx, &sy); int r = ui_menu(sx, sy, it, n); if (r < 0) return; int ok = 0, tot = 0; char t[420]; strcpy(t, compose); safe(t); char h[440]; snprintf(h, 440, "MENSAJE|%s", t);
-    for (int k = 0; k < n; k++) { if (k == 0 || (r && k != r)) continue; tot++; u8 *q; char err[120]; if (request(R.m[map[k]].id, h, 0, 0, &q, err) >= 0) { ok++; free(q); } }
-    snprintf(msg, 300, tr_("Mensaje entregado a %d de %d"), ok, tot); if (ok) { compose[0] = 0; ccur = 0; } char lg[80]; snprintf(lg, 80, "[prueba] red mensaje enviado %d/%d", ok, tot); z_log(lg); }
+/* ---- mensajes: lista de conversaciones a la izquierda y el dialogo a la derecha ---- */
+#define OLDC "*"   /* conversacion de solo lectura con los mensajes de la version anterior (RED-MENSAJES.TXT) */
+typedef struct { char conv[700], last[20]; int n; } conv_t; static conv_t CV[64]; static int ncv;
+static struct { char conv[700]; int seen; } SEEN[64]; static int nseen, seen_ready;
+static char cur_conv[700]; static int newconv, chat_off; static u8 pick[MAXM];
+static int seen_get(const char *c) { for (int i = 0; i < nseen; i++) if (!strcmp(SEEN[i].conv, c)) return SEEN[i].seen; return 0; }
+static void seen_set(const char *c, int n) { for (int i = 0; i < nseen; i++) if (!strcmp(SEEN[i].conv, c)) { SEEN[i].seen = n; return; } if (nseen < 64) { strncpy0(SEEN[nseen].conv, c, 700); SEEN[nseen++].seen = n; } }
+/* parte una linea de CHATS en sus 5 campos (sobre una copia) */
+static int chat_split(char *l, char **f) { int k = 0; f[k++] = l; for (char *p = l; *p && k < 5; p++) if (*p == '|') { *p = 0; f[k++] = p + 1; } return k == 5; }
+static void chats_load(void) { ncv = 0; char *t = z_readfile(CHATS, 0);
+    for (char *p = t; p && *p; ) { char *e = strchr(p, '\n'); if (e) *e = 0; char *f[5]; if (chat_split(p, f)) { int k = -1; for (int i = 0; i < ncv; i++) if (!strcmp(CV[i].conv, f[0])) k = i;
+            if (k < 0 && ncv < 64) { k = ncv++; strncpy0(CV[k].conv, f[0], 700); CV[k].n = 0; } if (k >= 0) { CV[k].n++; strncpy0(CV[k].last, f[1], 20); } } p = e ? e + 1 : 0; }
+    free(t); for (int i = 1; i < ncv; i++) for (int j = i; j > 0 && strcmp(CV[j - 1].last, CV[j].last) < 0; j--) { conv_t x = CV[j]; CV[j] = CV[j - 1]; CV[j - 1] = x; }   /* la mas reciente arriba */
+    char *o = z_readfile(INBOX, 0); if (o && *o && ncv < 64) { strcpy(CV[ncv].conv, OLDC); CV[ncv].last[0] = 0; CV[ncv].n = 0; ncv++; } free(o);
+    if (!seen_ready) { seen_ready = 1; for (int i = 0; i < ncv; i++) seen_set(CV[i].conv, CV[i].n); } }
+/* nombre de una conversacion: los demas equipos del grupo ("Todos" si son todos los de la red) */
+static void conv_title(const char *conv, char *o, int cap) { o[0] = 0; if (!strcmp(conv, OLDC)) { strncpy0(o, tr_("Mensajes anteriores"), cap); return; }
+    int n = 0, all = R.nm > 2; for (int i = 0; i < R.nm; i++) if (!conv_has(conv, R.m[i].id)) all = 0;
+    if (all) { strncpy0(o, tr_("Todos"), cap); return; }
+    for (const char *p = conv; *p; ) { char id[12]; int k = 0; while (*p && *p != ',' && k < 11) id[k++] = *p++; id[k] = 0; if (*p == ',') p++; if (!strcmp(id, myid)) continue;
+        if (n++) strncat0(o, ", ", cap); strncat0(o, mname(id), cap); } }
+static void chat_send(void) { if (!compose[0]) return; char conv[700];
+    if (newconv) { char ids[MAXM + 1][12]; int n = 0; strcpy(ids[n++], myid); for (int i = 0; i < R.nm; i++) if (pick[i] && strcmp(R.m[i].id, myid)) strcpy(ids[n++], R.m[i].id);
+        if (n < 2) { strcpy(msg, tr_("Marca al menos un equipo para empezar la conversación.")); return; } conv_make(ids, n, conv, 700); }
+    else if (cur_conv[0] && strcmp(cur_conv, OLDC)) strcpy(conv, cur_conv); else return;
+    char t[420]; strcpy(t, compose); safe(t); char h[1200]; snprintf(h, sizeof h, "CHAT|%s|%s", conv, t); int ok = 0, tot = 0;
+    for (const char *p = conv; *p; ) { char id[12]; int k = 0; while (*p && *p != ',' && k < 11) id[k++] = *p++; id[k] = 0; if (*p == ',') p++; if (!strcmp(id, myid)) continue;
+        tot++; u8 *q; char err[120]; if (request(id, h, 0, 0, &q, err) >= 0) { ok++; free(q); } }
+    char st[16]; snprintf(st, 16, "%d/%d", ok, tot); chat_store(conv, myid, t, st); strcpy(cur_conv, conv); newconv = 0; chat_off = 0; compose[0] = 0; ccur = 0;
+    chats_load(); for (int i = 0; i < ncv; i++) if (!strcmp(CV[i].conv, conv)) seen_set(conv, CV[i].n);
+    snprintf(msg, 300, tr_("Mensaje entregado a %d de %d"), ok, tot); char lg[80]; snprintf(lg, 80, "[prueba] red chat enviado %d/%d", ok, tot); z_log(lg); }
+/* cuantos bytes de s caben en una linea de maxc caracteres (corta por un espacio si puede) */
+static int wrap_n(const char *s, int maxc) { int i = 0, c = 0, sp = -1; while (s[i] && c < maxc) { if (s[i] == ' ') sp = i; u8 b = (u8)s[i]; i += b < 0x80 ? 1 : b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : 2; c++; }
+    if (!s[i]) return i; if (sp > 0) return sp + 1; return i ? i : 1; }
 
 /* zonas pulsables */
 typedef struct { int x, y, w, h, id; } hz_t; static hz_t HZ[300]; static int nhz;
 static void hz(int x, int y, int w, int h, int id) { if (nhz < 300) HZ[nhz++] = (hz_t){x, y, w, h, id}; }
 static int bw(const char *s) { return g_textw(tr(s)) + 22; }
 static void btn(int x, int y, const char *s, int st, int id) { ui_button(W, x, y, bw(s), 28, s, st); hz(x, y, bw(s), 28, id); }
-enum { B_TAB = 1, B_FIELD = 50, B_CREATE = 10, B_RENAME, B_LEAVE, B_DELNET, B_ADDSH, B_UP, B_UPLOAD, B_MKDIR, B_REFRESH, B_SEND, B_CLOSEB, B_INV = 100, B_DEL = 300, B_SH = 500, B_SHDEL = 700, B_ENT = 900, B_ADDP = 1400, B_PDEL = 1500 };
+enum { B_TAB = 1, B_FIELD = 50, B_CREATE = 10, B_RENAME, B_LEAVE, B_DELNET, B_ADDSH, B_UP, B_UPLOAD, B_MKDIR, B_REFRESH, B_SEND, B_CLOSEB, B_NEWC, B_ALL, B_INV = 100, B_DEL = 300, B_SH = 500, B_SHDEL = 700, B_ENT = 900, B_ADDP = 1400, B_PDEL = 1500, B_CONV = 1600, B_PICK = 1700 };
+/* pestana Mensajes */
+static void draw_chat(int X, int y, int w) { char b[300]; chats_load(); int H = W->h - 22, LW = 250, cx = X + LW + 16, cw = w - LW - 16; char lg[400]; int lk = 0, sx, sy;
+    btn(X, y, "Nueva conversación", newconv ? 2 : 0, B_NEWC); zw_screen(W, X + 20, y + 14, &sx, &sy); lk += snprintf(lg + lk, 400 - lk, "[prueba] red chat (nueva en %d,%d)", sx, sy); y += 40;
+    g_rect(W, X + LW + 6, 50, 1, H - 56, UI_LINE);
+    if (!ncv) g_text(W, X, y, tr_("Ninguna todavía."), UI_MUTED);
+    for (int i = 0; i < ncv && y < H - 50; i++) { conv_t *c = &CV[i]; int on = !newconv && !strcmp(c->conv, cur_conv), unread = c->n - seen_get(c->conv); if (on) { seen_set(c->conv, c->n); unread = 0; }
+        g_rect(W, X, y, LW, 44, on ? 0xDBEAFE : i % 2 ? UI_WHITE : UI_BG); char t[200]; conv_title(c->conv, t, 200); char t2[32]; snprintf(t2, 32, "%.*s", LW / 8 - 2, t); if (unread > 0) g_textb(W, X + 8, y + 5, t2, UI_TEXT); else g_text(W, X + 8, y + 5, t2, UI_TEXT);
+        if (c->last[0]) { snprintf(b, 300, "%.2s/%.2s %s", c->last + 8, c->last + 5, c->last + 11); g_text(W, X + 8, y + 24, b, UI_MUTED); }
+        if (unread > 0) { snprintf(b, 300, "%d", unread); g_circle(W, X + LW - 18, y + 22, 10, 0x2563EB, 1); g_text(W, X + LW - 18 - g_textw(b) / 2, y + 14, b, UI_WHITE); }
+        hz(X, y, LW, 44, B_CONV + i); if (i == 0) { zw_screen(W, X + 40, y + 22, &sx, &sy); lk += snprintf(lg + lk, 400 - lk, " (conv0 en %d,%d)", sx, sy); } y += 46; }
+    int fy = H - 40, top = 56;   /* campo de escribir abajo; arriba, la cabecera */
+    if (newconv) { g_textb(W, cx, top, tr_("Nueva conversación: marca con quién quieres hablar"), UI_TEXT); int yy = top + 30, n = 0;
+        for (int i = 0; i < R.nm && yy < fy - 40; i++) { if (!strcmp(R.m[i].id, myid)) continue; g_frame(W, cx, yy + 2, 14, 14, UI_TEXT); if (pick[i]) g_rect(W, cx + 3, yy + 5, 8, 8, UI_ACC);
+            g_circle(W, cx + 30, yy + 9, 5, online(R.m[i].id) ? 0x16A34A : 0x9CA3AF, 1); g_text(W, cx + 42, yy + 2, R.m[i].name, UI_TEXT); hz(cx, yy, cw, 22, B_PICK + i);
+            if (!n++) { zw_screen(W, cx + 7, yy + 9, &sx, &sy); lk += snprintf(lg + lk, 400 - lk, " (equipo0 en %d,%d)", sx, sy); } yy += 28; }
+        if (!n) g_text(W, cx, yy, tr_("No hay más equipos en la red."), UI_MUTED); else if (n > 1) btn(cx, yy + 6, "Todos", 0, B_ALL);
+        g_text(W, cx, fy - 24, tr_("El primer mensaje decide el grupo: las respuestas llegan a todos ellos."), UI_MUTED); }
+    else if (!cur_conv[0]) g_text(W, cx, top, tr_("Elige una conversación o empieza una nueva."), UI_MUTED);
+    else if (!strcmp(cur_conv, OLDC)) { g_textb(W, cx, top, tr_("Mensajes anteriores"), UI_TEXT); int yy = top + 28; char *t = z_readfile(INBOX, 0);
+        for (char *p = t; p && *p && yy < H - 30; ) { char *e = strchr(p, '\n'); if (e) *e = 0; char *f[3]; char l[700]; strncpy0(l, p, 700); if (split(l, f, 3) == 3) { snprintf(b, 300, "%s  %s:", f[0], f[1]); g_textb(W, cx, yy, b, UI_TEXT); yy += 18; g_text(W, cx + 16, yy, f[2], UI_TEXT); yy += 26; } p = e ? e + 1 : 0; } free(t); }
+    else { char t[200]; conv_title(cur_conv, t, 200); g_textb(W, cx, top, t, UI_TEXT);
+        /* los mensajes de la conversacion, de abajo arriba: cada burbuja con sus lineas */
+        char *all = z_readfile(CHATS, 0); char *L[400]; int nl = 0; for (char *p = all; p && *p; ) { char *e = strchr(p, '\n'); if (e) *e = 0; int pl = strlen(cur_conv); if (!strncmp(p, cur_conv, pl) && p[pl] == '|' && nl < 400) L[nl++] = p; p = e ? e + 1 : 0; }
+        int maxc = (cw * 2 / 3 - 20) / 8; if (maxc < 10) maxc = 10; int yb = fy - 12 + chat_off, area0 = top + 26; zw_clip(W, cx, area0, cw, fy - 8 - area0);
+        for (int i = nl - 1; i >= 0 && yb > area0; i--) { char l[800]; strncpy0(l, L[i], 800); char *f[5]; if (!chat_split(l, f)) continue; int mine = !strcmp(f[2], myid), lines = 0, mw = 0;
+            for (const char *q = f[4]; *q; ) { int k = wrap_n(q, maxc); int cc = 0; for (int j = 0; j < k; j++) if (((u8)q[j] & 0xC0) != 0x80) cc++; if (cc > mw) mw = cc; q += k; lines++; } if (!lines) lines = 1;
+            char hd[120]; if (mine) snprintf(hd, 120, "%.2s/%.2s %s  %s %s", f[1] + 8, f[1] + 5, f[1] + 11, tr_("entregado"), f[3]); else snprintf(hd, 120, "%s  %.2s/%.2s %s", mname(f[2]), f[1] + 8, f[1] + 5, f[1] + 11);
+            int bwid = MAX(mw * 8, g_textw(hd)) + 20, bh = lines * 18 + 30; yb -= bh; int bx = mine ? cx + cw - bwid - 4 : cx + 4;
+            g_round(W, bx, yb, bwid, bh - 6, 8, mine ? 0xDCFCE7 : 0xF3F4F6); g_text(W, bx + 10, yb + 4, hd, UI_MUTED); int ly = yb + 22;
+            for (const char *q = f[4]; *q; ) { int k = wrap_n(q, maxc); char seg[400]; int kk = MIN(k, 399); memcpy(seg, q, kk); seg[kk] = 0; g_text(W, bx + 10, ly, seg, UI_TEXT); ly += 18; q += k; } }
+        zw_noclip(W); if (chat_off > 0 && yb > area0) chat_off = MAX(0, chat_off - (yb - area0)); free(all); }
+    if (newconv || (cur_conv[0] && strcmp(cur_conv, OLDC))) { int fw = cw - bw("Enviar") - 10; ui_input(W, cx, fy, fw, 28, compose, ccur, cfoc); hz(cx, fy, fw, 28, B_FIELD); btn(cx + fw + 10, fy, "Enviar", 2, B_SEND);
+        zw_screen(W, cx + 20, fy + 14, &sx, &sy); lk += snprintf(lg + lk, 400 - lk, " (campo en %d,%d)", sx, sy); }
+    static char lastlg[400]; if (strcmp(lg, lastlg)) { strcpy(lastlg, lg); z_log(lg); } }
 static void draw(void) { nhz = 0; g_clear(W, UI_WHITE); g_rect(W, 0, 0, W->w, 40, UI_PANEL); static const char *T[] = {"Equipos", "Carpetas", "Mensajes", "Impresoras"}; int x = 10;
-    for (int i = 0; i < 4; i++) { ui_button(W, x, 6, bw(T[i]), 28, T[i], tab == i ? 2 : 0); hz(x, 6, bw(T[i]), 28, B_TAB + i); x += bw(T[i]) + 6; }
+    if (in_net()) chats_load(); int unread = 0; for (int i = 0; i < ncv; i++) if (tab != 2 || newconv || strcmp(CV[i].conv, cur_conv)) unread += MAX(0, CV[i].n - seen_get(CV[i].conv));
+    for (int i = 0; i < 4; i++) { ui_button(W, x, 6, bw(T[i]), 28, T[i], tab == i ? 2 : 0); hz(x, 6, bw(T[i]), 28, B_TAB + i);
+        if (i == 2 && unread > 0) { char u[12]; snprintf(u, 12, "%d", unread); g_circle(W, x + bw(T[i]) - 2, 10, 8, 0xDC2626, 1); g_text(W, x + bw(T[i]) - 2 - g_textw(u) / 2, 2, u, UI_WHITE); } x += bw(T[i]) + 6; }
     char b[300]; int y = 56, X = 20, w = W->w - 40; zs_area(W, 0, 40, W->w, W->h - 62, 0);
     if (tab == 0) { g_text2(W, X, y, in_net() ? R.netname : tr_("Sin red local"), UI_TEXT, 2); y += 40;
         snprintf(b, 300, "%s: %s   (%s %s)", tr_("Este equipo"), myname, tr_("id"), myid); g_text(W, X, y, b, UI_MUTED); if (!in_net()) btn(X + w - bw("Cambiar nombre"), y - 6, "Cambiar nombre", 0, B_RENAME); y += 26;
@@ -316,13 +398,14 @@ static void draw(void) { nhz = 0; g_clear(W, UI_WHITE); g_rect(W, 0, 0, W->w, 40
             if (s->rw) { btn(bx, y, "Subir un archivo...", 0, B_UPLOAD); bx += bw("Subir un archivo...") + 6; btn(bx, y, "Nueva carpeta", 0, B_MKDIR); } y += 38; int rows = (W->h - 22 - y) / 24; etop = MAX(0, MIN(etop, nent - rows));
             for (int i = 0; i < rows && etop + i < nent; i++) { ent_t *e = &E[etop + i]; char t[260]; if (e->d == 'D') snprintf(t, 260, "[%s]  %s", tr_("carpeta"), e->name); else snprintf(t, 260, "%s   (%lu KB)", e->name, (unsigned long)((e->size + 1023) / 1024)); g_text(W, X + 6, y + 4, t, e->d == 'D' ? UI_ACC : UI_TEXT); hz(X, y, w, 24, B_ENT + etop + i); y += 24; }
             if (!nent) g_text(W, X, y, tr_("Carpeta vacía."), UI_MUTED); } }
-    else { if (!in_net()) g_text(W, X, y, tr_("Primero une este equipo a una red local (pestaña Equipos)."), UI_MUTED);
-        else { g_textb(W, X, y, tr_("Escribe un mensaje para los equipos de la red"), UI_TEXT); y += 24; ui_input(W, X, y, w - bw("Enviar a...") - 10, 28, compose, ccur, cfoc); hz(X, y, w - bw("Enviar a...") - 10, 28, B_FIELD); btn(X + w - bw("Enviar a..."), y, "Enviar a...", 2, B_SEND); y += 44;
-            g_textb(W, X, y, tr_("Mensajes recibidos"), UI_TEXT); y += 24; char *t = z_readfile(INBOX, 0); int k = 0; for (char *p = t; p && *p && y < W->h - 40; k++) { char *e = strchr(p, '\n'); if (e) *e = 0; char *f[3]; char l[700]; strncpy0(l, p, 700); if (split(l, f, 3) == 3) { snprintf(b, 300, "%s  %s:", f[0], f[1]); g_textb(W, X, y, b, UI_TEXT); y += 18; g_text(W, X + 16, y, f[2], UI_TEXT); y += 26; } p = e ? e + 1 : 0; }
-            if (!k) g_text(W, X, y, tr_("Ninguno."), UI_MUTED); free(t); } }
+    else { if (!in_net()) g_text(W, X, y, tr_("Primero une este equipo a una red local (pestaña Equipos)."), UI_MUTED); else draw_chat(X, y - 6, w); }
     zs_stop(W); zs_show(W); g_rect(W, 0, W->h - 22, W->w, 22, UI_PANEL); g_text(W, 8, W->h - 19, msg, UI_TEXT); zw_present(W); }
 static void click(zevent *e) { for (int i = nhz - 1; i >= 0; i--) { hz_t *h = &HZ[i]; if (e->x < h->x || e->y < h->y || e->x >= h->x + h->w || e->y >= h->y + h->h) continue; int id = h->id; msg[0] = 0;
         if (id >= B_TAB && id < B_TAB + 4) { tab = id - B_TAB; cfoc = tab == 2; }
+        else if (id == B_NEWC) { newconv = 1; memset(pick, 0, sizeof pick); cfoc = 1; }
+        else if (id == B_ALL) { for (int k = 0; k < R.nm; k++) pick[k] = 1; }
+        else if (id >= B_PICK) { int k = id - B_PICK; if (k < MAXM) pick[k] = !pick[k]; }
+        else if (id >= B_CONV) { int k = id - B_CONV; if (k < ncv) { strcpy(cur_conv, CV[k].conv); newconv = 0; chat_off = 0; cfoc = 1; seen_set(CV[k].conv, CV[k].n); } }
         else if (id == B_CREATE) create_net(); else if (id == B_RENAME) { char n[32]; strcpy(n, myname); if (ui_prompt("Nombre del equipo", "Nombre de este equipo en la red:", n, 30) && n[0]) { safe(n); strcpy(myname, n); ident_save(); } }
         else if (id == B_LEAVE) { if (ui_confirm("Salir de la red", "¿Sacar este equipo de la red local? Necesitará otra invitación para volver.")) { z_unlink(CFG); memset(&R, 0, sizeof R); z_sync(); strcpy(msg, tr_("Este equipo ya no está en la red")); } }
         else if (id == B_DELNET) { if (ui_confirm("Borrar la red", "¿Borrar esta red? Los terminales dejarán de poder usarla.")) { char ids[MAXM][12]; int n = R.nm; for (int k = 0; k < n; k++) strcpy(ids[k], R.m[k].id); R.nm = 1; strcpy(R.m[0].id, myid); strcpy(R.m[0].name, myname); R.ns = 0; push_to(ids, n); z_unlink(CFG); memset(&R, 0, sizeof R); z_sync(); strcpy(msg, tr_("Red borrada")); } }
@@ -338,7 +421,7 @@ static void click(zevent *e) { for (int i = nhz - 1; i >= 0; i--) { hz_t *h = &H
         else if (id == B_ADDSH) add_share(); else if (id == B_CLOSEB) { sel_sh = -1; nent = 0; } else if (id == B_REFRESH) list_dir();
         else if (id == B_UP) { char *s = strrchr(cwd, '/'); if (s) *s = 0; else cwd[0] = 0; list_dir(); } else if (id == B_UPLOAD) upload();
         else if (id == B_MKDIR) { char n[120] = ""; if (ui_prompt("Nueva carpeta", "Nombre:", n, 110) && n[0] && !strchr(n, '/')) { char rel[400]; snprintf(rel, 400, "%s%s%s", cwd, cwd[0] ? "/" : "", n); simple("CARPETA", rel, 0); } }
-        else if (id == B_SEND) send_msg(); else if (id == B_FIELD) { cfoc = 1; ui_input_click(W, 0, compose, &ccur); }
+        else if (id == B_SEND) chat_send(); else if (id == B_FIELD) { cfoc = 1; ui_input_click(W, e, compose, &ccur); }
         break; } }
 int main(const char *a) {
     if (!strcmp(a, "--servicio")) return service();
@@ -349,7 +432,7 @@ int main(const char *a) {
     for (;;) { int g = z_event(&e, 500); poll_udp(); u64 now = z_ms(); if (now - last_busca > 5000) { busca(); cfg_load(); } if (!g) { draw(); continue; } if (e.type == EV_REDRAW) { draw(); continue; } if (e.win != (u32)W->id) continue;
         if (zs_event(W, &e)) { draw(); continue; }
         if (e.type == EV_CLOSE) return 0; if (e.type == EV_RESIZE) { zw_resized(W, e.x, e.y); draw(); continue; }
-        if (e.type == EV_WHEEL) { etop -= (int)e.key * 3; draw(); continue; }
-        if (e.type == EV_KEY) { if (tab == 2 && cfoc) { if (e.ch == '\n') send_msg(); else ui_input_key(compose, 380, &ccur, &e); } else if (e.key == K_F5) { busca(); if (sel_sh >= 0) list_dir(); } draw(); continue; }
+        if (e.type == EV_WHEEL) { if (tab == 2) chat_off = MAX(0, chat_off + (int)e.key * 54); else etop -= (int)e.key * 3; draw(); continue; }
+        if (e.type == EV_KEY) { if (tab == 2 && cfoc) { if (e.ch == '\n') chat_send(); else ui_input_key(compose, 380, &ccur, &e); } else if (e.key == K_F5) { busca(); if (sel_sh >= 0) list_dir(); } draw(); continue; }
         if (e.type == EV_DOWN) { if (e.btn & 2 && tab == 2 && cfoc) { ui_input_menu(W, compose, 380, &ccur, &e); draw(); continue; } click(&e); draw(); } }
 }

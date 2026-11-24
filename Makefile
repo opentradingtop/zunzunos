@@ -39,7 +39,7 @@ $(B)/BOOTX64.EFI: boot/uefi.c | $(B)/k
 
 $(B)/k/start.o: kernel/start.S | $(B)/k
 	$(CC) -target x86_64-unknown-none-elf -c $< -o $@
-$(B)/k/%.o: kernel/%.c kernel/kernel.h | $(B)/k
+$(B)/k/%.o: kernel/%.c kernel/kernel.h user/lib/version.h | $(B)/k
 	$(CC) $(KCFLAGS) -c $< -o $@
 $(B)/KERNEL.BIN: $(KOBJ) kernel/kernel.ld
 	$(LD) -T kernel/kernel.ld --oformat binary -z noexecstack -o $@ $(KOBJ)
@@ -49,7 +49,7 @@ $(B)/u/crt0.o: user/lib/crt0.S | $(B)/u
 $(B)/u/i18n.o: user/lib/i18n_tab.h
 $(B)/u/%.o: user/lib/%.c user/lib/z.h | $(B)/u
 	$(CC) $(UCFLAGS) -c $< -o $@
-$(B)/a/%.o: user/apps/%.c user/lib/z.h | $(B)/a
+$(B)/a/%.o: user/apps/%.c user/lib/z.h user/lib/version.h | $(B)/a
 	$(CC) $(UCFLAGS) -c $< -o $@
 WSRC := html calc text
 WOBJ := $(patsubst %,$(B)/w/%.o,$(WSRC))

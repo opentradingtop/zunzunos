@@ -1,7 +1,6 @@
 Aceptar	-	OK
 Cancelar	-	Cancel
 Acerca de ZunzunOS	Acerca de ZunzúnOS	About ZunzúnOS
-Versión 2.1	-	Version 2.1
 Un OS 100% independiente, libre y realmente privado.	-	A 100% independent, free and truly private OS.
 Escrito desde cero: kernel, controladores y programas propios.	-	Written from scratch: its own kernel, drivers and programs.
 Sin cuentas, sin nube y sin telemetría.	-	No accounts, no cloud and no telemetry.
@@ -1424,3 +1423,25 @@ Visitas borradas del historial	-	Visits removed from history
 Borrar las visitas marcadas	-	Delete ticked visits
 Marca las visitas que quieras quitar y pulsa el botón.	-	Tick the visits you want to remove and press the button.
 Se muestran las 250 visitas más recientes.	-	Showing the 250 most recent visits.
+Mensajes anteriores	-	Earlier messages
+Marca al menos un equipo para empezar la conversación.	-	Tick at least one computer to start the conversation.
+Nueva conversación	-	New conversation
+Nueva conversación: marca con quién quieres hablar	-	New conversation: tick who you want to talk to
+No hay más equipos en la red.	-	There are no other computers on the network.
+El primer mensaje decide el grupo: las respuestas llegan a todos ellos.	-	The first message sets the group: replies reach all of them.
+Elige una conversación o empieza una nueva.	-	Choose a conversation or start a new one.
+entregado	-	delivered
+Guardar borrador	-	Save draft
+No se pudo guardar el borrador	-	Could not save the draft
+Borrador guardado en Borradores	-	Draft saved in Drafts
+Borrador	-	Draft
+¿Guardar este mensaje en Borradores?	-	Save this message in Drafts?
+Borradores	-	Drafts
+Enviados (confirmados por el servidor)	-	Sent (confirmed by the server)
+Entrada	-	Inbox
+Enviados	-	Sent
+(sin destinatario)	-	(no recipient)
+No hay borradores.	-	There are no drafts.
+Todavía no has enviado mensajes desde este equipo.	-	You have not sent any messages from this computer yet.
+¿Borrar este borrador?	-	Delete this draft?
+¿Borrar este mensaje de Enviados? Solo se borra la copia de este equipo.	-	Delete this message from Sent? Only this computer's copy is deleted.

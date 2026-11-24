@@ -40,9 +40,9 @@ if otra:
     SB += M('redlocal') + ['wait:red local abierta', 'sleep:1', at(106, 195), 'sleep:0.8', 'key:ctrl-x', 'type:RedB\n', 'wait:red creada', 'sleep:1', 'key:alt-f4', 'wait:red invitacion recibida', 'sleep:1.5', 'shot:b-otra', 'click:700,480', 'wait:red unido', 'sleep:2']
     SA += [at(106, 195), 'sleep:0.8', 'key:ctrl-x', 'type:Casa\n', 'wait:red creada', 'wait:red encontrado', 'sleep:12', 'shot:a-otra', at(825, 320), 'wait:red invitado', 'sleep:2']
 if router:
-    SA += [at(106, 195), 'sleep:0.8', 'key:ctrl-x', 'type:Casa\n', 'wait:red creada', 'wait:red encontrado', 'sleep:7', 'shot:a-creada', at(825, 320), 'wait:red codigo', 'wait:red invitado', 'sleep:1', at(229, 20), 'sleep:0.8', at(300, 94), 'type:Hola\n', 'sleep:0.8', menu_item(720, 530, 0), 'wait:red mensaje enviado 1/1', 'sleep:0.5',
+    SA += [at(106, 195), 'sleep:0.8', 'key:ctrl-x', 'type:Casa\n', 'wait:red creada', 'wait:red encontrado', 'sleep:7', 'shot:a-creada', at(825, 320), 'wait:red codigo', 'wait:red invitado', 'sleep:1', at(229, 20), 'sleep:0.8', 'clicklog:nueva en (\\d+),(\\d+)', 'sleep:0.8', 'clicklog:equipo0 en (\\d+),(\\d+)', 'sleep:0.5', 'clicklog:campo en (\\d+),(\\d+)', 'sleep:0.3', 'type:Hola\n', 'wait:red chat enviado 1/1', 'sleep:0.5',
            'hmp:set_link n1 off', 'sleep:3', 'hmp:set_link n1 on', 'wait:cable conectado de nuevo', 'wait:sin DHCP, direccion local', 'sleep:1']
-    SB += ['wait:red invitacion recibida', 'sleep:1.5', 'click:700,480', 'wait:red unido', 'wait:red MENSAJE de', 'sleep:1']
+    SB += ['wait:red invitacion recibida', 'sleep:1.5', 'click:700,480', 'wait:red unido', 'wait:red CHAT de', 'sleep:1']
 if not explore and not router and not otra:
     # A crea la red "Casa" e invita a B
     SA += [at(106, 195), 'sleep:0.8', 'key:ctrl-x', 'type:Casa\n', 'wait:red creada', 'wait:red encontrado', 'sleep:1', 'shot:a-creada', at(825, 320), 'wait:red codigo', 'sleep:1', 'shot:a-codigo', 'wait:red invitado', 'sleep:2', 'shot:a-invitado']
@@ -53,19 +53,22 @@ if not explore and not router and not otra:
            at(300, 106), 'wait:red lista Fotos', 'sleep:0.5', at(430, 96), 'sleep:0.8', 'type:nota.txt\n', 'wait:red subido nota.txt', 'wait:red lista Fotos/: 1', 'sleep:0.5', 'shot:a-subido',
            at(200, 132), 'sleep:0.8', menu_item(200, 132, 1), 'wait:red descargado /sys/DOCS/Red/nota.txt', 'sleep:0.5']
     SB += ['wait:red configuracion', 'wait:red ESCRIBE de', 'sleep:1']
-    # mensaje de A a todos
-    SA += [at(229, 20), 'sleep:0.8', at(300, 94), 'type:Hola desde el administrador\n', 'sleep:0.8', menu_item(720, 530, 0), 'wait:red mensaje enviado 1/1', 'sleep:0.5']
-    SB += ['wait:red MENSAJE de', 'sleep:1', 'shot:b-mensaje']
+    # A empieza una conversacion con B
+    SA += [at(229, 20), 'sleep:0.8', 'clicklog:nueva en (\\d+),(\\d+)', 'sleep:0.8', 'clicklog:equipo0 en (\\d+),(\\d+)', 'sleep:0.5', 'clicklog:campo en (\\d+),(\\d+)', 'sleep:0.3', 'type:Hola desde el administrador\n', 'wait:red chat enviado 1/1', 'sleep:0.5', 'shot:a-chat']
+    SB += ['wait:red CHAT de', 'sleep:1', 'shot:b-mensaje']
     # B abre Red local y ve la carpeta que tiene compartida (sin red, es suya)
-    SB += M('redlocal') + ['wait:red local abierta', 'sleep:1', at(137, 20), 'sleep:0.8', at(300, 106), 'wait:red lista Fotos/: 1', 'sleep:0.5', 'shot:b-carpeta', 'key:alt-f4', 'sleep:1']
+    SB += M('redlocal') + ['wait:red local abierta', 'sleep:1', at(137, 20), 'sleep:0.8', at(300, 106), 'wait:red lista Fotos/: 1', 'sleep:0.5', 'shot:b-carpeta',
+           # B contesta en la misma conversacion: la respuesta va al grupo del primer mensaje
+           at(229, 20), 'sleep:1', 'clicklog:conv0 en (\\d+),(\\d+)', 'sleep:0.8', 'clicklog:campo en (\\d+),(\\d+)', 'sleep:0.3', 'type:Recibido, gracias\n', 'wait:red chat enviado 1/1', 'sleep:1', 'shot:b-chat', 'key:alt-f4', 'sleep:1']
     # A saca a B de la red
-    SA += [at(329, 20), 'sleep:1', at(797, 64), 'sleep:1', menu_item(200, 120, 0), 'wait:red impresora compartida', 'sleep:1', 'shot:a-impresoras', 'wait:red impresion de', 'sleep:2']
+    SA += [at(329, 20), 'sleep:1', at(797, 64), 'sleep:1', menu_item(200, 120, 0), 'wait:red impresora compartida', 'sleep:1', 'shot:a-impresoras', 'wait:red impresion de', 'sleep:2',
+           at(229, 20), 'wait:red CHAT de', 'sleep:1', 'clicklog:conv0 en (\\d+),(\\d+)', 'sleep:1', 'shot:a-dialogo']
     SA += ['sleep:8', at(80, 20), 'sleep:1', at(829, 250), 'sleep:0.8', 'key:ret', 'sleep:3', 'shot:a-sacado']
     SB += ['wait:(1 impresoras)', 'sleep:1'] + M('agenda') + ['sleep:1', 'key:ctrl-p', 'wait:dialogo imprimir abierto', 'sleep:1.2', 'shot:b-dialogo', 'click:955,625', 'wait:red trabajo enviado', 'sleep:1', 'key:alt-f4', 'sleep:0.5']
     SB += ['wait:red sacado de la red', 'sleep:1']
 res = {}
 def run(name, steps, img, mac, net, port):
-    res[name] = subprocess.call(['python3', '-I', 'tools/vm.py', '--mode', 'bios', '--no-disk', '--abs', '--out', os.path.join(out, name), '--timeout', '120', '--port', str(port), '--qemu', q(img, mac, net)] + steps, stdout=open(os.path.join(out, name + '.txt'), 'w'))
+    res[name] = subprocess.call(['python3', '-I', 'tools/vm.py', '--mode', 'bios', '--no-disk', '--abs', '--out', os.path.join(out, name), '--timeout', '150', '--port', str(port), '--qemu', q(img, mac, net)] + steps, stdout=open(os.path.join(out, name + '.txt'), 'w'))
 rt = None
 if router: rt = subprocess.Popen(['python3', '-I', 'tools/fake_router.py', '7470', '52:54:00:aa:00:01', out, '7471', '7472']); time.sleep(1)
 ta = threading.Thread(target=run, args=('a', SA, A, '52:54:00:aa:00:01', 'udp=127.0.0.1:7470,localaddr=127.0.0.1:7471' if router else 'listen=127.0.0.1:7461', 4721)); ta.start(); time.sleep(1.5)
@@ -74,7 +77,7 @@ ta.join(); tb.join()
 if rt: rt.kill()
 la = open(os.path.join(out, 'a', 'serial-bios.log'), errors='replace').read(); lb = open(os.path.join(out, 'b', 'serial-bios.log'), errors='replace').read()
 ok = res.get('a') == 0 and res.get('b') == 0
-CHK = ((la, ('red creada', 'red invitado')), (lb, ('red creada', 'red invitacion recibida', 'red unido'))) if otra else ((la, ('red: IP 192.168.50.20', 'red creada', 'red invitado', 'red mensaje enviado 1/1', 'cable conectado de nuevo', 'sin DHCP, direccion local')), (lb, ('sin DHCP, direccion local', 'red unido', 'red MENSAJE de'))) if router else ((la, ('red creada', 'red codigo', 'red invitado', 'red carpeta Fotos', 'red subido nota.txt', 'red descargado /sys/DOCS/Red/nota.txt', 'red mensaje enviado 1/1', 'red impresora compartida', 'red impresion de')), (lb, ('red invitacion recibida', 'red unido', 'red MENSAJE de', 'red lista Fotos/: 1', 'red trabajo enviado', 'red sacado de la red')))
+CHK = ((la, ('red creada', 'red invitado')), (lb, ('red creada', 'red invitacion recibida', 'red unido'))) if otra else ((la, ('red: IP 192.168.50.20', 'red creada', 'red invitado', 'red chat enviado 1/1', 'cable conectado de nuevo', 'sin DHCP, direccion local')), (lb, ('sin DHCP, direccion local', 'red unido', 'red CHAT de'))) if router else ((la, ('red creada', 'red codigo', 'red invitado', 'red carpeta Fotos', 'red subido nota.txt', 'red descargado /sys/DOCS/Red/nota.txt', 'red chat enviado 1/1', 'red CHAT de', 'red impresora compartida', 'red impresion de')), (lb, ('red invitacion recibida', 'red unido', 'red CHAT de', 'red chat enviado 1/1', 'red lista Fotos/: 1', 'red trabajo enviado', 'red sacado de la red')))
 for log, what in CHK:
     for w in what:
         if w not in log: print('FALLO: falta', repr(w)); ok = False

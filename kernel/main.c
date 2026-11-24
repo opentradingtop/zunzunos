@@ -1,4 +1,5 @@
 #include "kernel.h"
+#include "../user/lib/version.h"
 bootinfo_t bi;
 
 void rtc_read(u32 *o) {
@@ -30,7 +31,7 @@ void rtc_write(const u32 *t) {
 void kmain(bootinfo_t *p) {
     serial_init();
     memcpy(&bi, p, sizeof bi);
-    kprintf("\nZunzunOS arrancando (%s)\n", bi.boot_mode == 2 ? "UEFI" : "BIOS");
+    kprintf("\nZunzunOS %s arrancando (%s)\n", ZZ_VERSION, bi.boot_mode == 2 ? "UEFI" : "BIOS");
     if (bi.magic != 0x31544F424F4E555AUL) panic("bootinfo no valido");
     cpu_init(); mm_init(); acpi_init(); timer_init(); sched_init();
     __asm__("sti");
