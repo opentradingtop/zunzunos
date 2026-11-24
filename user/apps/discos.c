@@ -25,6 +25,6 @@ static void format_(void) {
 int main(const char *a) {
     W = zw_new("Discos", -1, 0, 680, 520, WF_DECOR); load(); draw(); zevent e; int X = LW + 14;
     for (;;) { if (!z_event(&e, 3000)) { load(); draw(); continue; } if (e.type == EV_REDRAW) { draw(); continue; } if (e.win != (u32)W->id) continue; if (e.type == EV_CLOSE) return 0;
-        if (e.type == EV_DOWN) { lfoc = 0; if (e.x < LW) { int i = (e.y - 34) / 44; if (e.y >= 34 && i < nd) { sd = i; sp = -1; load(); } } else if (e.y >= 32 && e.y < 58) sp = -1; else if (e.y >= 62 && e.y < 62 + np * 30) sp = (e.y - 62) / 30; else if (e.y >= 262 && e.y < 382) { if (e.x < X + 76) fs = (e.y - 262) / 30; } else if (e.y >= 388 && e.y < 414) lfoc = 1; else if (e.y >= 426 && e.y < 456 && e.x < X + 130) format_(); draw(); }
+        if (e.type == EV_DOWN) { lfoc = 0; if (e.x < LW) { int i = (e.y - 34) / 44; if (e.y >= 34 && i < nd) { sd = i; sp = -1; load(); } } else if (e.y >= 32 && e.y < 58) sp = -1; else if (e.y >= 62 && e.y < 62 + np * 30) sp = (e.y - 62) / 30; else if (e.y >= 262 && e.y < 382) { if (e.x < X + 76) fs = (e.y - 262) / 30; } else if (e.y >= 388 && e.y < 414) { lfoc = 1; ui_input_click(W, &e, label, &lcur); } else if (e.y >= 426 && e.y < 456 && e.x < X + 130) format_(); draw(); }
         else if (e.type == EV_KEY && lfoc) { ui_input_key(label, 12, &lcur, &e); draw(); } }
 }

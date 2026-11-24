@@ -5,9 +5,13 @@ static struct { int id; char key[96]; } WT[16];
 void z_title_key(int id, const char *k) { int f = -1; for (int i = 0; i < 16; i++) if (WT[i].id == id || (!WT[i].id && f < 0)) { if (WT[i].id == id) { f = i; break; } f = i; } if (f >= 0) { WT[f].id = id; strncpy0(WT[f].key, k, 96); } }
 static zevent jq[16]; static int jqn; static u32 jbtn; static int jdx, jdy, jmap[10] = {-1};
 static void jpush(u32 key, u32 ch, int down) { if (jqn < 16) { zevent e = {down ? EV_KEY : EV_KEYUP, 0, 0, 0, key, down ? ch : 0, 0, 0}; jq[jqn++] = e; } }
+int z_event0(zevent *e, long ms);
 static void jload(void) { static const char *K[] = {"mando_a", "mando_b", "mando_x", "mando_y", "mando_select", "mando_start", "mando_l", "mando_r"}; static const int D[] = {0, 1, 2, 3, 8, 9, 4, 5}; for (int i = 0; i < 8; i++) jmap[i] = z_cfg_get(K[i], D[i]); }
 static void joy_keys(zevent *e) { if (jmap[0] < 0) jload(); int dx = e->x, dy = e->y; u32 b = e->btn; if (dx != jdx) { if (jdx) jpush(jdx < 0 ? 0x50 : 0x4F, 0, 0); if (dx) jpush(dx < 0 ? 0x50 : 0x4F, 0, 1); } if (dy != jdy) { if (jdy) jpush(jdy < 0 ? 0x52 : 0x51, 0, 0); if (dy) jpush(dy < 0 ? 0x52 : 0x51, 0, 1); } static const u32 KK[8] = {0x2C, 0x28, 0x52, 0x1B, 0x29, 0x13, 0x4B, 0x4E}, CH[8] = {' ', '\n', 0, 'x', 27, 'p', 0, 0}; for (int i = 0; i < 8; i++) { int bit = jmap[i]; if (bit < 0 || bit > 31) continue; int was = jbtn >> bit & 1, now = b >> bit & 1; if (was != now) jpush(KK[i], CH[i], now); } jbtn = b; jdx = dx; jdy = dy; }
+zevent z_last_down;   /* ultima pulsacion del raton (ui_input_click la usa si el programa no le pasa el evento) */
 int z_event(zevent *e, long ms) {
+    int r0 = z_event0(e, ms); if (r0 && e->type == EV_DOWN) z_last_down = *e; return r0; }
+int z_event0(zevent *e, long ms) {
     for (;;) {
         if (jqn) { *e = jq[0]; memmove(jq, jq + 1, --jqn * sizeof *jq); e->win = WT[0].id; return 1; }
         int r = z_event_raw(e, ms); if (!r) return 0;

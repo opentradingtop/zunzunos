@@ -51,5 +51,6 @@ ok "audio: codificador y decodificador MP3 propios (en el Mac, contra macOS)"; t
 ok "audio: grabar en MP3 estereo, convertir y tocar MP3"; python3 -I tools/audio_test.py "$S/r-aud" 2>&1 | filt
 ok "javascript: motor Colibri (igual que Node)"; python3 -I tools/js_test.py "$S/r-js" 2>&1 | filt
 ok "navegador JS: DOM, eventos, formularios, fetch y temporizadores"; python3 -I tools/navjs_test.py "$S/r-nj" 2>&1 | filt
+ok "clics en el texto: 1 cursor, 2 palabra, 3 todo"; python3 -I tools/clics_test.py "$S/r-cl" 2>&1 | filt
 ok "sesiones"; python3 -I tools/sesion_test.py "$S/r-ses" "$K" 2>&1 | filt
 ok "fin"

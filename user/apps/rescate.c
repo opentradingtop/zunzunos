@@ -177,7 +177,7 @@ int main(const char *a) {
             else if (e.x < LW) { if (e.y >= W->h - 130) { int i = (e.y - (W->h - 130)) / 36; if (i < nd && i < 3) cd = i; } else { int i = (e.y - TB - 24) / 36; if (e.y >= TB + 24 && i < ns) { cs = i; scan_devs(); ndl = 0; } } }
             else if (e.y >= W->h - 36 && e.x >= W->w - 124) run();
             else if (e.y >= W->h - 36 && e.x >= W->w - 250 && tab == 1 && ndl) { do_recover(); scan_devs(); }
-            else if (tab == 0 && e.y >= Y + 50 && e.y < Y + 76) { pfoc = 1; pcur = strlen(path_); } else if (tab == 0 && e.y >= Y + 86 && e.y < Y + 112) { int i = (e.x - X) / 124; if (i >= 0 && i < 4) cats = 1 << i; }
+            else if (tab == 0 && e.y >= Y + 50 && e.y < Y + 76) { pfoc = 1; ui_input_click(W, &e, path_, &pcur); } else if (tab == 0 && e.y >= Y + 86 && e.y < Y + 112) { int i = (e.x - X) / 124; if (i >= 0 && i < 4) cats = 1 << i; }
             else if (tab == 1) { if (e.y < Y + 22 && e.x >= W->w - 106) { for (int i = 0; i < ndl; i++) DL[i].sel = 1; } else if (e.y >= Y + 24 && e.x < X + wd) { int i = dtop + (e.y - Y - 24) / 20; if (i < ndl) DL[i].sel ^= 1; } }
             else if (tab == 2 && e.y >= Y + 66 && e.y < Y + 92) { int i = (e.x - X) / 124; if (i >= 0 && i < 4) tsel ^= 1 << i; }
             else if (tab == 4 && e.y >= Y + 46) { int i = (e.y - Y - 46) / 30; if (i < nlp && cs >= 0) { int r = z_add_part(S[cs].name, LP[i].lba, LP[i].n); snprintf(msg, 200, r ? _("No se pudo montar: %s") : _("Montada en solo lectura%s"), r ? z_errstr(r) : ""); scan_devs(); } }

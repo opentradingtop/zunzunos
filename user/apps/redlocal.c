@@ -338,7 +338,7 @@ static void click(zevent *e) { for (int i = nhz - 1; i >= 0; i--) { hz_t *h = &H
         else if (id == B_ADDSH) add_share(); else if (id == B_CLOSEB) { sel_sh = -1; nent = 0; } else if (id == B_REFRESH) list_dir();
         else if (id == B_UP) { char *s = strrchr(cwd, '/'); if (s) *s = 0; else cwd[0] = 0; list_dir(); } else if (id == B_UPLOAD) upload();
         else if (id == B_MKDIR) { char n[120] = ""; if (ui_prompt("Nueva carpeta", "Nombre:", n, 110) && n[0] && !strchr(n, '/')) { char rel[400]; snprintf(rel, 400, "%s%s%s", cwd, cwd[0] ? "/" : "", n); simple("CARPETA", rel, 0); } }
-        else if (id == B_SEND) send_msg(); else if (id == B_FIELD) { cfoc = 1; ccur = strlen(compose); }
+        else if (id == B_SEND) send_msg(); else if (id == B_FIELD) { cfoc = 1; ui_input_click(W, 0, compose, &ccur); }
         break; } }
 int main(const char *a) {
     if (!strcmp(a, "--servicio")) return service();

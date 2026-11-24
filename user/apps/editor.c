@@ -1,5 +1,6 @@
 /* Editor de texto */
 #include "z.h"
+static int wch(char c) { unsigned char u = c; return u >= 0x80 || (u >= '0' && u <= '9') || ((u | 32) >= 'a' && (u | 32) <= 'z') || u == '_'; }
 static zwin *W; static char *T; static long len, cap, cur, sel = -1, top; static char path[256]; static int dirty; static char st[100];
 #define TB 34
 #define SB 20
@@ -36,7 +37,8 @@ int main(const char *a) { int wp; a = z_print_arg(a, &wp);
         if (e.type == EV_CLOSE) { if (!dirty || ui_confirm("Salir", "Hay cambios sin guardar. Salir?")) return 0; }
         else if (e.type == EV_RESIZE) zw_resized(W, e.x, e.y);
         else if (e.type == EV_WHEEL) { for (int i = 0; i < 3; i++) { if ((int)e.key > 0) { if (top > 0) top = ls(top - 1); } else { long n = le(top); if (n < len) top = n + 1; } } draw(); continue; }
-        else if (e.type == EV_DOWN) { if (e.y < TB) { int i = (e.x - 6) / 76; if (i == 0) { len = cur = top = 0; T[0] = 0; path[0] = 0; dirty = 0; sel = -1; title(); } else if (i == 1) { char n[256]; strcpy(n, path[0] ? path : "/rd/res/ayuda.txt"); if (ui_prompt("Abrir", "Ruta del archivo:", n, 240)) load(n); } else if (i == 2) save(0); else if (i == 3) save(1); else if (i == 4) print_(); } else { hit(e.x, e.y); sel = cur; drag = 1; } }
+        else if (e.type == EV_DOWN) { if (e.y < TB) { int i = (e.x - 6) / 76; if (i == 0) { len = cur = top = 0; T[0] = 0; path[0] = 0; dirty = 0; sel = -1; title(); } else if (i == 1) { char n[256]; strcpy(n, path[0] ? path : "/rd/res/ayuda.txt"); if (ui_prompt("Abrir", "Ruta del archivo:", n, 240)) load(n); } else if (i == 2) save(0); else if (i == 3) save(1); else if (i == 4) print_(); } else { hit(e.x, e.y); sel = cur; drag = 1; int nc = ui_clicks(&e);   /* 2 clics: la palabra; 3: todo */
+                if (nc >= 3) { sel = 0; cur = len; drag = 0; } else if (nc == 2 && len) { int s = MIN(cur, len), q; if (s == len || !wch(T[s])) { if (s > 0) s--; } if (wch(T[s])) { while (s > 0 && wch(T[s - 1])) s--; q = s; while (q < len && wch(T[q])) q++; } else q = s + 1; sel = s; cur = q; drag = 0; } } }
         else if (e.type == EV_MOVE) { if (!drag) continue; hit(e.x, e.y); }
         else if (e.type == EV_UP) { drag = 0; if (sel == cur) sel = -1; }
         else if (e.type == EV_KEY) {

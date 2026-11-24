@@ -19,7 +19,7 @@ s += ['key:print', 'wait:[prueba] captura', 'sleep:0.8']
 s += st + [f'click:{fx + 60},{pl}', 'sleep:0.8', f'rclick:{fx + 300},{fy + 66 + 20 + 11}', 'sleep:0.6', f'click:{fx + 340},{fy + 66 + 20 + 11 + 14 + 3 * 26}', 'wait:copiar 1 elementos', 'sleep:0.5']
 (gx, gy), st = M('files'); s += st + [f'rclick:{gx + 500},{gy + 250}', 'sleep:0.6', 'shot:t-menu-pegar', f'click:{gx + 540},{gy + 250 + 15 + 5 * 26}', 'wait:pegar en /sys:', 'sleep:1', 'key:alt-f4', 'sleep:0.5', 'key:alt-f4', 'sleep:0.6']
 s += ['rclick:900,300', 'sleep:0.6', 'click:940,496', 'wait:pegar en /sys/ESCRITORIO', 'sleep:1.5', 'shot:t-escritorio']; k[0] += 1  # Pegar en el escritorio abre una ventana de Archivos
-(bx, by), st = M('browser', 720); addr = f'click:{bx + 400},{by + 20}'
+(bx, by), st = M('browser', 720); addr = f'tclick:{bx + 400},{by + 20}'   # 3 clics: elige toda la direccion
 def go(u): return [addr, 'sleep:0.4', f'type:{u}\\n', 'sleep:3']
 s += st + go('http://10.0.2.2:8081/set') + go('http://10.0.2.2:8081/ver') + go('http://10.0.2.2:8081/base') + [f'click:{bx + 40},{by + 38 + 4 + 14}', 'sleep:3', 'shot:t-base'] + go('http://10.0.2.2:8081/noscript') + [f'click:{bx + 40},{by + 38 + 4 + 14}', 'sleep:3'] + go('http://10.0.2.2:8081/refresh') + ['sleep:2']
 s += [f'click:{bx + 190},{by + 20}', 'wait:navegador /rd/res/sitios.html: local', 'sleep:1.5', 'shot:t-sitios', f'click:{bx + 834},{by + 20}', 'sleep:1', f'click:{bx + 898},{by + 20}', 'sleep:0.8', 'shot:t-marcadores', f'click:{bx + 940},{by + 40 + 14 + 26}', 'sleep:0.8', f'click:{bx + 960},{by + 60 + 14}', 'sleep:0.8', 'key:ret', 'wait:marcador 0 eliminado', 'sleep:0.5']

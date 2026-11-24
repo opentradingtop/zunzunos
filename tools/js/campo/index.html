@@ -1,0 +1,8 @@
+<html><head><title>Campo</title></head><body>
+<p>Prueba de clics en un campo de texto</p>
+<form id="f"><input id="c" name="c" value="hola mundo" style="width:300px"></form>
+<script>
+var r = document.getElementById('c').getBoundingClientRect(), x = Math.round(r.left) + 5, y = Math.round(r.top) + 10;
+console.log('letra4 ' + (x + 32) + ',' + y + ' letra8 ' + (x + 68) + ',' + y);
+document.getElementById('f').addEventListener('submit', function (e) { e.preventDefault(); console.log('valor [' + document.getElementById('c').value + ']'); });
+</script></body></html>

@@ -18,14 +18,20 @@ def chain(c):
     out = []
     while 2 <= c < 0xFFF8 and len(out) < 10000: out.append(c); c = struct.unpack_from('<H', d, rs * bps + 2 * c)[0]
     return out
-def scan(b):
+def scan(b, gone=False):   # como Rescate: archivos con datos borrados o dentro de una carpeta borrada (y sus subcarpetas)
     global n
     for o in range(0, len(b), 32):
         e = b[o:o + 32]
         if e[0] == 0: break
-        if e[11] == 0x0F or e[11] & 8: continue
-        if e[0] == 0xE5: n += not e[11] & 0x10 and struct.unpack_from('<I', e, 28)[0] > 0; continue   # como Rescate: archivos con datos, no carpetas
-        if e[11] & 0x10 and e[0] != 0x2E: scan(b''.join(d[data + (x - 2) * cs:data + (x - 1) * cs] for x in chain(struct.unpack_from('<H', e, 26)[0])))
+        if e[11] == 0x0F or e[11] & 8 or e[0] == 0x2E: continue
+        c = struct.unpack_from('<H', e, 26)[0]; dele = e[0] == 0xE5
+        if e[11] & 0x10:
+            if not dele: scan(b''.join(d[data + (x - 2) * cs:data + (x - 1) * cs] for x in chain(c)), gone)
+            elif 2 <= c and d[data + (c - 2) * cs] == 0x2E and d[data + (c - 2) * cs + 32] == 0x2E:   # carpeta borrada que aun se lee
+                cl = [c]
+                while len(cl) < 9 and struct.unpack_from('<H', d, rs * bps + 2 * (cl[-1] + 1))[0] == 0: cl.append(cl[-1] + 1)
+                scan(b''.join(d[data + (x - 2) * cs:data + (x - 1) * cs] for x in cl), True)
+        elif (dele or gone) and struct.unpack_from('<I', e, 28)[0] > 0 and c >= 2: n += 1
 scan(d[root:data]); print(n)
 PY
 exit 0; fi

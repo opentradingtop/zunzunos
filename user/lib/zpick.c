@@ -44,6 +44,7 @@ int z_pick_file(const char *title, const char *exts, char *out, int cap) {
         else if (e.type == EV_DOWN) {
             if (e.x < 150) { int i = (e.y - 36) / 24; if (e.y >= 36 && i < np) { strncpy0(dir, pl[i], 256); load(dir, exts); sel = -1; top = 0; redraw = 1; } }
             else if (ui_in(e.x, e.y, lx, 10, 70, 26)) { char *sl = strrchr(dir, '/'); if (sl && sl != dir) *sl = 0; else strcpy(dir, "/"); load(dir, exts); sel = -1; top = 0; redraw = 1; }
+            else if (ui_in(e.x, e.y, lx, 42, w - lx - 12, 26)) { ui_input_click(d, &e, path, &cur); redraw = 1; }
             else if (ui_in(e.x, e.y, w - 200, h - 40, 90, 28)) res = 0;
             else if (ui_in(e.x, e.y, w - 104, h - 40, 90, 28)) pick = path[0] ? -1 : sel;
             else if (e.x >= lx && e.y >= ly && e.y < ly + vis * LH) { int i = top + (e.y - ly) / LH; if (i < ne) { if (i == lasti && z_ms() - lastc < 450) pick = i; else { sel = i; path[0] = 0; cur = 0; redraw = 1; } lasti = i; lastc = z_ms(); } } }

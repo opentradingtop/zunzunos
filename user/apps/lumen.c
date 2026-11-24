@@ -533,7 +533,7 @@ static void act(int id) {
     case B_LIVE1: C.stream = 1; cfg_save(); break; case B_LIVE0: C.stream = 0; cfg_save(); break; case B_APIRESET: strcpy(s_api, C.prov == 1 ? LYC_API : DEF_API); scur = strlen(s_api); break; case B_WIPE: wipe(); break;
     case B_USEID: { char id[112]; strncpy0(id, md_q, 112); char *t = id; while (*t == ' ') t++; md_add(t, t, 0, 0, 0, z_ends(t, ":free")); md_save(); pick_model(nmd - 1); break; }
     case B_TABFREE: md_tab = 0; md_top = md_cur = 0; break; case B_TABALL: md_tab = 1; md_top = md_cur = 0; break; case B_REFRESH: if (!wait_busy()) fetch_models(); break;
-    case F_KEY: sf = 0; scur = strlen(s_key); break; case F_SYS: sf = 1; scur = strlen(s_sys); break; case F_CSYS: sf = 2; scur = strlen(s_csys); break; case F_API: sf = 3; scur = strlen(s_api); break; } }
+    case F_KEY: sf = 0; if (show_key) ui_input_click(W, 0, s_key, &scur); else scur = strlen(s_key); break; case F_SYS: sf = 1; ui_input_click(W, 0, s_sys, &scur); break; case F_CSYS: sf = 2; ui_input_click(W, 0, s_csys, &scur); break; case F_API: sf = 3; ui_input_click(W, 0, s_api, &scur); break; } }
 static char *sfield(int i, int *cap) { *cap = i == 0 ? 250 : i == 3 ? 190 : 1000; return i == 0 ? s_key : i == 1 ? s_sys : i == 2 ? s_csys : s_api; }
 static int locate(int y, int *mi, int *li) { conv_t *c = CC(); if (!c || y < TB || y >= W->h - SBH - CH_H) return 0; int yy = TB + 12 - scy; for (int i = 0; i < c->n; i++) { msg_t *m = c->m[i]; if (y >= yy + m->nL * LH) { yy += m->nL * LH; continue; } if (y < yy) return 0; *mi = i; *li = (y - yy) / LH; return 1; } return 0; }
 static void msg_menu(zevent *e, int mi, int li) { conv_t *c = CC(); msg_t *m = c->m[mi]; int last = mi == c->n - 1, code = m->L[li].blk; const char *it[5]; int id[5], n = 0;

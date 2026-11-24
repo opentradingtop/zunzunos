@@ -133,6 +133,7 @@ struct node {
     char *calc, *cif;                    /* data-calc y data-if */
     char *equiv, *content;               /* <meta http-equiv content> */
     char *edit;                          /* texto de un campo editable */
+    short ecur, esel, eoff;              /* cursor, ancla de la seleccion + 1 (0 = nada) y primera letra visible */
     int dec, selidx;                     /* data-dec + 1 (0 = auto); opcion elegida */
     struct style s;
     int y;                               /* posicion para los enlaces #ancla */
@@ -1455,7 +1456,12 @@ static void emit_box(struct html_doc *d, struct line *l, struct node *n, char *h
         if (n->width) { int ok, x = parse_len(n->width, l->w, &ok); if (ok && x > 30) w = x; }
         strlcpy(label, n->edit && *n->edit ? n->edit : n->placeholder ? n->placeholder : "", sizeof label);
     }
-    int focused = d->focus == n;
+    int focused = d->focus == n, eoff = 0;
+    if (n->edit) {                               /* parte visible del campo: la que tiene el cursor */
+        int len = (int)strlen(n->edit), max = (w > l->w ? l->w : w) - 10; max = max > 8 ? max / 8 : 1;
+        if (n->ecur > len) n->ecur = len; if (n->ecur < 0) n->ecur = 0; if (n->esel > len + 1) n->esel = 0;
+        if (n->eoff > n->ecur) n->eoff = n->ecur; if (n->ecur - n->eoff > max) n->eoff = n->ecur - max; if (n->eoff > len) n->eoff = 0;
+        if (n->edit[0]) { eoff = n->eoff; strlcpy(label, n->edit + eoff, sizeof label); } }
     if (w > l->w) w = l->w;
     if (l->any && l->cx + w + (l->space ? 8 : 0) > l->x0 + l->w) line_break(l, d, 0);
     if (l->space && l->any) l->cx += 8;
@@ -1469,6 +1475,10 @@ static void emit_box(struct html_doc *d, struct line *l, struct node *n, char *h
         if ((n->tag != T_BUTTON && n->tag != T_IMG && kind != 1) || is_submit(n)) o->node = n;
     }
     if ((o = new_op(d))) { o->type = OP_RECT; o->x = x + 1; o->dy = 1; o->w = w - 2; o->h = h - 2; o->ih = h; o->color = face; }
+    if (focused && n->edit && n->esel && n->esel - 1 != n->ecur && (o = new_op(d))) {   /* texto elegido */
+        int max = (w - 10) / 8, a = n->esel - 1 < n->ecur ? n->esel - 1 : n->ecur, b = n->esel - 1 < n->ecur ? n->ecur : n->esel - 1;
+        a -= eoff; b -= eoff; if (a < 0) a = 0; if (b > max) b = max;
+        if (b > a) { o->type = OP_RECT; o->ih = h; o->h = 16; o->dy = n->tag == T_TEXTAREA ? 3 : (h - 16) / 2; o->x = x + 5 + a * 8; o->w = (b - a) * 8; o->color = 0xBFDBFE; } else o->type = OP_RECT, o->w = 0; }
     if (kind == 2 && n->checked && (o = new_op(d))) {
         o->type = OP_RECT; o->x = x + 4; o->dy = 4; o->w = 6; o->h = 6; o->ih = h; o->color = 0x2F6FB5;
     }
@@ -1490,10 +1500,10 @@ static void emit_box(struct html_doc *d, struct line *l, struct node *n, char *h
         }
     }
     if (focused && (o = new_op(d))) {             /* cursor del campo */
-        int len = n->edit ? (int)strlen(n->edit) : 0;
+        int len = n->edit ? n->ecur - eoff : 0;
         int max = (w - 10) / 8;
         o->type = OP_RECT; o->ih = h; o->w = 2; o->h = 16; o->dy = n->tag == T_TEXTAREA ? 3 : (h - 16) / 2;
-        o->x = x + 5 + (len < max ? len : max) * 8; o->color = 0x2F9E80;
+        o->x = x + 5 + (len < 0 ? 0 : len < max ? len : max) * 8; o->color = 0x2F9E80;
     }
     if (n->tag == T_SELECT && (o = new_op(d))) {
         o->type = OP_TEXT; o->scale = 1; o->ih = h; o->h = 16; o->w = 8;
@@ -1964,12 +1974,22 @@ static void do_submit(struct html_doc *d, struct node *from) {
 const char *html_take_submit(struct html_doc *d, int *post) { if (!d->submit[0]) return 0; static char out[3072]; strlcpy(out, d->submit, sizeof out); d->submit[0] = 0; if (post) *post = d->submit_post; return out; }
 int html_nimages(struct html_doc *d) { return d->nimgs; }
 const char *html_image_src(struct html_doc *d, int i) { return i >= 0 && i < d->nimgs ? d->imgs[i] : 0; }
-int html_click(struct html_doc *d, int x, int y) {
+static int e_word(const char *s, int i) { unsigned char c = s[i]; return c >= 0x80 || (c >= '0' && c <= '9') || ((c | 32) >= 'a' && (c | 32) <= 'z') || c == '_'; }
+/* clic en un campo: 1 clic pone el cursor en la letra pulsada, 2 eligen la palabra, 3 todo el texto */
+static void e_click(struct node *n, int px, int clicks) {
+    int len = (int)strlen(n->edit), p = n->eoff + (px + 4) / 8; if (p > len) p = len; if (p < 0) p = 0;
+    if (clicks >= 3) { n->esel = 1; n->ecur = len; }
+    else if (clicks == 2 && len) { int s = p, q; if (s == len || !e_word(n->edit, s)) { if (s > 0) s--; }
+        if (e_word(n->edit, s)) { while (s > 0 && e_word(n->edit, s - 1)) s--; q = s; while (q < len && e_word(n->edit, q)) q++; } else q = s + 1;
+        n->esel = s + 1; n->ecur = q; }
+    else { n->esel = 0; n->ecur = p; } }
+int html_click(struct html_doc *d, int x, int y) { return html_click_n(d, x, y, 1); }
+int html_click_n(struct html_doc *d, int x, int y, int clicks) {
     for (int i = d->nops - 1; i >= 0; i--) {
         struct op *o = &d->ops[i];
         if (!o->node || x < o->x || x >= o->x + o->w || y < o->y || y >= o->y + o->h) continue;
         struct node *n = o->node;
-        if (n->edit) { d->focus = n; return 1; }
+        if (n->edit) { if (d->focus != n) n->eoff = 0; d->focus = n; e_click(n, x - o->x - 5, clicks); return 1; }
         d->focus = NULL;
         if (is_submit(n)) { do_submit(d, n); return 1; }
         if (is_radio(n)) {
@@ -2013,24 +2033,27 @@ int html_key(struct html_doc *d, int k) {
         return 1;
     }
     if (k == 27) { d->focus = NULL; return 1; }
-    int len = (int)strlen(n->edit);
-    if (k == '\b' || k == KEY_DEL) { if (len) n->edit[len - 1] = 0; return 1; }
-    if (k == CTRL('a') || k == CTRL('x')) { n->edit[0] = 0; return 1; }
-    if (k == CTRL('v')) {
-        int cl;
-        const char *c = clip_get(&cl);
-        for (int i = 0; c && i < cl && len < 70; i++) if ((u8)c[i] >= 32) n->edit[len++] = c[i];
-        n->edit[len] = 0;
-        return 1;
-    }
-    if (k >= 32 && k < 0x100 && len < 70) {
-        if (n->itype && !strcasecmp(n->itype, "number") &&
-            !((k >= '0' && k <= '9') || k == '.' || k == ',' || k == '-')) return 1;
-        n->edit[len] = (char)k;
-        n->edit[len + 1] = 0;
-        return 1;
-    }
-    return k == KEY_LEFT || k == KEY_RIGHT || k == KEY_HOME || k == KEY_END;
+    char *s = n->edit; int len = (int)strlen(s);
+    if (n->ecur > len || n->ecur < 0) n->ecur = len; if (n->esel > len + 1) n->esel = 0;
+    int a = n->esel ? (n->esel - 1 < n->ecur ? n->esel - 1 : n->ecur) : n->ecur, b = n->esel ? (n->esel - 1 < n->ecur ? n->ecur : n->esel - 1) : n->ecur, has = b > a;
+    if (k == KEY_LEFT || k == KEY_RIGHT || k == KEY_HOME || k == KEY_END) {
+        n->ecur = k == KEY_HOME ? 0 : k == KEY_END ? len : k == KEY_LEFT ? (has ? a : n->ecur > 0 ? n->ecur - 1 : 0) : (has ? b : n->ecur < len ? n->ecur + 1 : len);
+        n->esel = 0; return 1; }
+    if (k == CTRL('a')) { n->esel = 1; n->ecur = len; return 1; }
+    if (k == CTRL('c') || k == CTRL('x')) { if (has) { clip_set(s + a, b - a); if (k == CTRL('x')) { memmove(s + a, s + b, len - b + 1); n->ecur = a; n->esel = 0; } } return 1; }
+    if (k == '\b' || k == KEY_DEL) {
+        if (has) { memmove(s + a, s + b, len - b + 1); n->ecur = a; }
+        else if (k == '\b' && n->ecur > 0) { memmove(s + n->ecur - 1, s + n->ecur, len - n->ecur + 1); n->ecur--; }
+        else if (k == KEY_DEL && n->ecur < len) memmove(s + n->ecur, s + n->ecur + 1, len - n->ecur);
+        n->esel = 0; return 1; }
+    if (k == CTRL('v') || (k >= 32 && k < 0x100)) {
+        char in[72]; int m = 0;
+        if (k == CTRL('v')) { int cl; const char *c = clip_get(&cl); for (int i = 0; c && i < cl && m < 70; i++) if ((u8)c[i] >= 32) in[m++] = c[i]; }
+        else { if (n->itype && !strcasecmp(n->itype, "number") && !((k >= '0' && k <= '9') || k == '.' || k == ',' || k == '-')) return 1; in[m++] = (char)k; }
+        if (has) { memmove(s + a, s + b, len - b + 1); len -= b - a; n->ecur = a; } n->esel = 0;
+        if (m > 70 - len) m = 70 - len; if (m <= 0) return 1;
+        memmove(s + n->ecur + m, s + n->ecur, len - n->ecur + 1); memcpy(s + n->ecur, in, m); n->ecur += m; return 1; }
+    return 0;
 }
 
 void html_free(struct html_doc *d) {

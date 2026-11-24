@@ -86,10 +86,40 @@ static int anc_get(const char *b) { for (int i = 0; i < 24; i++) if (ANC[i].b ==
 static void anc_set(const char *b, int a) { int f = -1; for (int i = 0; i < 24; i++) { if (ANC[i].b == b) { if (a < 0) ANC[i].b = 0; else ANC[i].a = a; return; } if (!ANC[i].b && f < 0) f = i; }
     if (a < 0) return; if (f < 0) { f = 0; memmove(ANC, ANC + 1, 23 * sizeof ANC[0]); f = 23; } ANC[f].b = b; ANC[f].a = a; }
 static int colx(const char *t, int n) { int cx = 0; for (int i = 0; t[i] && i < n; ) { const char *q = t + i; utf8_next(&q); i = q - t; cx += 8; } return cx; }
+/* casillas dibujadas hace poco: para saber en que letra cae un clic */
+typedef struct { const char *b; zwin *w; int x, y, a, h, sx; } fld_t; static fld_t FL[32]; static int nfl;
+static void fld_note(zwin *w, const char *b, int x, int y, int a, int h, int sx) {
+    int k = -1; for (int i = 0; i < nfl; i++) if (FL[i].b == b && FL[i].w == w) k = i;
+    if (k < 0) { if (nfl < 32) k = nfl++; else { memmove(FL, FL + 1, 31 * sizeof FL[0]); k = 31; } }
+    FL[k] = (fld_t){ b, w, x, y, a, h, sx }; }
+/* clics seguidos en el mismo sitio (doble y triple clic): 1, 2 o 3 */
+int ui_clicks(zevent *e) {
+    static u64 t0; static int x0, y0, n; u64 t = z_ms();
+    int dx = e->x - x0, dy = e->y - y0; if (t - t0 < 450 && dx > -5 && dx < 5 && dy > -5 && dy < 5) n = n >= 3 ? 3 : n + 1; else n = 1;
+    t0 = t; x0 = e->x; y0 = e->y; return n; }
+/* posicion (en bytes) de la letra mas cercana a la x de pantalla px, con la casilla empezando en sx */
+static int pos_at(const char *t, int sx, int px) { int i = 0, cx = 0;
+    while (t[i]) { const char *q = t + i; utf8_next(&q); if (px < sx + cx + 4) break; i = q - t; cx += 8; } return i; }
+static int wordc(const char *t, int i) { u8 c = t[i]; return c >= 0x80 || (c >= '0' && c <= '9') || ((c | 32) >= 'a' && (c | 32) <= 'z') || c == '_'; }
+/* clic en una casilla: 1 clic pone el cursor donde se pulsa, 2 eligen la palabra, 3 todo el texto */
+extern zevent z_last_down;
+int ui_input_click(zwin *w, zevent *e, const char *b, int *cur) {
+    if (!e) e = &z_last_down; int n = ui_clicks(e), l = strlen(b), p = l; fld_t *f = 0;
+    for (int i = 0; i < nfl; i++) if (FL[i].b == b && FL[i].w == w) f = &FL[i];
+    if (f) p = pos_at(b, f->sx, e->x);
+    if (n == 3) { anc_set(b, 0); *cur = l; }
+    else if (n == 2 && l) { int s = MIN(p, l), q = s; if (s == l || !wordc(b, s)) { if (s > 0) s--; q = s; }
+        if (wordc(b, s)) { while (s > 0 && wordc(b, s - 1)) s--; q = s; while (q < l && wordc(b, q)) q++; } else q = s + 1;
+        anc_set(b, s); *cur = q; }
+    else { anc_set(b, -1); *cur = p; }
+    return n; }
+/* elige todo el texto de la casilla (Ctrl+A, o al entrar en la barra de direcciones) */
+void ui_input_selall(const char *b, int *cur) { anc_set(b, 0); *cur = strlen(b); }
+int ui_input_hassel(const char *b, int cur) { int a = anc_get(b); return a >= 0 && a != cur; }
 void ui_input(zwin *w, int x, int y, int a, int b, const char *t, int cur, int focus) {
     g_rect(w, x, y, a, b, UI_WHITE); g_frame(w, x, y, a, b, focus ? UI_ACC : UI_LINE);
     int ty = y + (b - 16) / 2, len = g_textw(t), sx = x + 5, cx = colx(t, cur);
-    if (cx > a - 14) sx -= cx - (a - 14); (void)len;
+    if (cx > a - 14) sx -= cx - (a - 14); (void)len; fld_note(w, t, x, y, a, b, sx);
     zw_clip(w, x + 2, y + 1, a - 4, b - 2); int an = focus ? anc_get(t) : -1;
     if (an >= 0 && an != cur) { int p = colx(t, MIN(an, cur)), q = colx(t, MAX(an, cur)); g_rect(w, sx + p, ty, q - p, 16, 0xBFDBFE); }
     g_text(w, sx, ty, t, UI_TEXT);
@@ -135,7 +165,8 @@ static int dialog(const char *title, const char *msg, char *buf, int cap) {
         if (!z_event(&e, -1) || e.win != (u32)d->id) continue;
         if (e.type == EV_CLOSE) res = 0;
         else if (e.type == EV_KEY) { if (e.ch == '\n') res = 1; else if (e.ch == 27) res = 0; else if (buf && ui_input_key(buf, cap, &cur, &e)) redraw = 1; }
-        else if (e.type == EV_DOWN) { if (ui_in(e.x, e.y, w - 100, by, 84, 28)) res = 1; else if (ui_in(e.x, e.y, w - 196, by, 84, 28)) res = 0; }
+        else if (e.type == EV_DOWN) { if (ui_in(e.x, e.y, w - 100, by, 84, 28)) res = 1; else if (ui_in(e.x, e.y, w - 196, by, 84, 28)) res = 0;
+            else if (buf && ui_in(e.x, e.y, 16, 40, w - 32, 26)) { if (e.btn & 2) ui_input_menu(d, buf, cap, &cur, &e); else ui_input_click(d, &e, buf, &cur); redraw = 1; } }
     }
     zw_close(d); return res;
 }

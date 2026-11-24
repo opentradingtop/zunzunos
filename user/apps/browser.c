@@ -16,11 +16,12 @@ void gfx_char(int x, int y, u8 c, u32 k) { g_glyph(G, x, y, c, k & 0xFFFFFF); }
 void gfx_text_big(int x, int y, const char *s, u32 k, int sc) { for (; *s; s++, x += 8 * sc) { const u8 *g = font8x16 + (u8)*s * 16; for (int j = 0; j < 16; j++) for (int i = 0; i < 8; i++) if (g[j] & (0x80 >> i)) g_rect(G, x + i * sc, y + j * sc, sc, sc, k & 0xFFFFFF); } }
 void gfx_image(int x, int y, int w, int h, const u32 *px, int iw, int ih) { int y0 = MAX(y, G->cy0), y1 = MIN(y + h, G->cy1), x0 = MAX(x, G->cx0), x1 = MIN(x + w, G->cx1); for (int j = y0; j < y1; j++) { const u32 *r = px + (long)(j - y) * ih / h * iw; u32 *o = G->px + (long)j * G->w; for (int i = x0; i < x1; i++) o[i] = r[(long)(i - x) * iw / w] & 0xFFFFFF; } }
 const char *clip_get(int *l) { static char b[4096]; *l = z_clip_get(b, 4095); b[*l] = 0; return b; }
+void clip_set(const char *s, int n) { z_clip_set(s, n); }
 #define TB 38
 #define SB 22
 static void strncat0(char *d, const char *s, int cap) { int l = strlen(d); strncpy0(d + l, s, cap - l); }
 static int isal(int c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'); }
-static char url[1100], addr[1100], msg[200], title[200]; static int asel, acur, afoc, scroll, loading, secure, certst;
+static char url[1100], addr[1100], msg[200], title[200]; static int acur, afoc, scroll, loading, secure, certst;
 static struct html_doc *D; static char *src; static long srcl;
 static char *hb[64], *hf[64]; static int nb, nf;
 /* ---------- cache de imagenes ---------- */
@@ -192,7 +193,7 @@ static void draw(void) {
     if (D) { int mx = MAX(0, html_height(D) - vh); scroll = MAX(0, MIN(scroll, mx)); zw_clip(G, 0, TB, G->w - 10, vh); html_draw(D, 4, TB + 4, G->w - 18, vh, scroll); sel_paint(vh); zw_noclip(G); if (mx) { int bh = MAX(24, vh * vh / html_height(D)); g_rect(G, G->w - 8, TB + scroll * (vh - bh) / mx, 6, bh, UI_LINE); } }
     g_rect(G, 0, 0, G->w, TB, UI_PANEL); for (int i = 0; i < 4; i++) ui_button(G, bx(i), 6, bw(i), 26, BT[i], 0); ui_button(G, bx(4), 6, bw(7), 26, BT[7], !strcmp(url, SITIOS) ? 2 : 0);
     int ax = addr_x(); u32 lk = secure ? 0x16A34A : certst ? 0xDC2626 : 0x9CA3AF; g_round(G, ax - 20, 13, 12, 10, 2, lk); g_frame(G, ax - 18, 8, 8, 7, lk);
-    ui_input(G, ax, 6, addr_w(), 26, addr, acur, afoc); if (afoc && asel && addr[0]) { int tw = MIN(g_textw(addr), addr_w() - 10); g_rect(G, ax + 5, 10, tw, 18, 0xBFDBFE); zw_clip(G, ax + 4, 6, addr_w() - 8, 26); g_text(G, ax + 5, 11, addr, 0x111827); zw_noclip(G); } ui_button(G, ax + addr_w() + 6, 6, bw(4), 26, "*", 0); ui_button(G, ax + addr_w() + 10 + bw(4), 6, bw(5), 26, "Marcadores", 0); ui_button(G, ax + addr_w() + 14 + bw(4) + bw(5), 6, bw(6), 26, "Imprimir", 0);
+    ui_input(G, ax, 6, addr_w(), 26, addr, acur, afoc); ui_button(G, ax + addr_w() + 6, 6, bw(4), 26, "*", 0); ui_button(G, ax + addr_w() + 10 + bw(4), 6, bw(5), 26, "Marcadores", 0); ui_button(G, ax + addr_w() + 14 + bw(4) + bw(5), 6, bw(6), 26, "Imprimir", 0);
     g_rect(G, 0, G->h - SB, G->w, SB, UI_PANEL); zw_clip(G, 0, G->h - SB, G->w, SB); g_text(G, 8, G->h - SB + 3, loading ? _("Cargando...") : msg, UI_TEXT); zw_noclip(G); zw_present(G); }
 int main(const char *a) { int wp; a = z_print_arg(a, &wp);
     zsys s; z_sysinfo(&s); G = zw_new(APPNAME, -1, 0, MIN(1040, (int)s.scr_w - 40), MIN(720, (int)s.scr_h - 80), WF_DECOR | WF_RESIZE); html_img_get = img_get;
@@ -215,7 +216,7 @@ int main(const char *a) { int wp; a = z_print_arg(a, &wp);
         if (e.type == EV_WHEEL) scroll -= (int)e.key * 60;
         else if (e.type == EV_DOWN) { afoc = 0;
             if (e.y < TB) { int ax = addr_x();
-                if (e.x >= ax && e.x < ax + addr_w()) { if (!afoc) asel = 1; afoc = 1; acur = strlen(addr); }
+                if (e.x >= ax && e.x < ax + addr_w()) { afoc = 1; ui_input_click(G, &e, addr, &acur); }
                 else if (e.x < bx(1)) navigate("zunzun:volver", 0, 0);
                 else if (e.x < bx(2)) { if (nf) { char *p = hf[--nf]; if (nb < 64) hb[nb++] = strdup(url); navigate(p, 0, 0); free(p); } }
                 else if (e.x < bx(3)) navigate(url, 0, 0);
@@ -229,7 +230,7 @@ int main(const char *a) { int wp; a = z_print_arg(a, &wp);
 #ifdef CON_JS
                 if (html_js_click(D, X, Y) == 2) { html_js_update(D); js_title(); if (pend_ref[0]) continue; draw(); continue; } html_js_update(D); if (pend_ref[0]) continue;
 #endif
-                if (html_click(D, X, Y)) { int post = 0; const char *sub = html_take_submit(D, &post);
+                if (html_click_n(D, X, Y, ui_clicks(&e))) { int post = 0; const char *sub = html_take_submit(D, &post);
                     if (sub) { char act[1100]; const char *sep = post ? strchr(sub, '\n') : strchr(sub, '?'); int al = sep ? sep - sub : (int)strlen(sub); char a2[1100]; { int cl = MIN(al, (int)sizeof a2 - 1); memcpy(a2, sub, cl); a2[cl] = 0; } if (!a2[0]) { strcpy(act, url); char *q = strchr(act, '?'); if (q) *q = 0; } else resolve(pbase, a2, act, sizeof act);
                         if (post) navigate(act, sep ? sep + 1 : "", 1); else { char full[2200]; snprintf(full, sizeof full, "%s?%s", act, sep ? sep + 1 : ""); navigate(full, 0, 1); } }
                     else html_relayout(D); }
@@ -244,9 +245,9 @@ int main(const char *a) { int wp; a = z_print_arg(a, &wp);
         else if (e.type == EV_MOVE && D && e.y > TB && e.y < G->h - SB) { const char *l = html_link_at(D, e.x - 4, e.y - TB - 4 + scroll); static int had; if (l) { char nx[1100]; resolve(pbase, l, nx, sizeof nx); snprintf(msg, sizeof msg, "%s", nx); had = 1; } else if (had) { had = 0; msg[0] = 0; } else continue; }
         else if (e.type == EV_KEY) {
             if (e.ch == 16) { print_(); draw(); continue; } if (e.key == 0x0B && (e.mods & M_CTRL)) { navigate("zunzun:historial", 0, 1); draw(); continue; }
-            if (!afoc && e.ch == 3 && sel_has()) { sel_copy(); draw(); continue; } if (!afoc && e.ch == 1) { sel_all(); draw(); continue; }
-            if (e.ch == 12 && (e.mods & M_CTRL)) { afoc = 1; asel = 1; acur = strlen(addr); }
-            else if (afoc) { if (e.ch == '\n') { afoc = 0; asel = 0; go_addr(); } else if (e.ch == 27) { afoc = 0; asel = 0; strcpy(addr, url); } else if (e.ch == 1) { asel = 1; acur = strlen(addr); } else { if (asel && (e.ch >= 32 || e.ch == 8 || e.ch == 22)) { addr[0] = 0; acur = 0; } asel = 0; ui_input_key(addr, 1000, &acur, &e); } }
+            if (!afoc && e.ch == 3 && sel_has()) { sel_copy(); draw(); continue; } if (!afoc && e.ch == 1 && !(D && html_has_focus(D))) { sel_all(); draw(); continue; }
+            if (e.ch == 12 && (e.mods & M_CTRL)) { afoc = 1; ui_input_selall(addr, &acur); }
+            else if (afoc) { if (e.ch == '\n') { afoc = 0; go_addr(); } else if (e.ch == 27) { afoc = 0; strcpy(addr, url); acur = strlen(addr); } else ui_input_key(addr, 1000, &acur, &e); }
             else { int k = e.key == K_UP ? KEY_UP : e.key == K_DOWN ? KEY_DOWN : e.key == K_LEFT ? KEY_LEFT : e.key == K_RIGHT ? KEY_RIGHT : e.key == K_HOME ? KEY_HOME : e.key == K_END ? KEY_END : e.key == K_PGUP ? KEY_PGUP : e.key == K_PGDN ? KEY_PGDN : e.key == K_DEL ? KEY_DEL : e.ch < 128 ? (int)e.ch : uni_to_cp437(e.ch);
 #ifdef CON_JS
                 if (D && html_js_on(D)) { char kn[16]; const char *nm = e.key == K_UP ? "ArrowUp" : e.key == K_DOWN ? "ArrowDown" : e.key == K_LEFT ? "ArrowLeft" : e.key == K_RIGHT ? "ArrowRight" : e.ch == '\n' ? "Enter" : e.ch == 27 ? "Escape" : e.ch == 8 ? "Backspace" : e.ch == '\t' ? "Tab" : e.key == K_HOME ? "Home" : e.key == K_END ? "End" : e.key == K_DEL ? "Delete" : 0;
@@ -285,5 +286,5 @@ static void js_page(void) {
     if (!D || !html_has_script(D)) return;
     static struct html_js_host h; static char fu[1200]; snprintf(fu, sizeof fu, "%s%s", url[0] == '/' ? "file://" : "", url); h.u = 0; h.url = fu; h.http = js_http; h.go = js_go; h.dialog = js_dialog; h.console = js_console; h.scroll = js_scroll; h.view = js_view;
     u64 t0 = z_ms(); html_js_start(D, &h); html_js_update(D); js_title();
-    int sx, sy; zw_screen(G, 4, TB + 4, &sx, &sy); char m[160]; snprintf(m, 160, "[prueba] navjs pagina lista en %lu ms (pagina en %d,%d)", z_ms() - t0, sx, sy); z_log(m); }
+    int sx, sy, ax_, ay_; zw_screen(G, 4, TB + 4, &sx, &sy); zw_screen(G, addr_x() + 37, 19, &ax_, &ay_); char m[200]; snprintf(m, 200, "[prueba] navjs pagina lista en %lu ms (pagina en %d,%d) (barra en %d,%d)", z_ms() - t0, sx, sy, ax_, ay_); z_log(m); }
 #endif

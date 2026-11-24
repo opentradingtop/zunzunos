@@ -211,6 +211,8 @@ int ui_in(int mx, int my, int x, int y, int w, int h);
 void ui_button(zwin *, int x, int y, int w, int h, const char *, int state);
 int ui_input_key(char *buf, int cap, int *cur, zevent *e); int ui_input_menu(zwin *, char *buf, int cap, int *cur, zevent *e);
 void ui_input(zwin *, int x, int y, int w, int h, const char *txt, int cur, int focus);
+/* clics en casillas: 1 pone el cursor, 2 eligen la palabra, 3 todo; devuelve cuantos clics seguidos van */
+int ui_input_click(zwin *, zevent *, const char *buf, int *cur); int ui_clicks(zevent *e); void ui_input_selall(const char *buf, int *cur); int ui_input_hassel(const char *buf, int cur);
 int ui_prompt(const char *title, const char *msg, char *buf, int cap);
 int ui_confirm(const char *title, const char *msg);
 int z_png_decode(const u8 *d, long n, u32 **out, int *w, int *h);

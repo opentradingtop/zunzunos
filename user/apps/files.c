@@ -99,7 +99,7 @@ int main(const char *a) {
         else if (e.type == EV_WHEEL) top = MAX(0, MIN(top - (int)e.key * 3, MAX(0, n - v)));
         else if (e.type == EV_DOWN) { pfoc = 0;
             if (e.y < TB) { int x = 6; for (int i = 0; i < 8; i++) { int w = g_textw(_(bts[i])) + 14; if (e.x >= x && e.x < x + w) { act(i); break; } x += w + 3; } }
-            else if (e.y < y0) { pfoc = 1; pcur = strlen(pedit); }
+            else if (e.y < y0) { pfoc = 1; ui_input_click(W, &e, pedit, &pcur); }
             else if (e.x < SW) { int i = (e.y - y0 - 26) / 38; if (e.y >= y0 + 26 && i < nm) { if (e.btn & 2) { int sx, sy; zw_screen(W, e.x, e.y, &sx, &sy); drive_ctx(i, sx, sy); } else { char p[20]; snprintf(p, 20, "/%s", M[i].name); cd(p); } } else if (e.y >= y0 + 26 && i == nm) z_spawn("/rd/bin/papelera", ""); else { int py = y0 + 26 + nm * 38 + 34 + 28 - 3, k = (e.y - py) / 26; if (e.y >= py && k >= 0 && k < NPL) { char p[200]; place(k, p); z_mkdir(p); cd(p); } } }
             else if (e.y >= ly && e.y < W->h - SB) { int i = top + (e.y - ly) / RH; if (i < n) { if (e.btn & 2) { if (!L[i].sel) pick(i, 0); draw(); zwininfo w; zw_info(W->id, &w); ctx(w.x + e.x, w.y + e.y); } else { u64 t = z_ms(); if (i == lci && t - lc < 500 && !(e.mods & (M_CTRL | M_SHIFT))) { lci = -1; open_it(i); } else { pick(i, e.mods); lci = i; lc = t; } } } else { for (int k = 0; k < n; k++) L[k].sel = 0; cur = -1; if (e.btn & 2) { draw(); zwininfo w; zw_info(W->id, &w); ctx(w.x + e.x, w.y + e.y); } } }
         } else if (e.type == EV_KEY) { if (pfoc) { if (e.ch == '\n') { pfoc = 0; char t[512]; strcpy(t, pedit); cd(t); } else if (e.ch == 27) { pfoc = 0; strcpy(pedit, cwd); } else ui_input_key(pedit, 500, &pcur, &e); }

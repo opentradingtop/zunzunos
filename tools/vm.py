@@ -106,7 +106,7 @@ ok = True
 try:
     for st in a.steps:
         k, _, v = st.partition(':')
-        if k in ('key', 'hold', 'type', 'move', 'click', 'rclick', 'dclick', 'drag'): ensure_login()
+        if k in ('key', 'hold', 'type', 'move', 'click', 'rclick', 'dclick', 'tclick', 'drag'): ensure_login()
         if k == 'wait':
             t0 = time.time()
             while v not in serial():
@@ -124,17 +124,19 @@ try:
             n, sec = v.split(','); qmp('send-key', keys=[{'type': 'qcode', 'data': x} for x in n.split('-')], **{'hold-time': int(float(sec) * 1000)}); time.sleep(float(sec) + 0.2)
         elif k == 'type': typ(v.replace('\\n', '\n'))
         elif k == 'move': goto(*map(int, v.split(',')))
-        elif k in ('click', 'rclick', 'dclick'):
+        elif k in ('click', 'rclick', 'dclick', 'tclick'):
             goto(*map(int, v.split(',')))
             click('right' if k == 'rclick' else 'left')
-            if k == 'dclick': click()
+            if k in ('dclick', 'tclick'): click()
+            if k == 'tclick': click()
         elif k == 'drag':
             x, y, x2, y2 = map(int, v.split(',')); goto(x, y); btn('left', True); time.sleep(0.2); goto(x2, y2); time.sleep(0.2); btn('left', False)
-        elif k == 'clicklog':   # clicklog:ORIGEN|POS - pulsa en el punto POS (x,y) de la ultima linea del registro que encaja, sumandole ORIGEN (x,y)
+        elif k.startswith('clicklog'):   # clicklog:ORIGEN|POS - pulsa en el punto POS (x,y) de la ultima linea del registro que encaja, sumandole ORIGEN (x,y); clicklog2/3: doble o triple clic
             import re
             ro, _, rp = v.partition('|'); mo = re.findall(ro, serial()); mp = re.findall(rp, serial()) if rp else [('0', '0')]   # sin '|': la posicion ya es absoluta
             if not mo or not mp: print(f'FALLO: no hay posicion en el registro ({v})'); ok = False; break
-            x = int(mo[-1][0]) + int(mp[-1][0]); y = int(mo[-1][1]) + int(mp[-1][1]); print(f'clicklog {x},{y}'); goto(x, y); click()
+            x = int(mo[-1][0]) + int(mp[-1][0]); y = int(mo[-1][1]) + int(mp[-1][1]); print(f'{k} {x},{y}'); goto(x, y)
+            for _ in range(int(k[8:] or 1)): click()
         elif k == 'exit':
             t0 = time.time()
             while p.poll() is None and time.time() - t0 < float(v or 15): time.sleep(0.1)
