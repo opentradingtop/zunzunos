@@ -1318,3 +1318,104 @@ No se pudo guardar el adjunto	-	Could not save the attachment
 No hay ningún programa para abrir ese archivo	-	No program can open that file
 Como mucho 8 adjuntos por mensaje	-	At most 8 attachments per message
 Los adjuntos pasan de 20 MB: muchos servidores no los aceptan	-	Attachments exceed 20 MB: many servers reject them
+desconocida	-	unknown
+compilación 	-	build 
+Windows (registro ilegible)	-	Windows (registry unreadable)
+NTFS sin Windows	-	NTFS without Windows
+NTFS ilegible	-	Unreadable NTFS
+No se puede leer el volumen NTFS.	-	The NTFS volume can't be read.
+Disco	-	Disk
+sector	-	sector
+ATENCIÓN: el volumen está marcado como dañado (Windows no se cerró bien o encontró errores).	-	WARNING: the volume is marked as dirty (Windows didn't shut down cleanly or found errors).
+El volumen está limpio.	-	The volume is clean.
+Versión	-	Version
+Edición	-	Edition
+Propietario registrado	-	Registered owner
+No se puede leer la colmena SOFTWARE del registro.	-	The SOFTWARE registry hive can't be read.
+Equipo	-	Computer
+Último apagado correcto	-	Last clean shutdown
+Zona horaria	-	Time zone
+Servicios y drivers	-	Services and drivers
+se cargan al arrancar	-	load at boot
+No se puede leer la colmena SYSTEM del registro (puede ser la causa: Windows no arranca sin ella).	-	The SYSTEM registry hive can't be read (this may be the cause: Windows won't boot without it).
+Gestor de arranque de Windows	-	Windows Boot Manager
+Arranque por BIOS: bootmgr está en este volumen.	-	BIOS boot: bootmgr is on this volume.
+No se ha encontrado el gestor de arranque de Windows (ni partición EFI con bootmgfw.efi ni bootmgr).	-	The Windows Boot Manager wasn't found (no EFI partition with bootmgfw.efi, and no bootmgr).
+No hay SrtTrail.txt: la reparación automática de Windows no llegó a ejecutarse.	-	There is no SrtTrail.txt: Windows Automatic Repair never ran.
+Hay una actualización a medio instalar: WinSxS\pending.xml	-	An update is half-installed: WinSxS\pending.xml
+No hay actualizaciones a medio instalar.	-	No half-installed updates.
+volcados de pantallazo azul; el último:	-	blue screen dumps; the latest:
+No hay volcados de pantallazos azules (Windows\Minidump vacío o inexistente).	-	No blue screen dumps (Windows\Minidump is empty or missing).
+Hay un volcado completo de memoria (MEMORY.DMP).	-	There is a full memory dump (MEMORY.DMP).
+drivers en System32\drivers	-	drivers in System32\drivers
+cambiados en los 14 días anteriores al último apagado	-	changed in the 14 days before the last shutdown
+Hay copias del registro en RegBack.	-	There are registry backups in RegBack.
+Las copias de RegBack están vacías (normal desde Windows 10 1803).	-	The RegBack copies are empty (normal since Windows 10 1803).
+Elige un sistema	-	Choose a system
+Expediente de Forense (ZunzúnOS). Solo lectura: no se ha modificado nada del disco.	-	Forense case file (ZunzúnOS). Read-only: nothing on the disk was changed.
+No se pudo guardar el expediente	-	The case file couldn't be saved
+Expediente guardado en	-	Case file saved in
+Solo lectura: Forense no cambia nada del disco.	-	Read-only: Forense doesn't change anything on the disk.
+No hay volúmenes NTFS en los discos.	-	There are no NTFS volumes on the disks.
+Buscando sistemas en los discos...	-	Looking for systems on the disks...
+Conecta el disco del equipo averiado o arranca ZunzúnOS en él.	-	Connect the broken computer's disk, or boot ZunzúnOS on it.
+Analizando...	-	Analyzing...
+Buscar de nuevo	-	Search again
+Guardar expediente	-	Save case file
+Sistemas encontrados	-	Systems found
+Forense	-	Forensics
+Esperando al Lab...	-	Waiting for the Lab...
+No se pudo contactar con el Lab	-	The Lab couldn't be reached
+El Lab respondió con un error	-	The Lab replied with an error
+La respuesta del Lab no tiene el formato de la API de chat.	-	The Lab's reply isn't in the chat API format.
+binario	-	binary
+primeros 256 en hexadecimal	-	first 256 in hexadecimal
+No existe ese archivo.	-	That file doesn't exist.
+archivo de	-	file of
+solo el final	-	only the end
+No existe esa carpeta.	-	That folder doesn't exist.
+solo las 300 primeras	-	only the first 300
+Solo se pueden leer las colmenas SYSTEM y SOFTWARE (las demás guardan contraseñas o datos personales).	-	Only the SYSTEM and SOFTWARE hives can be read (the others hold passwords or personal data).
+No se puede abrir la colmena.	-	The hive can't be opened.
+No existe esa clave.	-	That key doesn't exist.
+No existe ese valor.	-	That value doesn't exist.
+Esta prueba aún no está disponible en esta versión de Forense.	-	This check isn't available yet in this version of Forense.
+Acción desconocida: rechazada (no está en el catálogo).	-	Unknown action: rejected (it isn't in the catalog).
+DIAGNÓSTICO	-	DIAGNOSIS
+CAUSAS POSIBLES	-	POSSIBLE CAUSES
+EL LAB PIDE ESTAS PRUEBAS (solo lectura)	-	THE LAB ASKS FOR THESE CHECKS (read-only)
+REPARACIONES PROPUESTAS	-	PROPOSED REPAIRS
+riesgo	-	risk
+Las reparaciones automáticas llegarán en la fase 4. De momento puedes hacerlas a mano con estas indicaciones.	-	Automatic repairs arrive in phase 4. For now you can do them by hand with these instructions.
+El Lab da el caso por cerrado.	-	The Lab considers the case closed.
+Primero configura un Lab.	-	Set up a Lab first.
+Se enviará el expediente al Lab «%s». %s	-	The case file will be sent to the Lab “%s”. %s
+Los datos personales irán cambiados por marcas.	-	Personal data will be replaced by placeholders.
+Irá tal cual (Lab de confianza en tu red).	-	It will go as is (a trusted Lab on your network).
+Lab	-	Lab
+Consultando al Lab, ronda	-	Asking the Lab, round
+El Lab no ha respondido con el formato zz-forense/1. Su respuesta:	-	The Lab didn't reply in the zz-forense/1 format. Its reply:
+El Lab pide %d pruebas de solo lectura (las ves en la ventana). ¿Se las doy?	-	The Lab asks for %d read-only checks (you can see them in the window). Give them?
+No autorizadas.	-	Not authorized.
+Pruebas enviadas al Lab	-	Checks sent to the Lab
+Pon un nombre y una URL base (http:// o https://).	-	Enter a name and a base URL (http:// or https://).
+Fuera de tu red local el Lab tiene que usar https://.	-	Outside your local network the Lab must use https://.
+Como mucho 8 Labs.	-	8 Labs at most.
+Lab guardado	-	Lab saved
+El Lab responde.	-	The Lab answers.
+Cualquier servidor compatible con la API de OpenAI: Lyceum, Ollama, llama.cpp, vLLM...	-	Any server compatible with the OpenAI API: Lyceum, Ollama, llama.cpp, vLLM...
+Todavía no hay ningún Lab.	-	There are no Labs yet.
+Anonimizar (siempre, porque el Lab está fuera de tu red)	-	Anonymize (always, because the Lab is outside your network)
+Anonimizar los datos personales	-	Anonymize personal data
+Añadir Lyceum con la clave de LUMEN	-	Add Lyceum with the LUMEN key
+Protocolo zz-forense/1: ver docs/FORENSE.md. Las claves se guardan solo en esta memoria USB.	-	zz-forense/1 protocol: see docs/FORENSE.md. Keys are stored only on this USB drive.
+Pulsa «Analizar en el Lab» para mandar el expediente.	-	Press “Analyze in the Lab” to send the case file.
+Analizar en el Lab	-	Analyze in the Lab
+Pruebas pedidas por el Lab	-	Checks requested by the Lab
+Borrar Lab	-	Delete Lab
+URL base	-	Base URL
+API key	-	API key
+Probar conexión	-	Test connection
+Preferido	-	Preferred
+Informe	-	Report
+Labs	-	Labs

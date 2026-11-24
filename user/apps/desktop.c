@@ -14,7 +14,7 @@ static u32 *wall; static int wall_w, wall_h; static char wall_p[160]; static int
 static int sess(void) { return z_sess(0, 0, 0); }
 static int guest(void) { return (sess() & 7) == 2; }
 /* programas que el invitado no puede abrir (el nucleo tambien lo impide) */
-static int admin_only(const char *b) { static const char *L[] = {"config", "instalar", "discos", "rescate", "restaurar"}; for (int i = 0; i < 5; i++) if (!strcmp(b, L[i])) return 1; return 0; }
+static int admin_only(const char *b) { static const char *L[] = {"config", "instalar", "discos", "rescate", "restaurar", "forense"}; for (int i = 0; i < 6; i++) if (!strcmp(b, L[i])) return 1; return 0; }
 static int bar_y(void) { return TH.panel_top ? 0 : si.scr_h - PH; }
 static void T_(zwin *w, int x, int y, const char *s, u32 c) { if (S_ > 1) g_text2(w, x, y, s, c, S_); else g_text(w, x, y, s, c); }
 static void visible(void) { nvis = 0; int g = guest(); for (int i = 0; i < NAPP && nvis < 64; i++) if (!z_hidden(z_apps[i].bin) && !(g && admin_only(z_apps[i].bin))) vis[nvis++] = i; }

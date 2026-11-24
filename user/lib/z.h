@@ -277,4 +277,7 @@ int z_cookies_policy(int set); int z_cookies_rule(const char *dom, int set); voi
 typedef struct { const char *hdrs; int (*cb)(const char *d, long n, void *ctx); int (*pump)(void *ctx); void *ctx; int timeout_ms; } zhttp_opt;
 int z_http_ex(const char *method, const char *url, const char *body, long bl, const char *ctype, const zhttp_opt *o, char **out, long *len, zhttp_info *inf);
 extern int z_https_allow_bad; void z_https_allow(const char *host); const char *z_http_err(int e);
+/* JSON (zjson.c): sobre el texto, sin copiarlo; v/obj/arr apuntan al inicio de un valor y e al final del texto */
+const char *zj_skip(const char *p, const char *e); const char *zj_get(const char *obj, const char *e, const char *key); const char *zj_item(const char *arr, const char *e, int i);
+int zj_str(const char *v, const char *e, char *out, int cap); int zj_milli(const char *v, const char *e, long *out); int zj_true(const char *v, const char *e); long zj_escape(const char *s, char *out, long cap);
 

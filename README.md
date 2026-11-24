@@ -24,6 +24,10 @@ El estudio de KolibriOS y las decisiones de diseño están en
 | Discos | IDE/ATAPI, AHCI, NVMe, USB y tarjetas SD. Particiones MBR y GPT |
 | Archivos | FAT12/16/32 y exFAT con lectura y escritura. NTFS, ext2/3/4 e ISO9660 de solo lectura. Los volúmenes se montan protegidos contra escritura |
 | Rescate | Copia tolerante a sectores dañados, archivos borrados (FAT, NTFS, exFAT y ext2; ext3/4 si conservan sus bloques), recuperación por firmas, imagen de disco y particiones perdidas |
+| Forense | Rastreador de desastres de sistemas: encuentra los Windows de los discos y, **sin modificar nada**, saca su versión, el nombre del equipo, el último apagado correcto, cómo arrancaba, si el volumen quedó dañado, los drivers cambiados justo antes del fallo, lo que dice la reparación automática de Windows y las actualizaciones a medio instalar. Lo guarda todo en un expediente en la memoria USB y lo manda a analizar a un **Lab** de IA. El Lab puede ser:
+  - **local**: cualquier servidor compatible con la API de OpenAI y una API key, como el de una empresa o el de casa;
+  - **Lyceum**: en la nube, con los datos personales anonimizados.
+  El Lab puede pedir más pruebas de solo lectura, que el administrador aprueba una a una. Lector NTFS y lector del registro de Windows propios. Las reparaciones paso a paso llegarán más adelante ([docs/FORENSE.md](docs/FORENSE.md)) |
 | Ofimática | Escritor (libros; TXT, MD, HTML, RTF y DOCX), Hoja (XLSX y CSV), Presentar y Agenda |
 | Apps web | Instalador de programas HTML/CSS con formularios y cálculos, desde archivo, portapapeles o http |
 | Chat con IA | **LUMEN**: chat con los modelos de OpenRouter (gratuitos o de pago), de **Lyceum** (servidores en la UE) o con un servidor compatible con OpenAI en la red local; respuestas en vivo por HTTPS, razonamiento, Markdown con tablas y código, chats guardados, exportar a Markdown e imprimir; **archivos adjuntos** (TXT, DOCX, ODT, XLSX, PDF…) de los que toma los fragmentos que vienen al caso para cada pregunta; imágenes para los modelos que las aceptan. Guía en [docs/LUMEN.md](docs/LUMEN.md) |
