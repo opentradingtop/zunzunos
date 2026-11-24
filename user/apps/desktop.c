@@ -184,7 +184,11 @@ static void guard_ask(void) { zask q; if (z_guard(3, &q, 0) != 1) return; char d
         if (!z_event(&e, 500) || e.win != (u32)d->id) continue; if (e.type == EV_CLOSE || (e.type == EV_KEY && e.ch == 27)) r = 3;
         else if (e.type == EV_DOWN && e.y >= h - 50 && e.y < h - 18) for (int i = 0; i < 3; i++) if (e.x >= bx[i] && e.x < bx[i] + bw[i]) r = i == 0 ? 2 : i == 1 ? 1 : 4; }
     zw_close(d); if (!r) r = 3; z_guard(4, (void *)(long)q.id, r); if (r == 2 || r == 4) z_rules_save(); snprintf(lg, 160, "[prueba] guardia respuesta %d", r); z_log(lg); }
-static void lock_done(void) { zw_close(lk); lk = 0; unlocking = 0; cfg_load(); reload(); z_log("[zz] sesion: escritorio"); z_recover_tmp("/sys", 6); z_rules_load(); red_start(); }
+/* datos cifrados: se pide la frase al entrar el administrador (el invitado no usa los datos de la memoria) */
+static void crypt_unlock(void) { int st = z_crypt(0, 0); if (!(st & 1) || (st & 2) || guest()) return; char p[200]; z_log("[prueba] cifrado pide la frase");
+    for (int tries = 0; ; tries++) { if (!z_pass_dialog("Abrir tus datos", tries ? "Frase incorrecta. Vuelve a escribirla:" : "Tus datos están cifrados. Frase de paso:", p, 190)) { z_log("[prueba] cifrado sin abrir"); break; }
+        long r = z_crypt(1, p); memset(p, 0, sizeof p); if (!r) { z_log("[prueba] cifrado abierto"); cfg_load(); reload(); break; } } }
+static void lock_done(void) { zw_close(lk); lk = 0; unlocking = 0; cfg_load(); reload(); z_log("[zz] sesion: escritorio"); crypt_unlock(); z_recover_tmp("/sys", 6); z_rules_load(); red_start(); }
 static void open_lock(int mode) { /* 0 inicio, 1 bloqueo, 2 cambiar PIN */
     pin[0] = lmsg[0] = 0; int st = sess(); unlocking = mode == 1;
     if (mode == 0) lst = L_PICK; else if (mode == 1) lst = (st & 7) == 1 && (st & 8) ? L_PIN : L_CONT; else lst = st & 8 ? L_OLD : L_CHG1;

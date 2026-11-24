@@ -35,12 +35,13 @@ int vfs_mounts(zmount_t *o, int max) {
     mutex_unlock(&vfs_lock); return n;
 }
 int vfs_open(const char *path, int fl, file_t **out) {
+    int prot = crypt_path(path);   /* fuera del cerrojo: puede leer CIFRADO.TXT */
     mutex_lock(&vfs_lock); const char *r; mount_t *m = resolve(path, &r); int e = E_NOENT;
     if (m && m->ro && (fl & (O_WRITE | O_CREATE | O_TRUNC | O_APPEND))) e = E_ROFS;
     else if (m) {
         file_t *f = kzalloc(sizeof *f);
         if (!f) e = E_NOMEM;
-        else { f->m = m; f->flags = fl; f->refs = 1; e = m->ops->open(m, r, fl, f); if (e) kfree(f); else { if (fl & O_APPEND) f->pos = f->size; *out = f; } }
+        else { f->m = m; f->flags = fl; f->refs = 1; e = m->ops->open(m, r, fl, f); if (e) kfree(f); else { if (fl & O_APPEND) f->pos = f->size; if (prot) { e = crypt_open(f, fl); if (e) { if (m->ops->close) m->ops->close(f); kfree(f); } } if (!e) *out = f; } }
     }
     mutex_unlock(&vfs_lock); return e;
 }
@@ -49,7 +50,7 @@ i64 vfs_read(file_t *f, void *b, u64 n) {
     if (!(f->flags & O_READ)) return E_BADF;
     if (f->m->dead) return E_IO;
     mutex_lock(&vfs_lock); i64 r = 0;
-    if (f->pos < f->size) { r = f->m->ops->read(f, b, MIN(n, f->size - f->pos)); if (r > 0) f->pos += r; }
+    if (f->pos < f->size) { r = f->enc ? crypt_read(f, b, MIN(n, f->size - f->pos)) : f->m->ops->read(f, b, MIN(n, f->size - f->pos)); if (r > 0) f->pos += r; }
     mutex_unlock(&vfs_lock); return r;
 }
 i64 vfs_write(file_t *f, const void *b, u64 n) {
@@ -57,15 +58,16 @@ i64 vfs_write(file_t *f, const void *b, u64 n) {
     if (!(f->flags & O_WRITE)) return E_BADF;
     if (f->m->dead) return E_IO;
     if (!f->m->ops->write) return E_ROFS;
-    mutex_lock(&vfs_lock); i64 r = f->m->ops->write(f, b, n);
+    mutex_lock(&vfs_lock); i64 r = f->enc ? crypt_write(f, b, n) : f->m->ops->write(f, b, n);
     if (r > 0) { f->pos += r; if (f->pos > f->size) f->size = f->pos; }
     mutex_unlock(&vfs_lock); return r;
 }
 i64 vfs_seek(file_t *f, i64 o, int wh) {
     if (f->is_sock) return E_INVAL;
-    i64 b = wh == 1 ? (i64)f->pos : wh == 2 ? (i64)f->size : 0;
+    int h = f->enc ? 16 : 0;   /* los cifrados tienen 16 bytes de cabecera que el programa no ve */
+    i64 b = wh == 1 ? (i64)f->pos - h : wh == 2 ? (i64)f->size - h : 0;
     if (b + o < 0) return E_INVAL;
-    f->pos = b + o; return f->pos;
+    f->pos = b + o + h; return f->pos - h;
 }
 void vfs_close(file_t *f) {
     if (f->is_sock) { sock_close(f); return; }

@@ -84,14 +84,21 @@ static void html_text(sb_t *o, const char *s, long n) { int sp = 0; for (long i 
             if (!done) sb_s(o, "&"); sp = 0; continue; }
         if (c == '\r' || c == '\n' || c == '\t' || c == ' ') { if (!sp && o->n && o->p[o->n - 1] != '\n') sb_s(o, " "); sp = 1; continue; } sp = 0; sb_add(o, &c, 1); } }
 /* ---------- MIME: busca el texto (o el HTML) y la lista de adjuntos ---------- */
-typedef struct { sb_t text, html, att; } mime_t;
+typedef struct { char name[160], ctype[80]; u8 *d; long n; } att_t;   /* adjunto ya decodificado */
+typedef struct { sb_t text, html, att; att_t a[16]; int na; } mime_t;
+static const char *ext_for(const char *ct) { return strstr(ct, "png") ? ".png" : strstr(ct, "jpeg") || strstr(ct, "jpg") ? ".jpg" : strstr(ct, "gif") ? ".gif" : strstr(ct, "pdf") ? ".pdf" : strstr(ct, "mpeg") ? ".mp3" : strstr(ct, "wav") ? ".wav" : strstr(ct, "plain") ? ".txt" : strstr(ct, "html") ? ".html" : strstr(ct, "wordprocessingml") ? ".docx" : strstr(ct, "spreadsheetml") ? ".xlsx" : strstr(ct, "zip") ? ".zip" : ".bin"; }
 static void mime_part(mime_t *m, const char *p, long n, int depth) {
     long hl = 0; while (hl + 1 < n && !(p[hl] == '\n' && (p[hl + 1] == '\n' || (p[hl + 1] == '\r' && hl + 2 < n && p[hl + 2] == '\n')))) hl++; const char *body; if (hl + 1 >= n) { hl = n; body = p + n; } else body = p + MIN(n, hl + (p[hl + 1] == '\r' ? 3 : 2)); long bl = p + n - body; if (bl < 0) bl = 0;
     char ct[300] = "text/plain", te[40] = "", cd[300] = "", v[200]; hget(p, hl, "Content-Type", ct, 300); hget(p, hl, "Content-Transfer-Encoding", te, 40); hget(p, hl, "Content-Disposition", cd, 300); char lc[300]; strcpy(lc, ct); lower(lc); lower(te);
     if (!strncmp(lc, "multipart/", 10) && depth < 6) { char bd[100]; param(ct, "boundary", bd, 100); if (!bd[0]) return; char mk[110]; snprintf(mk, 110, "--%s", bd); int ml = strlen(mk); const char *s = body, *e = body + bl;
         const char *a = 0; while (s < e) { const char *f = 0; for (const char *q = s; q + ml <= e; q++) if ((q == body || q[-1] == '\n') && !memcmp(q, mk, ml)) { f = q; break; } if (!f) break; if (a) { const char *z = f; if (z > a && z[-1] == '\n') z--; if (z > a && z[-1] == '\r') z--; mime_part(m, a, z - a, depth + 1); } if (f + ml + 1 < e && f[ml] == '-' && f[ml + 1] == '-') break; a = strchr(f, '\n'); if (!a) break; a++; s = a; } return; }
     char fn[160] = ""; param(cd, "filename", fn, 160); if (!fn[0]) param(ct, "name", fn, 160); char lcd[300]; strcpy(lcd, cd); lower(lcd);
-    if (fn[0] || !strncmp(lcd, "attachment", 10) || (strncmp(lc, "text/", 5) && strncmp(lc, "message/", 8))) { char d[200]; hdr_dec(fn[0] ? fn : _("(sin nombre)"), d, 200); if (m->att.n) sb_s(&m->att, ", "); sb_s(&m->att, d); return; }
+    if (fn[0] || !strncmp(lcd, "attachment", 10) || (strncmp(lc, "text/", 5) && strncmp(lc, "message/", 8))) { char d[200];
+        if (fn[0]) hdr_dec(fn, d, 200); else snprintf(d, 200, "%s%d%s", _("adjunto"), m->na + 1, ext_for(lc));
+        for (char *q = d; *q; q++) if (*q == '/' || *q == '\\' || *q == ':') *q = '_';   /* sin rutas en el nombre */
+        if (m->att.n) sb_s(&m->att, ", "); sb_s(&m->att, d);
+        if (m->na < 16) { att_t *a = &m->a[m->na++]; strncpy0(a->name, d, 160); strncpy0(a->ctype, lc, 80); a->d = malloc(bl + 1); a->n = strstr(te, "base64") ? b64d(body, bl, a->d) : strstr(te, "quoted") ? qpd(body, bl, a->d, 0) : (memcpy(a->d, body, bl), bl); }
+        return; }
     if (!strncmp(lc, "message/rfc822", 14)) { mime_part(m, body, bl, depth + 1); return; }
     u8 *raw = malloc(bl + 1); long rn = strstr(te, "base64") ? b64d(body, bl, raw) : strstr(te, "quoted") ? qpd(body, bl, raw, 0) : (memcpy(raw, body, bl), bl); param(ct, "charset", v, 200); lower(v);
     sb_t u = {0}; sb_s(&u, ""); to_utf8(&u, raw, rn, v); free(raw); if (strstr(lc, "text/html")) { if (!m->html.n) sb_add(&m->html, u.p, u.n); } else if (!m->text.n) sb_add(&m->text, u.p, u.n); free(u.p); }
@@ -123,6 +130,7 @@ static void refresh(void) { if (imap_login()) return; sb_t o = {0}; if (imap(&o,
     nh = 0; sel = -1; topl = 0; if (ex > 0) { long a = MAX(1, ex - NMAX + 1); if (imap(&o, "FETCH %ld:%ld (UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])", a, ex)) { snprintf(msg, 200, "IMAP: %s", IC.err); free(o.p); return; } parse_fetch(o.p, o.n); free(o.p); }
     int unread = 0; for (int i = 0; i < nh; i++) unread += !H[i].seen; snprintf(msg, 200, _("%ld mensajes en la bandeja de entrada, %d sin leer"), ex, unread); char m[100]; snprintf(m, 100, "[prueba] correo bandeja %ld mensajes", ex); z_log(m); }
 /* ---------- lectura ---------- */
+static att_t RA[16]; static int nra, att_y[16];   /* adjuntos del mensaje abierto y donde se dibujan */
 static sb_t body; static char rd_from[200], rd_to[300], rd_subj[300], rd_date[80], rd_att[300], rd_reply[200], rd_msgid[200]; static int rtop; static char **wl; static int nwl;
 static void wrap(int cols) { for (int i = 0; i < nwl; i++) free(wl[i]); free(wl); wl = 0; nwl = 0; int cap = 64; wl = malloc(cap * sizeof *wl); const char *p = body.p ? body.p : "";
     while (*p) { const char *e = strchr(p, '\n'); long n = e ? e - p : (long)strlen(p); const char *q = p; do { long k = 0, last = -1, ch = 0; while (k < n - (q - p) && ch < cols) { if (q[k] == ' ') last = k; u8 c = q[k]; k += c < 0x80 ? 1 : c < 0xE0 ? 2 : c < 0xF0 ? 3 : 4; ch++; } if (k < n - (q - p) && last > 0) k = last + 1; if (nwl == cap) { cap *= 2; wl = realloc(wl, cap * sizeof *wl); } char *l = malloc(k + 1); memcpy(l, q, k); l[k] = 0; if (k && l[k - 1] == '\r') l[k - 1] = 0; wl[nwl++] = l; q += k; } while (q < p + n); if (!n) { if (nwl == cap) { cap *= 2; wl = realloc(wl, cap * sizeof *wl); } wl[nwl++] = strdup(""); } p = e ? e + 1 : p + n; } }
@@ -131,12 +139,33 @@ static void open_msg(int i) { if (i < 0 || i >= nh) return; sel = i; if (imap_lo
     long hl = 0; while (hl + 1 < ml && !(lit[hl] == '\n' && (lit[hl + 1] == '\n' || (lit[hl + 1] == '\r' && lit[hl + 2] == '\n')))) hl++; char v[600];
     hget(lit, hl, "From", v, 600); hdr_dec(v, rd_from, 200); hget(lit, hl, "To", v, 600); hdr_dec(v, rd_to, 300); hget(lit, hl, "Subject", v, 600); hdr_dec(v, rd_subj, 300); hget(lit, hl, "Date", v, 600); strncpy0(rd_date, v, 80); if (!hget(lit, hl, "Reply-To", v, 600)) hget(lit, hl, "From", v, 600); strncpy0(rd_reply, v, 200); hget(lit, hl, "Message-ID", v, 600); strncpy0(rd_msgid, v, 200);
     mime_t m = {0}; mime_part(&m, lit, ml, 0); free(body.p); body = (sb_t){0}; sb_s(&body, ""); if (m.text.n) sb_add(&body, m.text.p, m.text.n); else if (m.html.n) { sb_t h = {0}; sb_s(&h, ""); html_text(&h, m.html.p, m.html.n); long k = 0; int nl = 2; for (long j = 0; j < h.n; j++) { char ch = h.p[j]; if (ch == '\n') { if (nl >= 2) continue; nl++; } else if (ch == ' ' && nl) continue; else nl = 0; h.p[k++] = ch; } sb_add(&body, h.p, k); free(h.p); } /* sin lineas en blanco de mas */ rd_att[0] = 0; if (m.att.n) strncpy0(rd_att, m.att.p, 300); free(m.text.p); free(m.html.p); free(m.att.p); free(o.p);
+    for (int k = 0; k < nra; k++) free(RA[k].d); nra = m.na; for (int k = 0; k < m.na; k++) RA[k] = m.a[k];
     if (!H[i].seen) { imap(0, "UID STORE %u +FLAGS (\\Seen)", H[i].uid); H[i].seen = 1; } rtop = 0; wrap((W->w - 32) / 8); msg[0] = 0; char lg[300]; snprintf(lg, 300, "[prueba] correo leido: %s", rd_subj); z_log(lg); }
+/* ---------- adjuntos: guardar en Documentos/Correo o abrir con su programa ---------- */
+static int att_save(int k, int open) {
+    char dir[200], p[400]; if (open) strcpy(dir, "/rd/tmp/correo"); else { char d[160]; z_docdir(d); snprintf(dir, 200, "%s/Correo", d); }
+    z_mkdir(dir); snprintf(p, 400, "%s/%s", dir, RA[k].name);
+    zdirent st; if (!open) for (int n = 2; !z_stat(p, &st) && n < 100; n++) { const char *dot = strrchr(RA[k].name, '.'); int bl = dot ? (int)(dot - RA[k].name) : (int)strlen(RA[k].name); snprintf(p, 400, "%s/%.*s (%d)%s", dir, bl, RA[k].name, n, dot ? dot : ""); }
+    int e = z_writefile(p, RA[k].d, RA[k].n); z_sync();
+    char lg[500]; snprintf(lg, 500, "[prueba] correo adjunto %s %s %ld bytes: %d", open ? "abierto" : "guardado", p, RA[k].n, e); z_log(lg);
+    if (e) { snprintf(msg, 200, "%s: %s", _("No se pudo guardar el adjunto"), z_errstr(e)); return -1; }
+    if (open) { if (z_open_path(p) < 0) snprintf(msg, 200, "%s", _("No hay ningún programa para abrir ese archivo")); else msg[0] = 0; }
+    else snprintf(msg, 200, "%s %s", _("Guardado en"), p);
+    return 0; }
+
 /* ---------- envio (SMTP) ---------- */
 static int smtp_resp(cn_t *c, char *l, int cap) { int code; do { if (cn_line(c, l, cap) < 0) return -1; code = atoi(l); } while (strlen(l) > 3 && l[3] == '-'); return code; }
 static int smtp_cmd(cn_t *c, const char *s, int want, char *l) { if (s && cn_puts(c, s)) return -1; int r = smtp_resp(c, l, 600); if (r / 100 != want / 100) { snprintf(c->err, 120, "SMTP: %s", l); return -1; } return 0; }
 static void addr_of(const char *s, char *o, int cap) { const char *a = strchr(s, '<'); if (a) { const char *b = strchr(a, '>'); int n = MIN(b ? (int)(b - a - 1) : (int)strlen(a + 1), cap - 1); memcpy(o, a + 1, n); o[n] = 0; } else { while (*s == ' ') s++; strncpy0(o, s, cap); char *e = o + strlen(o); while (e > o && e[-1] == ' ') *--e = 0; } }
 static void enc_hdr(sb_t *b, const char *s) { int ascii = 1; for (const char *p = s; *p; p++) if ((u8)*p >= 0x80) ascii = 0; if (ascii) { sb_s(b, s); return; } sb_s(b, "=?UTF-8?B?"); b64e(b, (const u8 *)s, strlen(s)); sb_s(b, "?="); }
+static char c_att[8][260]; static int nca;   /* archivos adjuntos del mensaje que se escribe */
+static const char *mime_of(const char *n) { const char *d = strrchr(n, '.'); if (!d) return "application/octet-stream"; static const char *T[][2] = { {".pdf", "application/pdf"}, {".png", "image/png"}, {".jpg", "image/jpeg"}, {".jpeg", "image/jpeg"}, {".gif", "image/gif"}, {".txt", "text/plain; charset=UTF-8"}, {".html", "text/html; charset=UTF-8"}, {".htm", "text/html; charset=UTF-8"}, {".mp3", "audio/mpeg"}, {".wav", "audio/wav"}, {".zip", "application/zip"}, {".csv", "text/csv"}, {".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}, {".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}, {".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"}, {".odt", "application/vnd.oasis.opendocument.text"}, {".doc", "application/msword"}, {".avi", "video/x-msvideo"} };
+    for (u32 i = 0; i < sizeof T / sizeof *T; i++) if (!strcasecmp(d, T[i][0])) return T[i][1]; return "application/octet-stream"; }
+static void b64_lines(sb_t *m, const u8 *d, long n) { sb_t b6 = {0}; b64e(&b6, d, n); for (long i = 0; i < b6.n; i += 76) { sb_add(m, b6.p + i, MIN(76, b6.n - i)); sb_s(m, "\r\n"); } free(b6.p); }
+static void fname_param(sb_t *m, const char *key, const char *nm) {   /* nombre de archivo: tal cual si es ASCII; si no, RFC 2231 y palabra codificada */
+    int ascii = 1; for (const char *p = nm; *p; p++) if ((u8)*p >= 0x80 || *p == '"') ascii = 0;
+    if (ascii) { sb_f(m, "; %s=\"%s\"", key, nm); return; }
+    sb_f(m, "; %s*=UTF-8''", key); for (const u8 *p = (const u8 *)nm; *p; p++) { if ((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || strchr(".-_", *p)) sb_add(m, (const char *)p, 1); else sb_f(m, "%%%02X", *p); } }
 static int smtp_send(const char *to, const char *subj, const char *text, const char *inrep) {
     cn_t c; char l[600]; snprintf(msg, 200, "%s %s...", _("Enviando por"), A.smtp); draw();
     if (cn_open_srv(&c, A.smtp, A.sport, !A.starttls)) { snprintf(msg, 200, "%s", c.err); return -1; }
@@ -148,24 +177,42 @@ static int smtp_send(const char *to, const char *subj, const char *text, const c
     if (!e && !nr) { e = -1; strcpy(c.err, _("Falta el destinatario")); }
     if (!e) e = smtp_cmd(&c, "DATA\r\n", 354, l);
     if (!e) { sb_t m = {0}; u32 t[6]; z_time(t); sb_s(&m, "From: "); if (A.name[0]) { enc_hdr(&m, A.name); sb_s(&m, " "); } sb_f(&m, "<%s>\r\nTo: %s\r\nSubject: ", A.user, to); enc_hdr(&m, subj); sb_f(&m, "\r\nMessage-ID: <%lu.%u@zunzunos>\r\n", (unsigned long)z_ms(), t[0] * 7919 + t[1]);
-        if (inrep && inrep[0]) sb_f(&m, "In-Reply-To: %s\r\nReferences: %s\r\n", inrep, inrep); sb_s(&m, "MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\nX-Mailer: ZunzunOS Correo\r\n\r\n");
-        sb_t nb = {0}; for (const char *p = text; *p; p++) { if (*p == '\n' && (p == text || p[-1] != '\r')) sb_s(&nb, "\r"); sb_add(&nb, p, 1); } sb_t b6 = {0}; b64e(&b6, (u8 *)(nb.p ? nb.p : ""), nb.n); for (long i = 0; i < b6.n; i += 76) { sb_add(&m, b6.p + i, MIN(76, b6.n - i)); sb_s(&m, "\r\n"); } free(nb.p); free(b6.p);
-        sb_s(&m, ".\r\n"); e = cn_write(&c, m.p, m.n); free(m.p); if (!e) e = smtp_cmd(&c, 0, 250, l); }
+        if (inrep && inrep[0]) sb_f(&m, "In-Reply-To: %s\r\nReferences: %s\r\n", inrep, inrep); sb_s(&m, "MIME-Version: 1.0\r\nX-Mailer: ZunzunOS Correo\r\n");
+        char bnd[64]; snprintf(bnd, 64, "=_zunzun_%lu_%u", (unsigned long)z_ms(), t[0] * 31 + t[1]);
+        if (nca) sb_f(&m, "Content-Type: multipart/mixed; boundary=\"%s\"\r\n\r\nMensaje en varias partes (MIME).\r\n--%s\r\n", bnd, bnd);
+        sb_s(&m, "Content-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n");
+        sb_t nb = {0}; for (const char *p = text; *p; p++) { if (*p == '\n' && (p == text || p[-1] != '\r')) sb_s(&nb, "\r"); sb_add(&nb, p, 1); } b64_lines(&m, (u8 *)(nb.p ? nb.p : ""), nb.n); free(nb.p);
+        for (int k = 0; k < nca && !e; k++) { long fl; u8 *fd = z_readfile(c_att[k], &fl); if (!fd) { e = -1; snprintf(c.err, 120, "%s %s", _("No se puede abrir"), c_att[k]); break; }
+            const char *nm = strrchr(c_att[k], '/'); nm = nm ? nm + 1 : c_att[k];
+            sb_f(&m, "--%s\r\nContent-Type: %s", bnd, mime_of(nm)); fname_param(&m, "name", nm); sb_s(&m, "\r\nContent-Disposition: attachment"); fname_param(&m, "filename", nm); sb_s(&m, "\r\nContent-Transfer-Encoding: base64\r\n\r\n");
+            b64_lines(&m, fd, fl); free(fd); }
+        if (nca) sb_f(&m, "--%s--\r\n", bnd);
+        if (!e) { sb_s(&m, ".\r\n"); e = cn_write(&c, m.p, m.n); } free(m.p); if (!e) e = smtp_cmd(&c, 0, 250, l); }
     if (!e) cn_puts(&c, "QUIT\r\n"); if (e) snprintf(msg, 200, "%s: %s", _("No se pudo enviar"), c.err[0] ? c.err : l); else snprintf(msg, 200, "%s", _("Mensaje enviado")); cn_close(&c);
     char lg[300]; snprintf(lg, 300, "[prueba] correo enviado a %s: %d", to, e); z_log(lg); return e; }
 /* ---------- ventana Escribir ---------- */
 static te_t CT; static char c_to[600], c_subj[300], c_inrep[200]; static int c_foc, c_cur;
-static void draw_compose(void) { zwin *w = CW; g_clear(w, UI_WHITE); g_rect(w, 0, 0, w->w, 40, UI_PANEL); ui_button(w, 8, 7, 90, 26, "Enviar", 2); ui_button(w, 104, 7, 90, 26, "Cancelar", 0);
+static int c_top(void) { return nca ? 114 + 24 * ((nca + 2) / 3) : 114; }   /* donde empieza el texto */
+static void draw_compose(void) { zwin *w = CW; g_clear(w, UI_WHITE); g_rect(w, 0, 0, w->w, 40, UI_PANEL); ui_button(w, 8, 7, 90, 26, "Enviar", 2); ui_button(w, 104, 7, 90, 26, "Cancelar", 0); ui_button(w, 200, 7, 110, 26, "Adjuntar...", 0);
+    for (int k = 0; k < nca; k++) { const char *nm = strrchr(c_att[k], '/'); nm = nm ? nm + 1 : c_att[k]; int cw = (w->w - 24) / 3, x = 12 + (k % 3) * cw, y = 112 + (k / 3) * 24; char b[80]; snprintf(b, 80, "%.26s", nm); g_round(w, x, y, cw - 8, 20, 3, 0xFEF3C7); g_text(w, x + 6, y + 2, b, 0x92400E); g_text(w, x + cw - 26, y + 2, "x", 0xB91C1C); }
     g_text(w, 12, 54, _("Para"), UI_TEXT); ui_input(w, 90, 48, w->w - 102, 26, c_to, c_foc == 0 ? c_cur : 0, c_foc == 0); g_text(w, 12, 86, _("Asunto"), UI_TEXT); ui_input(w, 90, 80, w->w - 102, 26, c_subj, c_foc == 1 ? c_cur : 0, c_foc == 1);
-    g_rect(w, 8, 114, w->w - 16, w->h - 122, 0xFFFFFF); g_frame(w, 8, 114, w->w - 16, w->h - 122, c_foc == 2 ? UI_ACC : UI_LINE); CT.cols = (w->w - 32) / 8; te_draw(w, &CT, 14, 118, w->h - 128, 1, UI_TEXT, UI_ACC2, UI_ACC, 0); zw_present(w); }
-static void compose(const char *to, const char *subj, const char *text, const char *inrep) { if (CW) zw_close(CW); strncpy0(c_to, to, 600); strncpy0(c_subj, subj, 300); strncpy0(c_inrep, inrep ? inrep : "", 200); te_init(&CT); te_set(&CT, text, strlen(text)); CT.cur = 0; c_foc = to[0] ? 2 : 0; c_cur = strlen(c_to);
-    zsys s; z_sysinfo(&s); CW = zw_new("Mensaje nuevo", -1, 0, MIN(760, (int)s.scr_w - 60), MIN(520, (int)s.scr_h - 100), WF_DECOR | WF_RESIZE); draw_compose(); }
+    int T0 = c_top(); g_rect(w, 8, T0, w->w - 16, w->h - T0 - 8, 0xFFFFFF); g_frame(w, 8, T0, w->w - 16, w->h - T0 - 8, c_foc == 2 ? UI_ACC : UI_LINE); CT.cols = (w->w - 32) / 8; te_draw(w, &CT, 14, T0 + 4, w->h - T0 - 14, 1, UI_TEXT, UI_ACC2, UI_ACC, 0); zw_present(w); }
+static void compose(const char *to, const char *subj, const char *text, const char *inrep) { if (CW) zw_close(CW); nca = 0; strncpy0(c_to, to, 600); strncpy0(c_subj, subj, 300); strncpy0(c_inrep, inrep ? inrep : "", 200); te_init(&CT); te_set(&CT, text, strlen(text)); CT.cur = 0; c_foc = to[0] ? 2 : 0; c_cur = strlen(c_to);
+    zsys s; z_sysinfo(&s); CW = zw_new("Mensaje nuevo", -1, 0, MIN(760, (int)s.scr_w - 60), MIN(520, (int)s.scr_h - 100), WF_DECOR | WF_RESIZE); draw_compose();
+    { int sx, sy; zw_screen(CW, 0, 0, &sx, &sy); char lg[160]; snprintf(lg, 160, "[prueba] correo escribir: para %d,%d asunto %d,%d texto %d,%d adjuntar %d,%d enviar %d,%d", sx + 200, sy + 60, sx + 200, sy + 92, sx + 200, sy + 200, sx + 255, sy + 20, sx + 50, sy + 20); z_log(lg); } }
 static int c_drag;
+static void add_attach(void) {
+    if (nca >= 8) { strcpy(msg, _("Como mucho 8 adjuntos por mensaje")); return; }
+    char p[260]; if (!z_pick_file(_("Adjuntar un archivo"), 0, p, 260)) return;
+    zdirent st; if (z_stat(p, &st)) return; long tot = (long)st.size; for (int k = 0; k < nca; k++) { zdirent s2; if (!z_stat(c_att[k], &s2)) tot += (long)s2.size; }
+    if (tot > 20L * 1024 * 1024) { strcpy(msg, _("Los adjuntos pasan de 20 MB: muchos servidores no los aceptan")); draw(); return; }
+    strncpy0(c_att[nca++], p, 260); char lg[300]; snprintf(lg, 300, "[prueba] correo adjuntado %s", p); z_log(lg); }
 static void compose_ev(zevent *e) { if (e->type == EV_CLOSE) { zw_close(CW); CW = 0; return; } if (e->type == EV_RESIZE) { zw_resized(CW, e->x, e->y); draw_compose(); return; } if (e->type == EV_REDRAW) { draw_compose(); return; }
-    if (e->type == EV_DOWN) { if (e->y < 40) { if (e->x < 100) { if (!smtp_send(c_to, c_subj, CT.t ? CT.t : "", c_inrep)) { zw_close(CW); CW = 0; draw(); return; } draw(); } else if (e->x < 196) { zw_close(CW); CW = 0; return; } }
+    if (e->type == EV_DOWN) { if (e->y < 40) { if (e->x < 100) { if (!smtp_send(c_to, c_subj, CT.t ? CT.t : "", c_inrep)) { zw_close(CW); CW = 0; draw(); return; } draw(); } else if (e->x < 196) { zw_close(CW); CW = 0; return; } else if (e->x >= 200 && e->x < 310) { add_attach(); draw_compose(); return; } }
+        else if (nca && e->y >= 112 && e->y < c_top() - 2) { int cw = (CW->w - 24) / 3, k = (e->y - 112) / 24 * 3 + (e->x - 12) / cw; if (k >= 0 && k < nca && (e->x - 12) % cw >= cw - 34) { memmove(c_att[k], c_att[k + 1], (size_t)(nca - k - 1) * sizeof c_att[0]); nca--; } }
         else if (e->y < 76) { c_foc = 0; c_cur = strlen(c_to); if (e->btn & 2) ui_input_menu(CW, c_to, 590, &c_cur, e); } else if (e->y < 108) { c_foc = 1; c_cur = strlen(c_subj); if (e->btn & 2) ui_input_menu(CW, c_subj, 290, &c_cur, e); }
-        else { c_foc = 2; if (e->btn & 2) te_menu(CW, &CT, e); else { te_click(&CT, e->x - 14, e->y - 118, 1, e->mods & M_SHIFT); c_drag = 1; } } draw_compose(); return; }
-    if (e->type == EV_MOVE && c_drag) { if (!e->btn) c_drag = 0; else { te_click(&CT, e->x - 14, e->y - 118, 1, 1); draw_compose(); } return; } if (e->type == EV_UP) { c_drag = 0; return; }
+        else { c_foc = 2; if (e->btn & 2) te_menu(CW, &CT, e); else { te_click(&CT, e->x - 14, e->y - c_top() - 4, 1, e->mods & M_SHIFT); c_drag = 1; } } draw_compose(); return; }
+    if (e->type == EV_MOVE && c_drag) { if (!e->btn) c_drag = 0; else { te_click(&CT, e->x - 14, e->y - c_top() - 4, 1, 1); draw_compose(); } return; } if (e->type == EV_UP) { c_drag = 0; return; }
     if (e->type == EV_KEY) { if (e->key == K_TAB) c_foc = (c_foc + 1) % 3; else if (c_foc == 0) ui_input_key(c_to, 590, &c_cur, e); else if (c_foc == 1) ui_input_key(c_subj, 290, &c_cur, e); else te_key(&CT, e, 10); if (c_foc < 2 && e->key == K_TAB) c_cur = strlen(c_foc ? c_subj : c_to); draw_compose(); } }
 /* ---------- formulario de la cuenta (dentro de la ventana principal) ---------- */
 static int setup, sf, scur; static char s_imap[96], s_smtp[96], s_sport[8];
@@ -196,13 +243,16 @@ void draw(void) { log_err(); zwin *w = W; g_clear(w, UI_WHITE); zs_area(w, 0, 0,
         if (!nh) g_text(w, 26, y + 4, _(acct_load_ok() ? "No hay mensajes. Pulsa Recibir." : "Pulsa Cuenta para configurar tu correo."), UI_MUTED);
         y = TB + 4 + lh + 4; g_rect(w, 0, y, w->w, 1, UI_LINE); y += 6; zs_area(w, 0, y, w->w, w->h - 22 - y, 0);
         if (sel >= 0 && body.p) { g_textb(w, 16, y, rd_subj, UI_TEXT); y += 20; char b[400]; snprintf(b, 400, "%s: %s", _("De"), rd_from); g_text(w, 16, y, b, UI_MUTED); y += 18; snprintf(b, 400, "%s: %s", _("Para"), rd_to); zw_clip(w, 16, y, w->w - 32, 18); g_text(w, 16, y, b, UI_MUTED); zw_noclip(w); y += 18; snprintf(b, 400, "%s: %s", _("Fecha"), rd_date); g_text(w, 16, y, b, UI_MUTED); y += 18;
-            if (rd_att[0]) { snprintf(b, 400, "%s: %s", _("Adjuntos"), rd_att); zw_clip(w, 16, y, w->w - 32, 18); g_text(w, 16, y, b, 0xB45309); zw_noclip(w); y += 18; } y += 6; int vis = (w->h - 24 - y) / 18; rtop = MAX(0, MIN(rtop, nwl - vis)); for (int i = rtop; i < nwl && i < rtop + vis; i++, y += 18) g_text(w, 16, y, wl[i], UI_TEXT); } }
+            for (int k = 0; k < nra; k++) { char sz[24]; if (RA[k].n < 1024) snprintf(sz, 24, "%ld B", (long)RA[k].n); else if (RA[k].n < 1048576) snprintf(sz, 24, "%ld KB", (long)((RA[k].n + 1023) / 1024)); else snprintf(sz, 24, "%ld.%ld MB", (long)(RA[k].n / 1048576), (long)(RA[k].n % 1048576 * 10 / 1048576)); snprintf(b, 400, "%s: %s (%s)", _("Adjunto"), RA[k].name, sz); zw_clip(w, 16, y, w->w - 230, 24); g_text(w, 16, y + 4, b, 0xB45309); zw_noclip(w); ui_button(w, w->w - 206, y, 90, 24, "Abrir", 0); ui_button(w, w->w - 110, y, 94, 24, "Guardar", 0); att_y[k] = y; y += 28; }
+            { static u32 logged; if (nra && logged != H[sel].uid) { logged = H[sel].uid; int sx, sy; zw_screen(w, w->w - 63, att_y[0] + 12, &sx, &sy); char lg[120]; snprintf(lg, 120, "[prueba] correo adjunto boton %d,%d", sx, sy); z_log(lg); } }
+            if (!nra && rd_att[0]) { snprintf(b, 400, "%s: %s", _("Adjuntos"), rd_att); zw_clip(w, 16, y, w->w - 32, 18); g_text(w, 16, y, b, 0xB45309); zw_noclip(w); y += 18; } y += 6; int vis = (w->h - 24 - y) / 18; rtop = MAX(0, MIN(rtop, nwl - vis)); for (int i = rtop; i < nwl && i < rtop + vis; i++, y += 18) g_text(w, 16, y, wl[i], UI_TEXT); } }
     zs_stop(w); zs_show(w); g_rect(w, 0, w->h - 22, w->w, 22, UI_PANEL); zw_clip(w, 0, w->h - 22, w->w, 22); g_text(w, 8, w->h - 19, msg, UI_TEXT); zw_noclip(w); zw_present(w); }
 static void quote(sb_t *o) { sb_s(o, "\n\n"); sb_f(o, _("El %s, %s escribió:"), rd_date, rd_from); sb_s(o, "\n"); for (int i = 0; i < nwl; i++) sb_f(o, "> %s\n", wl[i]); }
 static void act(int b) { char t[400];
     if (b == 0) { if (acct_load_ok()) refresh(); else setup = 1; }
     else if (b == 1) compose("", "", "", 0);
-    else if ((b == 2 || b == 3) && sel >= 0 && body.p) { sb_t q = {0}; sb_s(&q, ""); quote(&q); int fw = b == 3; const char *s = rd_subj; if (!strncasecmp(s, fw ? "Fwd: " : "Re: ", fw ? 5 : 4)) s += fw ? 5 : 4; snprintf(t, 400, "%s%s", fw ? "Fwd: " : "Re: ", s); compose(fw ? "" : rd_reply, t, q.p, fw ? 0 : rd_msgid); free(q.p); }
+    else if ((b == 2 || b == 3) && sel >= 0 && body.p) { sb_t q = {0}; sb_s(&q, ""); quote(&q); int fw = b == 3; const char *s = rd_subj; if (!strncasecmp(s, fw ? "Fwd: " : "Re: ", fw ? 5 : 4)) s += fw ? 5 : 4; snprintf(t, 400, "%s%s", fw ? "Fwd: " : "Re: ", s); compose(fw ? "" : rd_reply, t, q.p, fw ? 0 : rd_msgid); free(q.p);
+        if (fw) for (int k = 0; k < nra && nca < 8; k++) { char p[260]; snprintf(p, 260, "/rd/tmp/correo/%s", RA[k].name); z_mkdir("/rd/tmp/correo"); if (!z_writefile(p, RA[k].d, RA[k].n)) strncpy0(c_att[nca++], p, 260); } if (fw && CW) draw_compose(); }
     else if (b == 4 && sel >= 0) { if (!ui_confirm("Borrar", "¿Borrar este mensaje del servidor?")) return; if (imap_login() || imap(0, "SELECT INBOX") || imap(0, "UID STORE %u +FLAGS (\\Deleted)", H[sel].uid) || imap(0, "EXPUNGE")) { snprintf(msg, 200, "IMAP: %s", IC.err); return; } memmove(&H[sel], &H[sel + 1], (nh - sel - 1) * sizeof *H); nh--; sel = -1; free(body.p); body = (sb_t){0}; strcpy(msg, _("Mensaje borrado")); }
     else if (b == 5 && sel >= 0 && body.p) { char sub[600]; snprintf(sub, 600, "%s: %s   %s: %s", _("De"), rd_from, _("Fecha"), rd_date); sb_t tx = {0}; sb_s(&tx, ""); if (rd_att[0]) sb_f(&tx, "%s: %s\n\n", _("Adjuntos"), rd_att); sb_s(&tx, body.p); zp_print_text(rd_subj[0] ? rd_subj : _("(sin asunto)"), sub, tx.p, 0); free(tx.p); }
     else if (b == 5) strcpy(msg, _("Abre un mensaje para imprimirlo"));
@@ -218,5 +268,7 @@ int main(const char *a) { zsys s; z_sysinfo(&s); W = zw_new("Correo", -1, 0, MIN
         if (e.type == EV_WHEEL) { int lh = TB + 4 + list_h(); if (e.y < lh) topl = MAX(0, MIN(topl - (int)e.key, nh - 12)); else rtop -= (int)e.key * 3; draw(); continue; }
         if (e.type == EV_KEY) { if (e.key == K_DOWN && sel + 1 < nh) { open_msg(sel + 1); if (sel >= topl + 12) topl = sel - 11; } else if (e.key == K_UP && sel > 0) { open_msg(sel - 1); if (sel < topl) topl = sel; } else if (e.key == K_PGDN || e.ch == ' ') rtop += 20; else if (e.key == K_PGUP) rtop -= 20; else if (e.key == K_DEL) act(4); draw(); continue; }
         if (e.type == EV_DOWN && (e.btn & 2) && sel >= 0 && body.p && e.y > TB + 4 + list_h()) { int sx, sy; zw_screen(W, e.x, e.y, &sx, &sy); static const char *it[] = {"Copiar el mensaje", "Responder", "Reenviar", "Imprimir"}; int r = ui_menu(sx, sy, it, 4); if (r == 0) { sb_t c = {0}; sb_f(&c, "%s: %s\n%s: %s\n%s: %s\n\n%s", _("De"), rd_from, _("Fecha"), rd_date, _("Asunto"), rd_subj, body.p); z_clip_set(c.p, c.n); free(c.p); strcpy(msg, _("Mensaje copiado")); } else if (r > 0) act(r == 1 ? 2 : r == 2 ? 3 : 5); draw(); continue; }
-        if (e.type == EV_DOWN) { int y0 = TB + 4 + 22; if (e.y >= y0 && e.y < y0 + MIN(nh, 12) * LH) { open_msg(topl + (e.y - y0) / LH); draw(); } } }
+        if (e.type == EV_DOWN) { for (int k = 0; k < nra; k++) if (e.y >= att_y[k] && e.y < att_y[k] + 24 && e.x >= W->w - 206) { att_save(k, e.x < W->w - 112); draw(); goto next_ev; }
+            int y0 = TB + 4 + 22; if (e.y >= y0 && e.y < y0 + MIN(nh, 12) * LH) { open_msg(topl + (e.y - y0) / LH); draw(); } }
+        next_ev:; }
 }

@@ -1,0 +1,29 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Prueba de JavaScript</title>
+<style>.oculto { display: none } .verde { color: #15803d } #caja { background: #ecfeff; padding: 8px }</style>
+<script>
+  // se ejecuta en <head>, antes que el cuerpo en un navegador de verdad: espera a DOMContentLoaded
+  const ok = n => console.log('OK ' + n);
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('saludo').textContent = 'Hola desde JavaScript, ñandú';
+    const ul = document.querySelector('#lista');
+    ['uno', 'dos', 'tres'].forEach((t, i) => { const li = document.createElement('li'); li.textContent = t; li.dataset.n = i; li.className = 'item'; ul.appendChild(li); });
+    if (document.querySelectorAll('ul > li.item').length === 3 && ul.lastElementChild.dataset.n === '2') ok('dom');
+    document.getElementById('quitar').classList.add('oculto');
+    document.getElementById('caja').innerHTML = '<b>negrita</b> y <i class="verde">cursiva</i>';
+    if (document.querySelector('#caja i.verde').textContent === 'cursiva' && document.getElementById('caja').innerHTML.includes('<b>negrita</b>')) ok('innerHTML');
+    document.title = 'JS funcionando';
+  });
+</script>
+</head><body>
+<h1 id="saludo">Sin JavaScript</h1>
+<p id="quitar">Este parrafo se oculta con JavaScript.</p>
+<ul id="lista"></ul>
+<div id="caja">contenido inicial</div>
+<p>Contador: <span id="cuenta">0</span> <button id="boton" type="button">Sumar uno</button> <button id="boton2" onclick="this.textContent = 'pulsado'; console.log('OK onclick')">Atributo</button></p>
+<form id="f" action="/no-debe-ir"><input id="nombre" name="nombre" placeholder="tu nombre"> <input type="submit" value="Enviar"></form>
+<p id="res">sin enviar</p>
+<p id="red">sin datos</p>
+<p id="tiempo">esperando</p>
+<script src="app.js"></script>
+</body></html>

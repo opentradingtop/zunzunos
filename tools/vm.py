@@ -130,6 +130,11 @@ try:
             if k == 'dclick': click()
         elif k == 'drag':
             x, y, x2, y2 = map(int, v.split(',')); goto(x, y); btn('left', True); time.sleep(0.2); goto(x2, y2); time.sleep(0.2); btn('left', False)
+        elif k == 'clicklog':   # clicklog:ORIGEN|POS - pulsa en el punto POS (x,y) de la ultima linea del registro que encaja, sumandole ORIGEN (x,y)
+            import re
+            ro, _, rp = v.partition('|'); mo = re.findall(ro, serial()); mp = re.findall(rp, serial()) if rp else [('0', '0')]   # sin '|': la posicion ya es absoluta
+            if not mo or not mp: print(f'FALLO: no hay posicion en el registro ({v})'); ok = False; break
+            x = int(mo[-1][0]) + int(mp[-1][0]); y = int(mo[-1][1]) + int(mp[-1][1]); print(f'clicklog {x},{y}'); goto(x, y); click()
         elif k == 'exit':
             t0 = time.time()
             while p.poll() is None and time.time() - t0 < float(v or 15): time.sleep(0.1)

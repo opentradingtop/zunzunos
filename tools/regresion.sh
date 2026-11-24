@@ -33,6 +33,8 @@ ok "grabar pantalla y videos"; mkstick; python3 -I tools/video_test.py "$S/r-vid
 ok "formulas de la hoja"; tools/pruebas/hoja/correr.sh "$S/r-hoja" 2>&1 | filt
 ok "teclado, copiar y pegar, cookies y navegador"; mkstick; rm -rf "$S/r-web"; python3 -I tools/fake_web.py "$S/r-web" > "$S/r-web.log" 2>&1 & FW=$!; sleep 1
 python3 -I tools/tareas_test.py "$S/r-tar" "$S/r-web" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FW 2>/dev/null; wait $FW 2>/dev/null
+ok "navegador: historial y gestor de cookies"; mkstick; rm -rf "$S/r-wb"; python3 -I tools/fake_web.py "$S/r-wb" > "$S/r-wb.log" 2>&1 & FW=$!; sleep 1
+python3 -I tools/navegador_test.py "$S/r-nav" "$S/r-wb" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FW 2>/dev/null; wait $FW 2>/dev/null
 ok "correo"; mkstick; rm -rf "$S/r-mail"; python3 -I tools/fake_mail.py "$S/r-mail" > "$S/r-mail.log" 2>&1 & FM=$!; sleep 1
 python3 -I tools/correo_test.py "$S/r-cor" "$S/r-mail" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FM 2>/dev/null; wait $FM 2>/dev/null
 ok "lumen (chat con IA)"; mkstick; rm -rf "$S/r-or"; python3 -I tools/fake_openrouter.py "$S/r-or" > "$S/r-or.log" 2>&1 & FO=$!; sleep 1
@@ -44,5 +46,10 @@ ok "red local (uno con router, el otro con direccion local; cambio de cable)"; p
 ok "red local (identidad copiada de otro equipo; anadir un equipo de otra red)"; python3 -I tools/red_test.py "$S/r-otra" otra 2>&1 | filt
 ok "guardia de red: permisos de Internet y registro"; mkstick; python3 -I tools/guardia_test.py "$S/r-gua" "-nic user,model=e1000 $STICK" 2>&1 | filt
 ok "escrituras seguras (apagon a mitad de guardar)"; python3 -I tools/escritura_test.py "$S/r-esc" 2>&1 | filt
+ok "cifrado de datos (opcional, frase de paso)"; tools/pruebas/cifrado/correr.sh "$S/r-cifh" 2>&1 | filt; python3 -I tools/cifrado_test.py "$S/r-cif" 2>&1 | filt
+ok "audio: codificador y decodificador MP3 propios (en el Mac, contra macOS)"; tools/pruebas/mp3/correr.sh "$S/r-mp3h" 2>&1 | filt
+ok "audio: grabar en MP3 estereo, convertir y tocar MP3"; python3 -I tools/audio_test.py "$S/r-aud" 2>&1 | filt
+ok "javascript: motor Colibri (igual que Node)"; python3 -I tools/js_test.py "$S/r-js" 2>&1 | filt
+ok "navegador JS: DOM, eventos, formularios, fetch y temporizadores"; python3 -I tools/navjs_test.py "$S/r-nj" 2>&1 | filt
 ok "sesiones"; python3 -I tools/sesion_test.py "$S/r-ses" "$K" 2>&1 | filt
 ok "fin"

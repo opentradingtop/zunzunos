@@ -748,7 +748,7 @@ No se puede abrir la página	-	Cannot open the page
 Dirección no válida	-	Invalid address
 No se pudo guardar el archivo	-	Could not save the file
 Archivo descargado	-	File downloaded
-  - esta página usa JavaScript, que no está disponible	-	  - this page uses JavaScript, which is not available
+  - esta página usa JavaScript: ábrela en el Navegador JS	-	  - this page uses JavaScript: open it in the JS Browser
 Página añadida a marcadores	-	Page added to bookmarks
 Aún no hay marcadores: pulsa la estrella para guardar la página.	-	No bookmarks yet: press the star to save the page.
 Marcadores	-	Bookmarks
@@ -1232,3 +1232,89 @@ red local	-	local network
 Solo el administrador puede cambiar los permisos	-	Only the administrator can change the permissions
 Añadir a la red	-	Add to network
 Este equipo dejará la red "%s".	-	This computer will leave the network "%s".
+Proveedor:	-	Provider:
+Proveedor	-	Provider
+Otro servidor	-	Other server
+API key de Lyceum	-	Lyceum API key
+Crea la clave en dashboard.lyceum.technology (empieza por lk_). Lyceum funciona en servidores de la UE (París y Finlandia) y dice que no guarda los mensajes ni los usa para entrenar. Se paga por uso.	-	Create the key at dashboard.lyceum.technology (it starts with lk_). Lyceum runs on servers in the EU (Paris and Finland) and says it does not keep messages or use them for training. Pay per use.
+Servidor compatible con OpenAI, por ejemplo Ollama o LM Studio en otro equipo de la red local. La clave solo hace falta si el servidor la pide.	-	OpenAI-compatible server, for example Ollama or LM Studio on another computer in the local network. A key is only needed if the server asks for one.
+Las claves de Lyceum empiezan por lk_.	-	Lyceum keys start with lk_.
+Añade tu API key de Lyceum para empezar.	-	Add your Lyceum API key to start.
+Como mucho 4 imágenes por mensaje	-	At most 4 images per message
+No se pudo abrir la imagen	-	Could not open the image
+Imagen %s (%dx%d) lista para el próximo mensaje	-	Image %s (%dx%d) ready for the next message
+Historial	-	History
+Guardar el historial:	-	Save history:
+sí	-	yes
+No guardarlo	-	Don't save it
+Guardarlo	-	Save it
+Borrar todo el historial	-	Clear all history
+Cookies y privacidad	-	Cookies and privacy
+El historial está vacío.	-	History is empty.
+Historial borrado	-	History cleared
+Qué cookies se aceptan:	-	Which cookies are accepted:
+Solo las del sitio que visito (sin las de terceros)	-	Only from the site I visit (no third-party ones)
+Ninguna (algunas webs no dejarán iniciar sesión)	-	None (some websites won't let you sign in)
+Sitios con cookies guardadas	-	Sites with saved cookies
+cookies	-	cookies
+(permitido siempre)	-	(always allowed)
+Excepciones	-	Exceptions
+Ninguna.	-	None.
+Borrar todas las cookies	-	Delete all cookies
+%d cookies rechazadas	-	%d cookies rejected
+Cifrado de datos	-	Data encryption
+Activado: tus datos se guardan cifrados.	-	On: your data is stored encrypted.
+Desactivado: tus datos se guardan sin cifrar.	-	Off: your data is stored unencrypted.
+Cifra con AES-256 tus documentos, el escritorio y la configuración	-	Encrypts with AES-256 your documents, the desktop and the settings
+(claves de LUMEN y de la red, cookies, historial) y los puntos de restauración.	-	(LUMEN and network keys, cookies, history) and the restore points.
+Al encender el equipo se pide la frase de paso.	-	The passphrase is asked when the computer starts.
+Es opcional. Ten en cuenta que:	-	It is optional. Keep in mind that:
+- si olvidas la frase, los datos no se pueden recuperar;	-	- if you forget the passphrase, the data cannot be recovered;
+- los archivos cifrados no se pueden leer desde Windows, macOS ni Linux;	-	- encrypted files cannot be read from Windows, macOS or Linux;
+- en casa, para un equipo que no sale de ella, puede no hacer falta.	-	- at home, for a computer that never leaves it, it may not be needed.
+Activar el cifrado...	-	Turn on encryption...
+Desactivar el cifrado...	-	Turn off encryption...
+Activar el cifrado	-	Turn on encryption
+Desactivar el cifrado	-	Turn off encryption
+Frase de paso (8 letras o más):	-	Passphrase (8 characters or more):
+Escríbela otra vez:	-	Type it again:
+La frase tiene que tener al menos 8 letras	-	The passphrase must have at least 8 characters
+Las dos frases no coinciden	-	The two passphrases do not match
+No se pudo activar	-	Could not turn it on
+Cifrado activado: %d archivos cifrados	-	Encryption on: %d files encrypted
+Tus datos se guardarán sin cifrar. ¿Seguir?	-	Your data will be stored unencrypted. Continue?
+Frase de paso:	-	Passphrase:
+Frase incorrecta	-	Wrong passphrase
+Cifrado desactivado: %d archivos descifrados	-	Encryption off: %d files decrypted
+Reescribiendo los datos: %d archivos...	-	Rewriting the data: %d files...
+Abrir tus datos	-	Open your data
+Frase incorrecta. Vuelve a escribirla:	-	Wrong passphrase. Type it again:
+Tus datos están cifrados. Frase de paso:	-	Your data is encrypted. Passphrase:
+Usar el modelo	-	Use the model
+Estereo	Estéreo	Stereo
+Mono	-	Mono
+comprimido	-	compressed
+comprimido, mono	-	compressed, mono
+sin perdida	sin pérdida	lossless
+A MP3	-	To MP3
+Convirtiendo...	-	Converting...
+Convirtiendo... %d%%	-	Converting... %d%%
+MP3: %lu KB (era %lu KB)	-	MP3: %lu KB (was %lu KB)
+MP3, %d Hz, %s, %ld kbps, %ld:%02ld	-	MP3, %d Hz, %s, %ld kbps, %ld:%02ld
+Ruta del sonido (WAV o MP3):	-	Sound path (WAV or MP3):
+Consola JavaScript	-	JavaScript Console
+No hay memoria para JavaScript	-	Not enough memory for JavaScript
+Navegador JS	-	JS Browser
+  - JavaScript activo	-	  - JavaScript on
+Página	-	Page
+JavaScript (Colibrí). Escribe y pulsa Intro.	-	JavaScript (Colibrí). Type and press Enter.
+Adjunto	-	Attachment
+adjunto	-	attachment
+Adjuntar...	-	Attach...
+Adjuntar un archivo	-	Attach a file
+Guardar	-	Save
+Guardado en	-	Saved to
+No se pudo guardar el adjunto	-	Could not save the attachment
+No hay ningún programa para abrir ese archivo	-	No program can open that file
+Como mucho 8 adjuntos por mensaje	-	At most 8 attachments per message
+Los adjuntos pasan de 20 MB: muchos servidores no los aceptan	-	Attachments exceed 20 MB: many servers reject them

@@ -49,6 +49,9 @@ class H(http.server.BaseHTTPRequestHandler):
         if self.path != '/api/v1/chat/completions': return self.send_json(404, {'error': {'message': 'no existe', 'code': 404}})
         if not self.authed(): return self.send_json(401, {'error': {'message': 'User not found.', 'code': 401}})
         req = json.loads(body); last = req['messages'][-1]['content'] if req['messages'] else ''
+        if isinstance(last, list):   # mensaje con imagenes: [{"type":"text"...},{"type":"image_url"...}]
+            imgs = sum(1 for p in last if p.get('type') == 'image_url' and p['image_url']['url'].startswith('data:image/jpeg;base64,'))
+            last = ' '.join(p.get('text', '') for p in last if p.get('type') == 'text') + f' [{imgs} imagenes]'
         if 'error429' in last: return self.send_json(429, {'error': {'message': 'Rate limit exceeded: free-models-per-min', 'code': 429}})
         if req.get('max_tokens') == 1: return self.send_json(200, {'choices': [{'message': {'role': 'assistant', 'content': 'p'}}]})
         model = req.get('model', '')

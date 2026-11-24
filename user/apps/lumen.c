@@ -11,6 +11,8 @@
 #define SW 220
 #define DEF_API "https://openrouter.ai/api/v1"
 #define DEF_MODEL "openrouter/free"
+#define LYC_API "https://api.lyceum.technology/openai/v1"   /* Lyceum: servidores en la UE (Paris y Finlandia) */
+#define LYC_MODEL "lyceum/router"
 static zwin *W; static char msg[300], base[48];
 static long atol(const char *s) { while (*s == ' ') s++; int g = *s == '-'; if (g) s++; long v = 0; while (*s >= '0' && *s <= '9') v = v * 10 + *s++ - '0'; return g ? -v : v; }
 static int isalnum(int c) { return isalpha(c) || isdigit(c); }
@@ -73,19 +75,27 @@ static int cpy_utf8(char *o, int cap, const char *s, long n) { int k = 0; for (l
 static void dnorm_str(const char *s, char *o, int cap) { sb_t b = {0}; dnorm(&b, s, strlen(s)); cpy_utf8(o, cap, b.p, b.n); free(b.p); }
 
 /* ---------- ajustes ---------- */
-typedef struct { char key[256], model[128], api[200], sys[1024]; int temp, maxtok, stream, side; } cfg_t;
+typedef struct { char key[256], model[128], api[200], sys[1024]; int temp, maxtok, stream, side; int prov; char k2[3][256], m2[3][128], custom[200]; } cfg_t;   /* prov: 0 OpenRouter, 1 Lyceum, 2 otro servidor */
 static cfg_t C; static int kst; static char kdet[300]; /* kst: 0 sin clave, 1 comprobando, 2 valida, 3 no valida, 4 sin verificar */
 static void path_of(char *o, int cap, const char *f) { snprintf(o, cap, "%s/%s", base, f); }
 static void kv(const char *t, const char *k, char *o, int cap) { int l = strlen(k); for (const char *p = t; p && *p; p = strchr(p, '\n') ? strchr(p, '\n') + 1 : 0) if (!strncmp(p, k, l) && p[l] == '=') { int i = 0; p += l + 1; while (p[i] && p[i] != '\n' && i < cap - 1) { o[i] = p[i]; i++; } o[i] = 0; return; } }
 static void unesc_nl(char *s) { char *w = s; for (char *r = s; *r; r++) { if (r[0] == '\\' && r[1] == 'n') { *w++ = '\n'; r++; } else if (r[0] == '\\' && r[1] == '\\') { *w++ = '\\'; r++; } else *w++ = *r; } *w = 0; }
 static void esc_nl(sb_t *b, const char *s) { for (; *s; s++) { if (*s == '\n') sb_s(b, "\\n"); else if (*s == '\\') sb_s(b, "\\\\"); else if (*s != '\r') sb_add(b, s, 1); } }
+/* el proveedor activo usa C.key / C.model / C.api; los otros guardan los suyos en k2 / m2 */
+static void prov_keep(void) { strcpy(C.k2[C.prov], C.key); strcpy(C.m2[C.prov], C.model); if (C.prov == 2) strncpy0(C.custom, C.api, 200); }
+static void prov_use(int p) { C.prov = p; strcpy(C.key, C.k2[p]); strcpy(C.model, C.m2[p][0] ? C.m2[p] : p == 0 ? DEF_MODEL : p == 1 ? LYC_MODEL : ""); strncpy0(C.api, p == 0 ? DEF_API : p == 1 ? LYC_API : C.custom[0] ? C.custom : "http://", 200); }
 static void cfg_load(void) { memset(&C, 0, sizeof C); strcpy(C.model, DEF_MODEL); strcpy(C.api, DEF_API); C.temp = 7; C.stream = 1; C.side = 1; char p[96]; path_of(p, 96, "LUMEN.TXT"); char *t = z_readfile(p, 0); if (!t) return; char v[32];
     kv(t, "clave", C.key, 256); kv(t, "modelo", C.model, 128); kv(t, "servidor", C.api, 200); kv(t, "sistema", C.sys, 1024); unesc_nl(C.sys);
+    { char pv[8] = ""; kv(t, "proveedor", pv, 8); strcpy(C.m2[1], LYC_MODEL);
+      if (pv[0]) { C.prov = atoi(pv) % 3; strcpy(C.k2[0], C.key); strcpy(C.m2[0], C.model); kv(t, "clave_lyceum", C.k2[1], 256); kv(t, "clave_otro", C.k2[2], 256); kv(t, "modelo_lyceum", C.m2[1], 128); kv(t, "modelo_otro", C.m2[2], 128); if (!C.m2[1][0]) strcpy(C.m2[1], LYC_MODEL); }
+      else { C.prov = strstr(C.api, "openrouter.ai") ? 0 : strstr(C.api, "lyceum.technology") ? 1 : 2; strcpy(C.k2[C.prov], C.key); strcpy(C.m2[C.prov], C.model); if (!C.m2[0][0]) strcpy(C.m2[0], DEF_MODEL); }   /* formato anterior */
+      if (C.prov == 2) strncpy0(C.custom, C.api, 200); prov_use(C.prov); }
     v[0] = 0; kv(t, "temperatura", v, 32); if (v[0]) C.temp = atoi(v); v[0] = 0; kv(t, "max_tokens", v, 32); if (v[0]) C.maxtok = atoi(v); v[0] = 0; kv(t, "en_vivo", v, 32); if (v[0]) C.stream = atoi(v); v[0] = 0; kv(t, "lateral", v, 32); if (v[0]) C.side = atoi(v);
     if (!C.model[0]) strcpy(C.model, DEF_MODEL); if (!C.api[0]) strcpy(C.api, DEF_API); free(t); }
-static int cfg_save(void) { sb_t b = {0}; sb_f(&b, "clave=%s\nmodelo=%s\nservidor=%s\ntemperatura=%d\nmax_tokens=%d\nen_vivo=%d\nlateral=%d\nsistema=", C.key, C.model, C.api, C.temp, C.maxtok, C.stream, C.side); esc_nl(&b, C.sys); sb_s(&b, "\n");
+static int cfg_save(void) { prov_keep(); sb_t b = {0}; sb_f(&b, "proveedor=%d\nclave=%s\nclave_lyceum=%s\nclave_otro=%s\nmodelo=%s\nmodelo_lyceum=%s\nmodelo_otro=%s\nservidor=%s\ntemperatura=%d\nmax_tokens=%d\nen_vivo=%d\nlateral=%d\nsistema=", C.prov, C.k2[0], C.k2[1], C.k2[2], C.m2[0], C.m2[1], C.m2[2], C.custom, C.temp, C.maxtok, C.stream, C.side); esc_nl(&b, C.sys); sb_s(&b, "\n");
     char p[96]; path_of(p, 96, "LUMEN.TXT"); int e = z_writefile(p, b.p, b.n); free(b.p); z_sync(); return e; }
 static int is_or(void) { return strstr(C.api, "openrouter.ai") != 0; }
+static int is_ly(void) { return strstr(C.api, "lyceum.technology") != 0; }
 /* la clave tal como se pego: sin espacios, comillas, caracteres invisibles ni "Bearer" delante */
 static void clean_key(char *k) { char o[256]; int n = 0; for (const char *p = k; *p && n < 255; ) { const char *q = p; u32 c = utf8_next(&q); if (c > ' ' && c < 127 && c != '"' && c != '\'' && c != '`') o[n++] = c; p = q; } o[n] = 0;
     char *s = o; if (!strncasecmp(s, "bearer", 6)) s += 6; if (!strncasecmp(s, "authorization:", 14)) s += 14; if (!strncasecmp(s, "bearer", 6)) s += 6; if (!strncasecmp(s, "api_key=", 8) || !strncasecmp(s, "api-key=", 8) || !strncasecmp(s, "api_key:", 8)) s += 8; strcpy(k, s); }
@@ -93,13 +103,13 @@ static void clean_key(char *k) { char o[256]; int n = 0; for (const char *p = k;
 /* ---------- conversaciones ---------- */
 typedef struct { char *s; short kind, blk; u8 st; } dl_t;
 enum { K_TXT, K_H, K_CODE, K_REAS, K_META, K_USER, K_ERR, K_GAP, K_TOGGLE, K_RETRY, K_CODEH, K_HR, K_QUOTE, K_TABLE, K_WHO, K_THINK };
-typedef struct { int role; sb_t t, r; char model[128]; int tin, tout, stopped, open; long ms; dl_t *L; int nL, cols, dirty; } msg_t; /* role: 0 tu, 1 IA, 2 error */
+typedef struct { int role; sb_t t, r; char model[128]; int tin, tout, stopped, open; long ms; dl_t *L; int nL, cols, dirty; char *img; } msg_t;   /* img: rutas de imagenes (una por linea) */ /* role: 0 tu, 1 IA, 2 error */
 #define MAXATT 8
 typedef struct { char file[32], title[96], model[128]; char *sys; long upd; msg_t **m; int n, cap; char att[MAXATT][200]; int natt; } conv_t;
 static conv_t **CV; static int ncv, cur = -1;
 static conv_t *CC(void) { return cur >= 0 && cur < ncv ? CV[cur] : 0; }
 static void lines_free(msg_t *m) { for (int i = 0; i < m->nL; i++) free(m->L[i].s); free(m->L); m->L = 0; m->nL = 0; }
-static void msg_free(msg_t *m) { lines_free(m); free(m->t.p); free(m->r.p); free(m); }
+static void msg_free(msg_t *m) { lines_free(m); free(m->t.p); free(m->r.p); free(m->img); free(m); }
 static msg_t *msg_add(conv_t *c, int role) { if (c->n == c->cap) { c->cap = c->cap * 2 + 16; c->m = realloc(c->m, c->cap * sizeof *c->m); } msg_t *m = calloc(1, sizeof *m); m->role = role; m->dirty = 1; sb_add(&m->t, "", 0); sb_add(&m->r, "", 0); c->m[c->n++] = m; return m; }
 static void msg_del(conv_t *c, int i) { if (i < 0 || i >= c->n) return; msg_free(c->m[i]); memmove(c->m + i, c->m + i + 1, (c->n - i - 1) * sizeof *c->m); c->n--; }
 static void conv_free(conv_t *c) { for (int i = 0; i < c->n; i++) msg_free(c->m[i]); free(c->m); free(c->sys); free(c); }
@@ -107,7 +117,7 @@ static void put_block(sb_t *b, const char *s) { for (const char *p = s; *p; ) { 
 static int conv_save(conv_t *c) { if (!c->file[0]) { long t = now_num(); for (int k = 0; k < 100; k++) { snprintf(c->file, 32, "%ld%02d.TXT", t % 10000000000L, k); char p[128]; snprintf(p, 128, "%s/LUMEN/%s", base, c->file); zdirent d; if (z_stat(p, &d)) break; } }
     sb_t b = {0}; sb_f(&b, "LUMEN1\ntitulo=%s\nmodelo=%s\nfecha=%ld\nsistema=", c->title, c->model, c->upd); esc_nl(&b, c->sys ? c->sys : ""); sb_s(&b, "\n");
     if (c->natt) { sb_s(&b, "adjuntos="); for (int i = 0; i < c->natt; i++) { if (i) sb_s(&b, "|"); sb_s(&b, c->att[i]); } sb_s(&b, "\n"); }
-    for (int i = 0; i < c->n; i++) { msg_t *m = c->m[i]; if (m->role == 0) sb_s(&b, "@@tu\n"); else if (m->role == 1) sb_f(&b, "@@ia %s|%d|%d|%ld|%d\n", m->model, m->tin, m->tout, m->ms, m->stopped); else sb_s(&b, "@@error\n"); put_block(&b, m->t.p);
+    for (int i = 0; i < c->n; i++) { msg_t *m = c->m[i]; if (m->role == 0) { sb_s(&b, "@@tu\n"); if (m->img) { sb_s(&b, "@@imagenes "); for (const char *q = m->img; *q; q++) sb_add(&b, *q == '\n' ? "|" : q, 1); sb_s(&b, "\n"); } } else if (m->role == 1) sb_f(&b, "@@ia %s|%d|%d|%ld|%d\n", m->model, m->tin, m->tout, m->ms, m->stopped); else sb_s(&b, "@@error\n"); put_block(&b, m->t.p);
         if (m->role == 1 && m->r.n) { sb_s(&b, "@@razonamiento\n"); put_block(&b, m->r.p); } }
     char d[96]; snprintf(d, 96, "%s/LUMEN", base); z_mkdir(base); z_mkdir(d); char p[128]; snprintf(p, 128, "%s/%s", d, c->file); int e = z_writefile(p, b.p, b.n); free(b.p); z_sync(); return e; }
 static void trim_nl(sb_t *s) { if (s->n && s->p[s->n - 1] == '\n') s->p[--s->n] = 0; }
@@ -116,7 +126,7 @@ static conv_t *conv_load(const char *file) { char p[128]; snprintf(p, 128, "%s/L
     { char a[MAXATT * 201]; a[0] = 0; kv(t, "adjuntos", a, sizeof a); for (char *q = a; *q && c->natt < MAXATT; ) { char *e = strchr(q, '|'); if (e) *e = 0; strncpy0(c->att[c->natt++], q, 200); if (!e) break; q = e + 1; } }
     msg_t *m = 0; sb_t *dst = 0; for (char *l = t; l && *l; ) { char *e = strchr(l, '\n'); if (e) *e = 0;
         if (l[0] == '@' && l[1] == '@' && l[2] != '@') { if (dst) trim_nl(dst); dst = 0;
-            if (!strcmp(l, "@@tu")) { m = msg_add(c, 0); dst = &m->t; } else if (!strcmp(l, "@@error")) { m = msg_add(c, 2); dst = &m->t; } else if (!strcmp(l, "@@razonamiento") && m && m->role == 1) dst = &m->r;
+            if (!strcmp(l, "@@tu")) { m = msg_add(c, 0); dst = &m->t; } else if (!strncmp(l, "@@imagenes ", 11) && m && m->role == 0) { m->img = strdup(l + 11); for (char *q = m->img; *q; q++) if (*q == '|') *q = '\n'; dst = &m->t; } else if (!strcmp(l, "@@error")) { m = msg_add(c, 2); dst = &m->t; } else if (!strcmp(l, "@@razonamiento") && m && m->role == 1) dst = &m->r;
             else if (!strncmp(l, "@@ia", 4)) { m = msg_add(c, 1); dst = &m->t; char *f = l + 4; while (*f == ' ') f++; char *b = strchr(f, '|'); if (b) *b = 0; strncpy0(m->model, f, 128); if (b) { m->tin = atoi(b + 1); char *q = strchr(b + 1, '|'); if (q) { m->tout = atoi(q + 1); q = strchr(q + 1, '|'); if (q) { m->ms = atol(q + 1); q = strchr(q + 1, '|'); if (q) m->stopped = atoi(q + 1); } } } } }
         else if (dst) { const char *s = l[0] == '@' && l[1] == '@' ? l + 1 : l; sb_s(dst, s); sb_s(dst, "\n"); }
         l = e ? e + 1 : 0; }
@@ -131,18 +141,24 @@ static void conv_remove(int i) { if (i < 0 || i >= ncv) return; conv_t *c = CV[i
 /* ---------- modelos ---------- */
 typedef struct { char id[112], name[80]; long ctx; double pin, pout; int fr; } model_t;
 static model_t *MD; static int nmd; static long md_at; static int md_tab, md_top, md_cur, md_loading; static char md_q[80];
-static const char *RANK[] = {"deepseek/deepseek-v4.1-flash", "openrouter/free", "deepseek/", "google/gemini", "google/gemma", "anthropic/", "openai/", "meta-llama/", "qwen/", "mistralai/", "nvidia/", "inclusionai/", "baidu/", "liquid/", "particle-ai/"};
+static const char *RANK[] = {"deepseek/deepseek-v4.1-flash:free", "deepseek/deepseek-v4.1-flash", "openrouter/free", "deepseek/", "google/gemini", "google/gemma", "anthropic/", "openai/", "meta-llama/", "qwen/", "mistralai/", "nvidia/", "inclusionai/", "baidu/", "liquid/", "particle-ai/"};
 static int rank_of(const char *id) { for (unsigned i = 0; i < sizeof RANK / sizeof *RANK; i++) if (!strcmp(id, RANK[i]) || (RANK[i][strlen(RANK[i]) - 1] == '/' && !strncmp(id, RANK[i], strlen(RANK[i])))) return i; return 99; }
 static int md_cmp(const void *a, const void *b) { const model_t *x = a, *y = b; int r = rank_of(x->id) - rank_of(y->id); return r ? r : strcasecmp(x->name, y->name); }
 static void clean_name(const char *n, char *o, int cap) { const char *c = strstr(n, ": "); if (c && c - n >= 2 && c - n <= 24) n = c + 2; char t[160]; dnorm_str(n, t, 160); int l = strlen(t); if (l > 7 && !strcasecmp(t + l - 7, " (free)")) t[l - 7] = 0; strncpy0(o, t, cap); }
 static void md_add(const char *id, const char *name, long ctx, double pin, double pout, int fr) { MD = realloc(MD, (nmd + 1) * sizeof *MD); model_t *m = &MD[nmd++]; strncpy0(m->id, id, 112); clean_name(name && *name ? name : id, m->name, 80); m->ctx = ctx; m->pin = pin; m->pout = pout; m->fr = fr; }
-static void md_fallback(void) { static const struct { const char *id, *name; long ctx; } F[] = {{"openrouter/free", "Free Models Router", 200000}, {"deepseek/deepseek-v4.1-flash", "DeepSeek: DeepSeek V4.1 Flash", 1048576}, {"deepseek/deepseek-r1:free", "DeepSeek: R1 (free)", 163840}, {"deepseek/deepseek-chat-v3-0324:free", "DeepSeek: DeepSeek V3 0324 (free)", 163840}, {"google/gemma-4-31b-it:free", "Google: Gemma 4 31B (free)", 262144}, {"meta-llama/llama-3.3-70b-instruct:free", "Meta: Llama 3.3 70B Instruct (free)", 131072}, {"qwen/qwen3-235b-a22b:free", "Qwen: Qwen3 235B A22B (free)", 131072}, {"mistralai/mistral-small-3.2-24b-instruct:free", "Mistral: Mistral Small 3.2 24B (free)", 131072}};
+/* modelos que OpenRouter no publica en /models pero existen (se piden por su nombre): siempre en la lista */
+static void md_pinned(void) { if (!is_or()) return; static const struct { const char *id, *name; long ctx; } P[] = {{"deepseek/deepseek-v4.1-flash:free", "DeepSeek: DeepSeek V4.1 Flash (free)", 1048576}};
+    for (unsigned i = 0; i < sizeof P / sizeof *P; i++) { int have = 0; for (int k = 0; k < nmd; k++) if (!strcmp(MD[k].id, P[i].id)) have = 1; if (!have) md_add(P[i].id, P[i].name, P[i].ctx, 0, 0, 1); } }
+static void md_fallback_ly(void) { static const char *L[] = {"lyceum/router", "lyceum/simple", "lyceum/complex", "lyceum/reasoning", "deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4-flash-0731", "z-ai/glm-5.3", "z-ai/glm-5.3-instant", "z-ai/glm-5.3-flash", "z-ai/glm-5.3-flash-instant", "moonshotai/kimi-k3.1-pro", "moonshotai/kimi-k2.7-code", "qwen/qwen3.8-2.4t-a95b", "qwen/qwen3.8-27b", "qwen/qwen3.8-27b-instant", "minimax/minimax-m3"};   /* los 16 de chat de su documentacion (noviembre de 2026) */ nmd = 0; for (unsigned i = 0; i < sizeof L / sizeof *L; i++) md_add(L[i], L[i], 131072, 0, 0, 0); }
+static void md_fallback_or(void);
+static void md_fallback(void) { if (is_ly()) { md_fallback_ly(); return; } md_fallback_or(); md_pinned(); }
+static void md_fallback_or(void) { static const struct { const char *id, *name; long ctx; } F[] = {{"openrouter/free", "Free Models Router", 200000}, {"deepseek/deepseek-v4.1-flash", "DeepSeek: DeepSeek V4.1 Flash", 1048576}, {"deepseek/deepseek-r1:free", "DeepSeek: R1 (free)", 163840}, {"deepseek/deepseek-chat-v3-0324:free", "DeepSeek: DeepSeek V3 0324 (free)", 163840}, {"google/gemma-4-31b-it:free", "Google: Gemma 4 31B (free)", 262144}, {"meta-llama/llama-3.3-70b-instruct:free", "Meta: Llama 3.3 70B Instruct (free)", 131072}, {"qwen/qwen3-235b-a22b:free", "Qwen: Qwen3 235B A22B (free)", 131072}, {"mistralai/mistral-small-3.2-24b-instruct:free", "Mistral: Mistral Small 3.2 24B (free)", 131072}};
     nmd = 0; for (unsigned i = 0; i < sizeof F / sizeof *F; i++) md_add(F[i].id, F[i].name, F[i].ctx, i == 1 ? 0.00000005 : 0, i == 1 ? 0.0000002 : 0, i != 1); qsort(MD, nmd, sizeof *MD, md_cmp); }
 static void md_save(void) { sb_t b = {0}; sb_f(&b, "LUMENM1\n%ld\n%s\n", md_at, C.api); for (int i = 0; i < nmd; i++) sb_f(&b, "%s\t%s\t%ld\t%.12f\t%.12f\t%d\n", MD[i].id, MD[i].name, MD[i].ctx, MD[i].pin, MD[i].pout, MD[i].fr); char p[96]; path_of(p, 96, "LUMEN-MODELOS.TXT"); z_writefile(p, b.p, b.n); free(b.p); }
 static void md_load(void) { char p[96]; path_of(p, 96, "LUMEN-MODELOS.TXT"); char *t = z_readfile(p, 0); md_fallback(); md_at = 0; if (!t) return; if (strncmp(t, "LUMENM1\n", 8)) { free(t); return; }
     char *l = t + 8, *e = strchr(l, '\n'); if (!e) { free(t); return; } long at = atol(l); l = e + 1; e = strchr(l, '\n'); if (!e) { free(t); return; } *e = 0; if (strcmp(l, C.api)) { free(t); return; } l = e + 1; int n0 = nmd; nmd = 0;
     for (; l && *l; l = e ? e + 1 : 0) { e = strchr(l, '\n'); if (e) *e = 0; char *f[6]; int k = 0; f[k++] = l; for (char *q = l; *q && k < 6; q++) if (*q == '\t') { *q = 0; f[k++] = q + 1; } if (k == 6) md_add(f[0], f[1], atol(f[2]), num(f[3], 0), num(f[4], 0), atoi(f[5])); }
-    if (!nmd) { nmd = n0; md_fallback(); } else md_at = at; free(t); qsort(MD, nmd, sizeof *MD, md_cmp); }
+    if (!nmd) { nmd = n0; md_fallback(); } else { md_at = at; md_pinned(); } free(t); qsort(MD, nmd, sizeof *MD, md_cmp); }
 static model_t *md_find(const char *id) { for (int i = 0; i < nmd; i++) if (!strcmp(MD[i].id, id)) return &MD[i]; return 0; }
 static const char *model_name(const char *id) { model_t *m = md_find(id); if (m) return m->name; const char *s = strrchr(id, '/'); return s ? s + 1 : id; }
 static void fmt_ctx(long c, char *o, int cap) { if (c >= 1000000) snprintf(o, cap, "%ldM", (c + 500000) / 1000000); else if (c >= 1000) snprintf(o, cap, "%ldK", (c + 500) / 1000); else snprintf(o, cap, "%ld", c); }
@@ -169,8 +185,8 @@ static void fetch_models(void) { if (busy) return; busy = 1; md_loading = 1; str
     if (a >= 0) { nmd = 0; for (int c = d.n[a].ch; c >= 0; c = d.n[c].nx) { const char *id = js(&d, jget(&d, c, "id")); if (!id || z_ends(id, ":batch")) continue; int arch = jget(&d, c, "architecture"), om = jget(&d, arch, "output_modalities");
             if (om >= 0) { int text = 0; for (int k = d.n[om].ch; k >= 0; k = d.n[k].nx) if (js(&d, k) && !strcmp(js(&d, k), "text")) text = 1; if (!text) continue; }
             int pr = jget(&d, c, "pricing"); double pin = jn(&d, jget(&d, pr, "prompt")), pout = jn(&d, jget(&d, pr, "completion")); long ctx = (long)jn(&d, jget(&d, c, "context_length")); if (!ctx) ctx = (long)jn(&d, jget(&d, jget(&d, c, "top_provider"), "context_length"));
-            md_add(id, js(&d, jget(&d, c, "name")), ctx, pin, pout, pr < 0 || (pin == 0 && pout == 0)); n++; } }
-    jfree(&d); free(body); if (!n) { md_fallback(); snprintf(msg, 300, "%s", tr("El servidor no devolvió modelos; se muestra la lista básica")); return; }
+            if (strstr(id, "embedding")) continue; md_add(id, js(&d, jget(&d, c, "name")), ctx, pin, pout, !is_ly() && (pr < 0 || (pin == 0 && pout == 0))); n++; } }
+    jfree(&d); free(body); if (!n) { md_fallback(); snprintf(msg, 300, "%s", tr("El servidor no devolvió modelos; se muestra la lista básica")); return; } md_pinned();
     qsort(MD, nmd, sizeof *MD, md_cmp); md_at = now_num(); md_save(); int fr = 0; for (int i = 0; i < nmd; i++) fr += MD[i].fr; snprintf(msg, 300, tr("%d modelos, %d gratuitos"), nmd, fr); char lg[80]; snprintf(lg, 80, "[prueba] lumen modelos %d gratis %d", nmd, fr); z_log(lg); }
 
 /* comprobar la clave: /key dice si OpenRouter la conoce, pero eso no basta (las claves de gestion, desactivadas o
@@ -181,7 +197,7 @@ static void probe(int *st, char *am, int cap) { char u[260]; api_url(u, 260, "/c
 static int jtrue(jd_t *d, int o, const char *k) { int i = jget(d, o, k); return i >= 0 && d->n[i].t == 5; }
 static void check_key(void) { if (busy) return; clean_key(C.key); if (!C.key[0]) { kst = 0; kdet[0] = 0; return; } busy = 1; kst = 1; kdet[0] = 0; strcpy(msg, tr("Comprobando la clave...")); draw();
     char u[260]; api_url(u, 260, "/key"); sb_t h = {0}; sb_s(&h, ""); hdrs(&h); zhttp_opt o = {h.p, 0, pump, 0, 30000}; zhttp_info inf; char *body = 0; long bl; int e = z_http_ex("GET", u, 0, 0, 0, &o, &body, &bl, &inf); free(h.p);
-    const char *shape = is_or() && strncmp(C.key, "sk-or-", 6) ? tr("Las claves de OpenRouter empiezan por sk-or-v1-.") : "";
+    const char *shape = is_or() && strncmp(C.key, "sk-or-", 6) ? tr("Las claves de OpenRouter empiezan por sk-or-v1-.") : is_ly() && strncmp(C.key, "lk_", 3) ? tr("Las claves de Lyceum empiezan por lk_.") : "";
     char l[64]; snprintf(l, 64, "sk-or-...%s", C.key + MAX(0, (int)strlen(C.key) - 4)); int ps = -1, mg = 0;
     if (e) { char t[200]; net_err(e, &inf, t, 200); kst = e == -125 ? 0 : 4; snprintf(kdet, 300, "%s %s", t, shape); }
     else if (inf.status == 200) { jd_t d; int r = jparse(&d, body); int dd = jget(&d, r, "data"); const char *lb = js(&d, jget(&d, dd, "label")); double us = jn(&d, jget(&d, dd, "usage")); int lim = jget(&d, dd, "limit"); kst = 2;
@@ -216,6 +232,19 @@ static int sse_cb(const char *d, long n, void *ctx) { sse_t *x = ctx; sb_add(&x-
 /* ---------- archivos adjuntos (RAG): se leen una vez, se trocean y en cada pregunta van los fragmentos que
    mas tienen que ver con ella, delante de la pregunta ---------- */
 static zrdoc RD[24]; static int nrd; static char rd_err[24][80];
+static char pimg[1000]; static int npimg;   /* imagenes para el proximo mensaje */
+static int IMG_OK(const char *n) { return z_ends(n, ".png") || z_ends(n, ".jpg") || z_ends(n, ".jpeg") || z_ends(n, ".gif") || z_ends(n, ".bmp"); }
+static void img_add(const char *path) { if (npimg >= 4) { strcpy(msg, tr("Como mucho 4 imágenes por mensaje")); return; } u32 *px; int w, h; if (z_img_load(path, &px, &w, &h)) { snprintf(msg, 300, "%s: %s", tr("No se pudo abrir la imagen"), path); return; } free(px);
+    if (strlen(pimg) + strlen(path) + 2 >= sizeof pimg) return; strcat(pimg, path); strcat(pimg, "\n"); npimg++; const char *b = strrchr(path, '/'); snprintf(msg, 300, tr("Imagen %s (%dx%d) lista para el próximo mensaje"), b ? b + 1 : path, w, h); char lg[300]; snprintf(lg, 300, "[prueba] lumen imagen %s %dx%d", b ? b + 1 : path, w, h); z_log(lg); }
+/* imagen como JPEG en base64 (como mucho 1280 px de lado), con una pequena memoria para no repetir el trabajo */
+static const char B64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static struct { char path[200]; char *b64; } IC[6]; static int icn;
+static const char *img_b64(const char *path) { for (int i = 0; i < 6; i++) if (IC[i].b64 && !strcmp(IC[i].path, path)) return IC[i].b64;
+    u32 *px; int w, h; int le = z_img_load(path, &px, &w, &h); if (le) { char lg[300]; snprintf(lg, 300, "[prueba] lumen imagen no se pudo leer %s: %d", path, le); z_log(lg); return 0; } int nw = w, nh = h; if (w > 1280 || h > 1280) { if (w >= h) { nw = 1280; nh = (int)((long)h * 1280 / w); } else { nh = 1280; nw = (int)((long)w * 1280 / h); } }
+    if (nw != w || nh != h) { u32 *q = malloc((long)nw * nh * 4); for (int y = 0; y < nh; y++) for (int x = 0; x < nw; x++) q[(long)y * nw + x] = px[(long)(y * h / nh) * w + x * w / nw]; free(px); px = q; }
+    u8 *j; long n = z_jpeg_encode(px, nw, nh, 85, &j); free(px); if (n <= 0) { z_log("[prueba] lumen imagen: fallo el JPEG"); return 0; } char *o = malloc(n * 4 / 3 + 40), *w2 = o; strcpy(w2, "data:image/jpeg;base64,"); w2 += strlen(w2);
+    for (long i = 0; i < n; i += 3) { u32 v = j[i] << 16 | (i + 1 < n ? j[i + 1] << 8 : 0) | (i + 2 < n ? j[i + 2] : 0); *w2++ = B64[v >> 18 & 63]; *w2++ = B64[v >> 12 & 63]; *w2++ = i + 1 < n ? B64[v >> 6 & 63] : '='; *w2++ = i + 2 < n ? B64[v & 63] : '='; } *w2 = 0; free(j);
+    free(IC[icn].b64); strncpy0(IC[icn].path, path, 200); IC[icn].b64 = o; icn = (icn + 1) % 6; return o; }
 static int RAG_OK(const char *n) { static const char *E[] = {".txt", ".md", ".csv", ".html", ".htm", ".rtf", ".docx", ".odt", ".xlsx", ".pdf", ".json", ".xml", ".log", ".ini", ".c", ".h", ".py", ".js", ".css", ".tsv"}; for (unsigned i = 0; i < sizeof E / sizeof *E; i++) if (z_ends(n, E[i])) return 1; return 0; }
 static zrdoc *rag_doc(const char *path, char *err, int ecap) { err[0] = 0; for (int i = 0; i < nrd; i++) if (!strcmp(RD[i].path, path)) { strncpy0(err, rd_err[i], ecap); return RD[i].txt ? &RD[i] : 0; }
     if (nrd == 24) { zr_free(&RD[0]); memmove(RD, RD + 1, 23 * sizeof *RD); memmove(rd_err, rd_err + 1, 23 * sizeof *rd_err); nrd--; }
@@ -242,7 +271,11 @@ static void build_req(conv_t *c, sb_t *b) { sb_s(b, "{\"model\":"); jesc(b, C.mo
     for (int i = c->n - 1; i >= 0; i--) { if (c->m[i]->role == 2 || c->m[i] == SM) continue; sz += c->m[i]->t.n; if (sz > budget && c->n - i > 4) { start = i + 1; break; } }
     int lastu = -1; for (int i = c->n - 1; i >= 0; i--) if (c->m[i]->role == 0) { lastu = i; break; }
     for (int i = start; i < c->n; i++) { msg_t *m = c->m[i]; if (m->role == 2 || m == SM || !m->t.n) continue; if (!first) sb_s(b, ","); first = 0; sb_s(b, m->role ? "{\"role\":\"assistant\",\"content\":" : "{\"role\":\"user\",\"content\":");
-        if (i == lastu && RAGT.n) { sb_t q = {0}; sb_add(&q, RAGT.p, RAGT.n); sb_s(&q, "\n---\n"); sb_s(&q, m->t.p); jesc(b, q.p); free(q.p); } else jesc(b, m->t.p); sb_s(b, "}"); }
+        sb_t q = {0}; if (i == lastu && RAGT.n) { sb_add(&q, RAGT.p, RAGT.n); sb_s(&q, "\n---\n"); } sb_s(&q, m->t.p);
+        if (m->role == 0 && m->img && m->img[0]) { sb_s(b, "[{\"type\":\"text\",\"text\":"); jesc(b, q.p); sb_s(b, "}"); int ni = 0;
+            for (const char *z = m->img; *z; ) { const char *e = strchr(z, '\n'); char pth[200]; int n = e ? e - z : (int)strlen(z); snprintf(pth, 200, "%.*s", n, z); const char *d = img_b64(pth); if (d) { sb_s(b, ",{\"type\":\"image_url\",\"image_url\":{\"url\":\""); sb_s(b, d); sb_s(b, "\"}}"); ni++; } z = e ? e + 1 : z + n; }
+            sb_s(b, "]"); if (i == lastu) { char lg[80]; snprintf(lg, 80, "[prueba] lumen enviadas %d imagenes", ni); z_log(lg); } }
+        else jesc(b, q.p); free(q.p); sb_s(b, "}"); }
     sb_f(b, "],\"temperature\":%d.%d,\"stream\":%s", C.temp / 10, C.temp % 10, C.stream ? "true" : "false"); if (C.maxtok > 0) sb_f(b, ",\"max_tokens\":%d", C.maxtok);
     if (C.stream) sb_s(b, ",\"stream_options\":{\"include_usage\":true}"); if (is_or()) sb_s(b, ",\"usage\":{\"include\":true}"); sb_s(b, "}"); }
 static int mode, stick = 1, scy, tot_h, view_h; static te_t CT;
@@ -326,14 +359,14 @@ static void build(msg_t *m, int cols, int last) { lines_free(m); m->cols = cols;
     sb_t t = {0}; dnorm(&t, m->t.p, m->t.n);
     if (m->role == 1 && m->r.n) { int open = m->open || (m == SM && !m->t.n); snprintf(h, 200, "%s %s (%d %s)", open ? "\xE2\x96\xBC" : "\xE2\x96\xBA", tr("Razonamiento"), words(m->r.p), tr("palabras")); addl(m, 0, h, strlen(h), K_TOGGLE, 0, 0); if (open) { sb_t r = {0}; dnorm(&r, m->r.p, m->r.n); plainadd(m, r.p, cols - 2, K_REAS); free(r.p); } }
     if (m == SM && !m->t.n) addl(m, 0, "", 0, K_THINK, 0, 0);
-    else if (m->role == 0) { plainadd(m, t.p, cols - 2, K_USER); if (last && !busy) { addl(m, 0, "", 0, K_GAP, 0, 0); addl(m, 0, "", 0, K_RETRY, 0, 0); } } else if (m->role == 2) { plainadd(m, t.p, cols, K_ERR); if (last) addl(m, 0, "", 0, K_RETRY, 0, 0); } else md_build(m, t.p, cols);
+    else if (m->role == 0) { plainadd(m, t.p, cols - 2, K_USER); for (const char *q = m->img; q && *q; ) { const char *e = strchr(q, '\n'); long n = e ? e - q : (long)strlen(q); const char *b = q; for (const char *z = q; z < q + n; z++) if (*z == '/') b = z + 1; char ln[200]; snprintf(ln, 200, "[%s] %.*s", tr("imagen"), (int)(q + n - b), b); addl(m, 0, ln, strlen(ln), K_USER, 0, 0); q = e ? e + 1 : q + n; } if (last && !busy) { addl(m, 0, "", 0, K_GAP, 0, 0); addl(m, 0, "", 0, K_RETRY, 0, 0); } } else if (m->role == 2) { plainadd(m, t.p, cols, K_ERR); if (last) addl(m, 0, "", 0, K_RETRY, 0, 0); } else md_build(m, t.p, cols);
     if (m->role == 1 && m != SM) { if (m->tin || m->tout) snprintf(h, 200, "\xE2\x86\x91 %d  \xE2\x86\x93 %d tokens  \xC2\xB7  %ld.%ld s%s", m->tin, m->tout, m->ms / 1000, m->ms % 1000 / 100, m->stopped ? tr("  \xC2\xB7  detenida") : ""); else snprintf(h, 200, "%ld.%ld s%s", m->ms / 1000, m->ms % 1000 / 100, m->stopped ? tr("  \xC2\xB7  detenida") : ""); addl(m, 0, h, strlen(h), K_META, 0, 0); }
     addl(m, 0, "", 0, K_GAP, 0, 0); free(t.p); }
 
 /* ---------- pantalla ---------- */
 #define CH_H (4 * LH + 22)
 enum { B_NEW = 1, B_SIDE, B_MODEL, B_SET, B_EXP, B_PRINT, B_SEND, B_CLOSE, B_KPASTE, B_KSHOW, B_KSAVE, B_KTEST, B_KDEL, B_TMINUS, B_TPLUS, B_MMINUS, B_MPLUS, B_LIVE1, B_LIVE0, B_APIRESET, B_WIPE, B_ADDKEY, B_TABFREE, B_TABALL, B_REFRESH,
-    F_KEY = 50, F_SYS, F_CSYS, F_API, F_SEARCH, B_FILES = 60, B_FUP, B_FPATH, B_FDOCS, B_FDESK, B_FSYS, B_FROOT, B_SUG = 70, B_MROW = 100, B_FDEL = 4000, B_FROW = 4100 };
+    F_KEY = 50, F_SYS, F_CSYS, F_API, F_SEARCH, B_USEID = 55, B_PROV = 56, B_FILES = 60, B_FUP, B_FPATH, B_FDOCS, B_FDESK, B_FSYS, B_FROOT, B_SUG = 70, B_MROW = 100, B_FDEL = 4000, B_FROW = 4100 };
 typedef struct { int x, y, w, h, id; } hz_t; static hz_t HZ[200]; static int nhz, need, sb_top, sf = -1, scur, show_key, qcur; static char s_key[256], s_sys[1024], s_csys[1024], s_api[200];
 static void hz(int x, int y, int w, int h, int id) { if (nhz < 200) HZ[nhz++] = (hz_t){x, y, w, h, id}; }
 static void btn(int x, int y, int w, int h, const char *s, int st, int id) { ui_button(W, x, y, w, h, s, st); hz(x, y, w, h, id); }
@@ -382,7 +415,7 @@ static void dline(msg_t *m, dl_t *l, int x, int y, int rw) {
     case K_THINK: { char t[60]; int d = z_ms() / 400 % 4; snprintf(t, 60, "%s%s", tr(m->r.n ? "Razonando" : "Pensando"), d == 3 ? "..." : d == 2 ? ".." : d == 1 ? "." : ""); g_text(W, x, y + 1, t, UI_MUTED); break; } } }
 static void draw_empty(int x0, int y0, int w, int h) { int cx = x0 + w / 2, y = y0 + MAX(16, h / 2 - 160);
     g_text2(W, cx - 60, y, "LUMEN", UI_ACC, 3); y += 58; ctext(cx, y, "Chat con IA para ZunzúnOS", UI_MUTED); y += 30;
-    if (is_or() && !C.key[0]) { ctext(cx, y, "Añade tu API key gratuita de OpenRouter para empezar.", UI_TEXT); y += 26; int b = bw("Añadir API key") + 20; btn(cx - b / 2, y, b, 30, "Añadir API key", 2, B_ADDKEY); y += 46; }
+    if ((is_or() || is_ly()) && !C.key[0]) { ctext(cx, y, is_ly() ? "Añade tu API key de Lyceum para empezar." : "Añade tu API key gratuita de OpenRouter para empezar.", UI_TEXT); y += 26; int b = bw("Añadir API key") + 20; btn(cx - b / 2, y, b, 30, "Añadir API key", 2, B_ADDKEY); y += 46; }
     else { char t[200]; snprintf(t, 200, "%s: %s", tr("Modelo"), model_name(C.model)); ctext(cx, y, t, UI_TEXT); y += 34; }
     for (int i = 0; i < 4 && y + 34 < y0 + h; i++, y += 38) { int b = MIN(w - 40, g_textw(tr(SUG[i])) + 30); btn(cx - b / 2, y, b, 30, SUG[i], 0, B_SUG + i); } }
 static void draw_chat(void) { int x0 = CX0(), cw = W->w - x0, y0 = TB, y1 = W->h - SBH - CH_H; conv_t *c = CC(); view_h = y1 - y0;
@@ -395,16 +428,19 @@ static void draw_comp(void) { int x0 = CX0(), cw = W->w - x0, y = W->h - SBH - C
     int bx = x0 + 12, by = y + 10, bww = cw - 24 - 106, bh = CH_H - 20; g_rect(W, bx, by, bww, bh, UI_WHITE); g_frame(W, bx, by, bww, bh, UI_ACC); hz(bx, by, bww, bh, 0);
     CT.cols = MAX(10, (bww - 16) / 8); if (!CT.len) { g_text(W, bx + 9, by + 7, "Escribe un mensaje...", UI_MUTED); g_text(W, bx + 9, by + 7 + LH * 2, "Intro envía  \xC2\xB7  Mayús+Intro, nueva línea", UI_LINE); }
     zw_clip(W, bx + 1, by + 1, bww - 2, bh - 2); te_draw(W, &CT, bx + 8, by + 7, bh - 12, 1, UI_TEXT, UI_ACC2, UI_ACC, 0); zw_noclip(W);
-    btn(bx + bww + 10, by, 96, 34, busy && SM ? "Detener" : "Enviar", 2, B_SEND); if (!busy) { conv_t *c = CC(); char t[40]; if (c && c->natt) snprintf(t, 40, "%s (%d)", tr("Archivos"), c->natt); else strcpy(t, tr("Archivos")); btn(bx + bww + 10, by + 40, 96, 28, t, c && c->natt ? 1 : 0, B_FILES); } if (busy && SM) { char t[40]; snprintf(t, 40, "%ld s", (long)((z_ms() - t_send) / 1000)); ctext(bx + bww + 58, by + 44, t, UI_MUTED); } }
+    btn(bx + bww + 10, by, 96, 34, busy && SM ? "Detener" : "Enviar", 2, B_SEND); if (!busy) { conv_t *c = CC(); char t[40]; if ((c && c->natt) || npimg) snprintf(t, 40, "%s (%d)", tr("Archivos"), (c ? c->natt : 0) + npimg); else strcpy(t, tr("Archivos")); btn(bx + bww + 10, by + 40, 96, 28, t, (c && c->natt) || npimg ? 1 : 0, B_FILES); } if (busy && SM) { char t[40]; snprintf(t, 40, "%ld s", (long)((z_ms() - t_send) / 1000)); ctext(bx + bww + 58, by + 44, t, UI_MUTED); } }
 static void fld(int x, int y, int w, int id, const char *v, int foc) { ui_input(W, x, y, w, 26, v, foc ? scur : 0, foc); hz(x, y, w, 26, id); }
 static void spin(int x, int y, const char *val, int idm, int idp) { btn(x, y, 28, 26, "-", 0, idm); g_rect(W, x + 32, y, 74, 26, UI_WHITE); g_frame(W, x + 32, y, 74, 26, UI_LINE); ctext(x + 69, y + 5, val, UI_TEXT); btn(x + 110, y, 28, 26, "+", 0, idp); }
 static void draw_settings(void) { int x0 = 28, w = MIN(W->w - 56, 760), y = TB + 14; g_rect(W, 0, TB, W->w, W->h - TB - SBH, UI_BG);
-    g_text2(W, x0, y, "Ajustes", UI_TEXT, 2); btn(W->w - 28 - bw("Cerrar"), y, bw("Cerrar"), 28, "Cerrar", 0, B_CLOSE); y += 42;
-    g_textb(W, x0, y, is_or() ? "API key de OpenRouter" : "API key (opcional en servidores locales)", UI_TEXT); y += 22; char mk[256]; const char *kv_ = s_key; if (!show_key) { int n = MIN((int)strlen(s_key), 255); memset(mk, '*', n); mk[n] = 0; if (n > 12) memcpy(mk, s_key, 6); kv_ = mk; }
+    g_text2(W, x0, y, "Ajustes", UI_TEXT, 2); btn(W->w - 28 - bw("Cerrar"), y, bw("Cerrar"), 28, "Cerrar", 0, B_CLOSE);
+    { static const char *PV[] = {"OpenRouter", "Lyceum (UE)", "Otro servidor"}; int px = x0 + 150; g_text(W, px, y + 6, "Proveedor:", UI_MUTED); px += g_textw(tr("Proveedor:")) + 10; for (int i = 0; i < 3; i++) { btn(px, y, bw(PV[i]), 28, PV[i], C.prov == i ? 2 : 0, B_PROV + i); px += bw(PV[i]) + 6; } } y += 42;
+    g_textb(W, x0, y, is_or() ? "API key de OpenRouter" : is_ly() ? "API key de Lyceum" : "API key (opcional en servidores locales)", UI_TEXT); y += 22; char mk[256]; const char *kv_ = s_key; if (!show_key) { int n = MIN((int)strlen(s_key), 255); memset(mk, '*', n); mk[n] = 0; if (n > 12) memcpy(mk, s_key, 6); kv_ = mk; }
     int iw = w - bw("Pegar") - bw("Mostrar") - 16; ui_input(W, x0, y, iw, 26, kv_, sf == 0 ? (show_key ? scur : (int)strlen(kv_)) : 0, sf == 0); hz(x0, y, iw, 26, F_KEY); btn(x0 + iw + 8, y, bw("Pegar"), 26, "Pegar", 0, B_KPASTE); btn(x0 + iw + 16 + bw("Pegar"), y, bw("Mostrar"), 26, show_key ? "Ocultar" : "Mostrar", 0, B_KSHOW); y += 34;
     g_circle(W, x0 + 6, y + 8, 5, KC[kst], 1); g_textb(W, x0 + 18, y, KS[kst], KC[kst]); y += 20; if (kdet[0]) y += para(x0 + 18, y, w - 18, kdet, UI_MUTED) * 18; y += 6;
     int x = x0; btn(x, y, bw("Guardar y comprobar"), 28, "Guardar y comprobar", 2, B_KSAVE); x += bw("Guardar y comprobar") + 8; btn(x, y, bw("Probar de nuevo"), 28, "Probar de nuevo", 0, B_KTEST); x += bw("Probar de nuevo") + 8; btn(x, y, bw("Borrar clave"), 28, "Borrar clave", 0, B_KDEL); y += 38;
-    y += para(x0, y, w, tr("Crea una clave gratuita en openrouter.ai/keys (empieza por sk-or-v1-). Se guarda solo en esta memoria (ZUNZUN/LUMEN.TXT) y solo se envía al servidor de la API."), UI_MUTED) * 18 + 12;
+    y += para(x0, y, w, tr(is_or() ? "Crea una clave gratuita en openrouter.ai/keys (empieza por sk-or-v1-). Se guarda solo en esta memoria (ZUNZUN/LUMEN.TXT) y solo se envía al servidor de la API."
+        : is_ly() ? "Crea la clave en dashboard.lyceum.technology (empieza por lk_). Lyceum funciona en servidores de la UE (París y Finlandia) y dice que no guarda los mensajes ni los usa para entrenar. Se paga por uso."
+        : "Servidor compatible con OpenAI, por ejemplo Ollama o LM Studio en otro equipo de la red local. La clave solo hace falta si el servidor la pide."), UI_MUTED) * 18 + 12;
     g_textb(W, x0, y, "Instrucciones de sistema para todos los chats", UI_TEXT); y += 22; fld(x0, y, w, F_SYS, s_sys, sf == 1); y += 36;
     if (CC()) { g_textb(W, x0, y, "Instrucciones solo para este chat (tienen prioridad)", UI_TEXT); y += 22; fld(x0, y, w, F_CSYS, s_csys, sf == 2); y += 36; }
     char v[32]; g_textb(W, x0, y, "Temperatura", UI_TEXT); g_textb(W, x0 + 190, y, "Máximo de tokens", UI_TEXT); g_textb(W, x0 + 380, y, "Respuesta en vivo", UI_TEXT); y += 22;
@@ -419,7 +455,7 @@ static void draw_models(void) { int x0 = 28, w = W->w - 56, y = TB + 14; g_rect(
     int rw = bw(md_loading ? "Descargando..." : "Actualizar lista"); int sw_ = MAX(120, x0 + w - rw - 8 - x); g_text(W, x, y + 6, "Buscar", UI_MUTED); x += g_textw(tr("Buscar")) + 8; sw_ -= g_textw(tr("Buscar")) + 8; ui_input(W, x, y + 1, sw_, 26, md_q, qcur, 1); hz(x, y + 1, sw_, 26, F_SEARCH); btn(x0 + w - rw, y, rw, 28, md_loading ? "Descargando..." : "Actualizar lista", 0, B_REFRESH); y += 36;
     if (md_at) { char d[60]; fmt_upd(md_at, d, 60); snprintf(t, 200, "%s %s  \xC2\xB7  %s", tr("Lista actualizada:"), d, tr("los modelos gratuitos tienen límites de uso y cambian a menudo")); } else snprintf(t, 200, "%s", tr("Lista básica sin conexión: pulsa Actualizar lista para ver todos los modelos")); g_text(W, x0, y, t, UI_MUTED); y += 24;
     int *fl = malloc((nmd + 1) * sizeof(int)), n = md_filter(fl), rows = md_rows(); md_cur = MAX(0, MIN(md_cur, n - 1)); if (md_cur < md_top) md_top = md_cur; if (md_cur >= md_top + rows) md_top = md_cur - rows + 1; md_top = MAX(0, MIN(md_top, n - rows));
-    if (!n) g_text(W, x0, y + 8, "Ningún modelo coincide con la búsqueda.", UI_MUTED);
+    if (!n) { g_text(W, x0, y + 8, "Ningún modelo coincide con la búsqueda.", UI_MUTED); if (strchr(md_q, '/')) { char u2[160]; snprintf(u2, 160, "%s %s", tr("Usar el modelo"), md_q); btn(x0, y + 34, g_textw(u2) + 24, 30, u2, 2, B_USEID); } }
     for (int r = md_top; r < n && r < md_top + rows; r++, y += 40) { model_t *m = &MD[fl[r]]; int sel = !strcmp(m->id, C.model); g_round(W, x0, y, w, 37, 4, r == md_cur ? UI_ACC2 : UI_WHITE); if (sel) g_rect(W, x0, y + 4, 4, 29, UI_ACC);
         char pr[80], cx[24], rt[120]; fmt_price(m, pr, 80); fmt_ctx(m->ctx, cx, 24); if (m->ctx) snprintf(rt, 120, "%s  \xC2\xB7  %s %s", pr, cx, tr("contexto")); else strcpy(rt, pr); int rtw = g_textw(rt);
         zw_clip(W, x0 + 12, y, w - rtw - 36, 38); g_textb(W, x0 + 12, y + 2, m->name, UI_TEXT); g_text(W, x0 + 12, y + 19, m->id, UI_MUTED); zw_noclip(W); g_text(W, x0 + w - rtw - 12, y + 11, rt, m->fr ? 0x16A34A : UI_MUTED); hz(x0, y, w, 37, B_MROW + fl[r]); }
@@ -427,7 +463,7 @@ static void draw_models(void) { int x0 = 28, w = W->w - 56, y = TB + 14; g_rect(
 /* panel Archivos: los adjuntos del chat y un explorador sencillo para anadir mas */
 static char fb_dir[200]; static int fb_top; static zdirent FBE[300]; static int nfbe;
 static int fb_cmp(const void *a, const void *b) { const zdirent *x = a, *y = b; if (x->is_dir != y->is_dir) return y->is_dir - x->is_dir; return strcasecmp(x->name, y->name); }
-static void fb_load(const char *d) { if (d != fb_dir) strncpy0(fb_dir, d, 200); nfbe = 0; fb_top = 0; zdirent e; for (int i = 0; nfbe < 300 && !z_readdir(fb_dir, i, &e); i++) { if (e.name[0] == '.' || (!e.is_dir && !RAG_OK(e.name))) continue; FBE[nfbe++] = e; } qsort(FBE, nfbe, sizeof *FBE, fb_cmp); }
+static void fb_load(const char *d) { if (d != fb_dir) strncpy0(fb_dir, d, 200); nfbe = 0; fb_top = 0; zdirent e; for (int i = 0; nfbe < 300 && !z_readdir(fb_dir, i, &e); i++) { if (e.name[0] == '.' || (!e.is_dir && !RAG_OK(e.name) && !IMG_OK(e.name))) continue; FBE[nfbe++] = e; } qsort(FBE, nfbe, sizeof *FBE, fb_cmp); }
 static void fb_go(const char *d) { zdirent e; if (d[0] && (!strcmp(d, "/") || !z_stat(d, &e))) fb_load(d); else snprintf(msg, 300, "%s: %s", tr("No existe"), d); }
 static int fb_rows(void) { return MAX(3, (W->h - SBH - (TB + 14 + 300)) / 26); }
 static void draw_files(void) { int x0 = 28, w = MIN(W->w - 56, 860), y = TB + 14; conv_t *c = CC(); g_rect(W, 0, TB, W->w, W->h - TB - SBH, UI_BG);
@@ -446,7 +482,7 @@ static void draw_files(void) { int x0 = 28, w = MIN(W->w - 56, 860), y = TB + 14
     for (int i = 0; i < rows && fb_top + i < nfbe; i++) { zdirent *e = &FBE[fb_top + i]; int ry = y + 2 + i * 26; char t[160]; if (e->is_dir) snprintf(t, 160, "[%s]  %s", tr("carpeta"), e->name); else snprintf(t, 160, "%s   (%lu KB)", e->name, (unsigned long)((e->size + 1023) / 1024));
         g_text(W, x0 + 10, ry + 5, t, e->is_dir ? UI_ACC : UI_TEXT); hz(x0 + 1, ry, w - 2, 26, B_FROW + fb_top + i); }
     if (nfbe > rows) { char t[60]; snprintf(t, 60, tr("%d de %d (rueda para ver más)"), MIN(rows, nfbe - fb_top), nfbe); g_text(W, x0, y + rows * 26 + 10, t, UI_MUTED); } }
-static void fb_pick(int i) { if (i < 0 || i >= nfbe) return; char p[260]; snprintf(p, 260, "%s%s%s", fb_dir, strcmp(fb_dir, "/") ? "/" : "", FBE[i].name); if (FBE[i].is_dir) { fb_go(p); return; } rag_add(p); }
+static void fb_pick(int i) { if (i < 0 || i >= nfbe) return; char p[260]; snprintf(p, 260, "%s%s%s", fb_dir, strcmp(fb_dir, "/") ? "/" : "", FBE[i].name); if (FBE[i].is_dir) { fb_go(p); return; } if (IMG_OK(p)) { img_add(p); return; } rag_add(p); }
 void draw(void) { nhz = 0; need = 0; last_draw = z_ms(); g_clear(W, UI_WHITE); zs_area(W, 0, 0, 0, 0, 0); zs_stop(W); draw_tb(); if (mode == 1) draw_settings(); else if (mode == 2) draw_models(); else if (mode == 3) draw_files(); else { if (side_on()) draw_side(); draw_chat(); draw_comp(); }
     g_rect(W, 0, W->h - SBH, W->w, SBH, UI_PANEL); g_rect(W, 0, W->h - SBH, W->w, 1, UI_LINE); zw_clip(W, 0, W->h - SBH, W->w - 200, SBH); g_text(W, 8, W->h - 19, msg, UI_TEXT); zw_noclip(W);
     conv_t *c = CC(); if (c && c->n) { char t[60]; snprintf(t, 60, tr("%d mensajes"), c->n); g_text(W, W->w - 8 - g_textw(t), W->h - 19, t, UI_MUTED); } if (mode == 0) zs_show(W); zw_present(W); }
@@ -461,13 +497,13 @@ static void export_md(conv_t *c) { if (!c || !c->n) { strcpy(msg, tr("No hay nad
     if (e) snprintf(msg, 300, "%s: %s", tr("No se pudo guardar"), z_errstr(e)); else snprintf(msg, 300, "%s %s", tr("Guardado en"), p); char lg[260]; snprintf(lg, 260, "[prueba] lumen exportado %s: %d", p, e); z_log(lg); }
 static void print_conv(conv_t *c) { if (!c || !c->n) { strcpy(msg, tr("No hay nada que imprimir")); return; } if (wait_busy()) return; sb_t b = {0}; conv_md(c, &b); char sub[120]; char d[60]; fmt_upd(c->upd, d, 60); snprintf(sub, 120, "LUMEN  \xC2\xB7  %s", d); zp_print_text(c->title[0] ? c->title : "LUMEN", sub, b.p, 0); free(b.p); }
 static void open_settings(void) { strncpy0(s_key, C.key, 256); strncpy0(s_sys, C.sys, 1024); strncpy0(s_csys, CC() && CC()->sys ? CC()->sys : "", 1024); strncpy0(s_api, C.api, 200); mode = 1; sf = C.key[0] ? -1 : 0; scur = strlen(s_key); show_key = 0; if (C.key[0] && !kst) kst = 5; }
-static void apply_settings(void) { clean_key(s_key); int changed = strcmp(s_key, C.key) != 0; strcpy(C.key, s_key); strcpy(C.sys, s_sys); char *a = s_api; while (*a == ' ') a++; int l = strlen(a); while (l && (a[l - 1] == ' ' || a[l - 1] == '/')) a[--l] = 0; strncpy0(C.api, *a ? a : DEF_API, 200);
+static void apply_settings(void) { clean_key(s_key); int changed = strcmp(s_key, C.key) != 0; strcpy(C.key, s_key); strcpy(C.sys, s_sys); char *a = s_api; while (*a == ' ') a++; int l = strlen(a); while (l && (a[l - 1] == ' ' || a[l - 1] == '/')) a[--l] = 0; if (*a && strcmp(a, C.api) && C.prov != 2 && strcmp(a, DEF_API) && strcmp(a, LYC_API)) { char pm[128]; strcpy(pm, C.model); prov_keep(); strncpy0(C.custom, a, 200); prov_use(2); strcpy(C.key, s_key); if (!C.model[0]) strcpy(C.model, pm); } else if (C.prov == 2) strncpy0(C.api, *a ? a : C.custom, 200); else strncpy0(C.api, C.prov == 1 ? LYC_API : DEF_API, 200);
     if (CC()) { free(CC()->sys); CC()->sys = strdup(s_csys); if (CC()->n) conv_save(CC()); } if (changed) { kst = C.key[0] ? 5 : 0; kdet[0] = 0; } int e = cfg_save(); if (e) snprintf(msg, 300, "%s: %s", tr("No se pudieron guardar los ajustes"), z_errstr(e)); }
 static void close_panel(void) { if (mode == 1) apply_settings(); mode = 0; sf = -1; }
 static void retry(void) { conv_t *c = CC(); if (!c || wait_busy()) return; while (c->n && c->m[c->n - 1]->role != 0) msg_del(c, c->n - 1); if (c->n) ask(); }
 static void send_text(void) { if (wait_busy()) return; char *t = CT.t ? CT.t : (char *)""; while (*t == ' ' || *t == '\n') t++; long n = strlen(t); while (n && (t[n - 1] == ' ' || t[n - 1] == '\n')) n--; if (!n) return;
-    if (is_or() && !C.key[0]) { open_settings(); strcpy(msg, tr("Primero añade tu API key de OpenRouter (gratis en openrouter.ai/keys)")); return; }
-    conv_t *c = CC(); if (!c) c = conv_new(); msg_t *m = msg_add(c, 0); sb_add(&m->t, t, n); te_set(&CT, "", 0); conv_title(c); c->upd = now_num(); stick = 1; mode = 0; ask(); }
+    if ((is_or() || is_ly()) && !C.key[0]) { open_settings(); strcpy(msg, tr("Primero añade tu API key de OpenRouter (gratis en openrouter.ai/keys)")); return; }
+    conv_t *c = CC(); if (!c) c = conv_new(); msg_t *m = msg_add(c, 0); sb_add(&m->t, t, n); if (npimg) { m->img = strdup(pimg); pimg[0] = 0; npimg = 0; } te_set(&CT, "", 0); conv_title(c); c->upd = now_num(); stick = 1; mode = 0; ask(); }
 static void new_chat(void) { if (wait_busy()) return; mode = 0; if (CC() && !CC()->n) return; for (int i = 0; i < ncv; i++) if (!CV[i]->n) { cur = i; return; } cur = -1; stick = 1; te_set(&CT, "", 0); }
 static void code_block(const char *t, int k, sb_t *o) { int blk = 0, in = 0; for (const char *p = t; *p; ) { const char *e = strchr(p, '\n'); long n = e ? e - p : (long)strlen(p); const char *s = p; while (s < p + n && *s == ' ') s++;
         if (s - p < 4 && (!strncmp(s, "```", 3) || !strncmp(s, "~~~", 3))) { if (!in) { in = 1; blk++; } else { in = 0; if (blk == k) break; } } else if (in && blk == k) { sb_add(o, p, n); sb_s(o, "\n"); } if (!e) break; p = e + 1; } if (!o->p) sb_add(o, "", 0); }
@@ -481,7 +517,7 @@ static void act(int id) {
     case B_FILES: if (wait_busy()) break; if (mode == 1) apply_settings(); mode = mode == 3 ? 0 : 3; if (mode == 3 && !fb_dir[0]) { char d[120]; z_docdir(d); fb_load(d); } else if (mode == 3) fb_load(fb_dir); break;
     case B_FUP: { char d[200]; strcpy(d, fb_dir); char *q = strrchr(d, '/'); if (q && q > d) *q = 0; else strcpy(d, "/"); fb_go(d); break; }
     case B_FDOCS: { char d[120]; z_docdir(d); fb_go(d); break; } case B_FDESK: fb_go("/sys/ESCRITORIO"); break; case B_FSYS: fb_go("/sys"); break; case B_FROOT: fb_go("/"); break;
-    case B_FPATH: { char p[200]; strcpy(p, fb_dir); if (ui_prompt("Añadir archivo", "Ruta del archivo o de la carpeta:", p, 190) && p[0]) { zdirent e; if (!z_stat(p, &e) && e.is_dir) fb_go(p); else rag_add(p); } break; }
+    case B_FPATH: { char p[200]; strcpy(p, fb_dir); if (ui_prompt("Añadir archivo", "Ruta del archivo o de la carpeta:", p, 190) && p[0]) { zdirent e; if (!z_stat(p, &e) && e.is_dir) fb_go(p); else if (IMG_OK(p)) img_add(p); else rag_add(p); } break; }
     case B_NEW: new_chat(); break; case B_SIDE: C.side = !side_on(); if (C.side && W->w < 640) C.side = 1; cfg_save(); break;
     case B_MODEL: if (mode == 1) apply_settings(); mode = mode == 2 ? 0 : 2; if (mode == 2) { md_q[0] = 0; qcur = 0; md_top = 0; model_t *m = md_find(C.model); md_tab = m && !m->fr ? 1 : 0; md_cur = 0; int fl[2048], n = nmd < 2048 ? md_filter(fl) : 0; for (int k = 0; k < n; k++) if (!strcmp(MD[fl[k]].id, C.model)) md_cur = k; if (models_stale() && !busy) { draw(); fetch_models(); } } break;
     case B_SET: if (mode == 1) close_panel(); else open_settings(); break; case B_ADDKEY: open_settings(); sf = 0; break;
@@ -493,7 +529,9 @@ static void act(int id) {
     case B_KDEL: s_key[0] = 0; scur = 0; apply_settings(); strcpy(msg, tr("Clave borrada")); break;
     case B_TMINUS: C.temp = MAX(0, C.temp - 1); cfg_save(); break; case B_TPLUS: C.temp = MIN(20, C.temp + 1); cfg_save(); break;
     case B_MMINUS: case B_MPLUS: { int k = 0; for (int i = 0; i < 9; i++) if (MAXT[i] == C.maxtok) k = i; k = id == B_MPLUS ? MIN(8, k + 1) : MAX(0, k - 1); C.maxtok = MAXT[k]; cfg_save(); break; }
-    case B_LIVE1: C.stream = 1; cfg_save(); break; case B_LIVE0: C.stream = 0; cfg_save(); break; case B_APIRESET: strcpy(s_api, DEF_API); scur = strlen(s_api); break; case B_WIPE: wipe(); break;
+    case B_PROV: case B_PROV + 1: case B_PROV + 2: { if (wait_busy()) break; apply_settings(); prov_keep(); prov_use(id - B_PROV); strncpy0(s_key, C.key, 256); scur = strlen(s_key); strncpy0(s_api, C.api, 200); kst = C.key[0] ? 5 : 0; kdet[0] = 0; md_load(); cfg_save(); snprintf(msg, 300, "%s: %s", tr("Proveedor"), id == B_PROV ? "OpenRouter" : id == B_PROV + 1 ? "Lyceum (UE)" : tr("Otro servidor")); char lg[80]; snprintf(lg, 80, "[prueba] lumen proveedor %d", C.prov); z_log(lg); break; }
+    case B_LIVE1: C.stream = 1; cfg_save(); break; case B_LIVE0: C.stream = 0; cfg_save(); break; case B_APIRESET: strcpy(s_api, C.prov == 1 ? LYC_API : DEF_API); scur = strlen(s_api); break; case B_WIPE: wipe(); break;
+    case B_USEID: { char id[112]; strncpy0(id, md_q, 112); char *t = id; while (*t == ' ') t++; md_add(t, t, 0, 0, 0, z_ends(t, ":free")); md_save(); pick_model(nmd - 1); break; }
     case B_TABFREE: md_tab = 0; md_top = md_cur = 0; break; case B_TABALL: md_tab = 1; md_top = md_cur = 0; break; case B_REFRESH: if (!wait_busy()) fetch_models(); break;
     case F_KEY: sf = 0; scur = strlen(s_key); break; case F_SYS: sf = 1; scur = strlen(s_sys); break; case F_CSYS: sf = 2; scur = strlen(s_csys); break; case F_API: sf = 3; scur = strlen(s_api); break; } }
 static char *sfield(int i, int *cap) { *cap = i == 0 ? 250 : i == 3 ? 190 : 1000; return i == 0 ? s_key : i == 1 ? s_sys : i == 2 ? s_csys : s_api; }
@@ -535,7 +573,7 @@ static void handle(zevent *e) {
 int main(const char *a) { zdirent d; if (!z_stat("/sys", &d)) strcpy(base, "/sys/ZUNZUN"); else { z_mkdir("/rd/tmp"); strcpy(base, "/rd/tmp/ZUNZUN"); } z_mkdir(base);
     cfg_load(); md_load(); conv_load_all(); te_init(&CT); if (C.key[0]) kst = 5;
     zsys s; z_sysinfo(&s); W = zw_new("LUMEN", -1, 0, MIN(1000, (int)s.scr_w - 40), MIN(680, (int)s.scr_h - 80), WF_DECOR | WF_RESIZE); if (!W) return 1;
-    if (is_or() && !C.key[0]) strcpy(msg, tr("Bienvenido a LUMEN. Añade tu API key de OpenRouter en Ajustes.")); else snprintf(msg, 300, "%s: %s", tr("Modelo"), model_name(C.model));
+    if ((is_or() || is_ly()) && !C.key[0]) strcpy(msg, tr("Bienvenido a LUMEN. Añade tu API key de OpenRouter en Ajustes.")); else snprintf(msg, 300, "%s: %s", tr("Modelo"), model_name(C.model));
     draw(); char lg[80]; snprintf(lg, 80, "[prueba] lumen listo, %d chats", ncv); z_log(lg); zevent e;
     while (!quit) { if (!z_event(&e, busy ? 300 : -1)) { if (busy) draw(); continue; } handle(&e); if (need && !quit) draw(); }
     return 0; }

@@ -24,7 +24,7 @@ def scan(b):
         e = b[o:o + 32]
         if e[0] == 0: break
         if e[11] == 0x0F or e[11] & 8: continue
-        if e[0] == 0xE5: n += 1; continue
+        if e[0] == 0xE5: n += not e[11] & 0x10 and struct.unpack_from('<I', e, 28)[0] > 0; continue   # como Rescate: archivos con datos, no carpetas
         if e[11] & 0x10 and e[0] != 0x2E: scan(b''.join(d[data + (x - 2) * cs:data + (x - 1) * cs] for x in chain(struct.unpack_from('<H', e, 26)[0])))
 scan(d[root:data]); print(n)
 PY

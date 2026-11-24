@@ -1,0 +1,51 @@
+bloque 5
+anidadas 11
+for-let 0,1,2
+for-var 3,3,3
+for-of-const x,y
+tdz ReferenceError
+switch dos
+cae
+catch-destr a
+etiquetas 0 0
+etiquetas 1 0
+arguments 3:1-2-3
+param [1,2,3,null,0] [1,5,3,4,2]
+new.target llamada true
+this p object p!
+bind b bound f true
+clases 21 42 Q:p21 1 estatico true false P(21) true Q
+extiende Array 6 3 true
+extiende Error true true mal Er: mal
+finally gen
+gen {"value":1,"done":false} {"value":10,"done":false} {"value":7,"done":true} {"done":true}
+finally gen
+yield* 1,2,1,NaN
+iterable propio 1,2,3,4 4 1,4,9,16
+destr cadena a c def
+destr anidada 2 {"c":3,"d":4}
+intercambio 2 1
+proxy 1 true false true a,z get a|del a
+reflect 4 true 5
+lookbehind 10 precio [30]
+nombres 24.11.2026 b
+unicode true false 2 Hola
+lazy y back <a><b> true mMmM
+sticky y flags true gimsuy true
+split regex uno|dos|tres a|1|b|2| 1
+redondeos 1.00 1.4 0.000001 1.23e+2 1.0e-7 73 -1
+conversion 12 NaN 16 0 12 5 0 5 NaN -Infinity
+igualdad true false true true true false true true
+texto STRASSE 2 -1 4   x| b 120
+plantillas a2bc \n2 x|y|z1+2
+orden claves 1,b,a [object Mio] [["1","uno"],["b",2],["a",1]]
+congelado 1 true
+defineProperty 42 0 {"enumerable":false,"configurable":false}
+spread obj {"a":1,"b":3} {"0":"a","1":"b"}
+json {"d":"1970-01-01T00:00:00.000Z","n":null,"nested":[null,null]} 17 20
+await catch TypeError
+race rapido
+any 2
+for await 1,2
+finally 5
+fin2

@@ -79,6 +79,10 @@ typedef struct { u64 t, t0; u32 seq, ip; u16 port; u8 proto, verdict; u32 count;
 typedef struct { char name[24]; u32 pol; } zrule;   /* pol 0 preguntar, 1 permitir, 2 bloquear */
 typedef struct { u32 id; int pid; char name[24], host[48]; u32 ip; u32 port; } zask;
 static inline long z_guard(int op, const void *a, long b) { return SC3(114, op, a, b); }
+/* cifrado de datos: op 0 estado (1 activado, 2 abierto, 4 desactivandose), 1 abrir, 2 activar, 3 empezar a desactivar, 4 terminar */
+static inline long z_crypt(int op, const char *pass) { return SC2(115, op, pass); }
+int z_pick_file(const char *title, const char *exts, char *out, int cap);   /* selector de archivos (zpick.c) */
+int z_pass_dialog(const char *title, const char *msg, char *buf, int cap); int z_crypt_rewrite(void (*progress)(int n, void *ctx), void *ctx);
 int z_rules_load(void); int z_rules_save(void); const char *z_app_name(const char *bin);
 /* bateria: o[0] hay, o[1] %, o[2] cargando, o[3] con cargador, o[4] descargando; error si no se puede leer */
 static inline int z_battery(int o[5]) { return SC1(113, o); }
@@ -169,11 +173,14 @@ int memcmp(const void *, const void *, size_t); size_t strlen(const char *); int
 int strncmp(const char *, const char *, size_t); int strncasecmp(const char *, const char *, size_t); int strcasecmp(const char *, const char *); char *strcpy(char *, const char *);
 char *strncpy0(char *, const char *, size_t); char *strchr(const char *, int); char *strrchr(const char *, int); char *strstr(const char *, const char *);
 char *strcasestr(const char *, const char *); char *strcat(char *, const char *); int atoi(const char *); double atof(const char *);
-void *malloc(size_t); void *calloc(size_t, size_t); void *realloc(void *, size_t); void free(void *); char *strdup(const char *);
+size_t z_msize(void *); void *malloc(size_t); void *calloc(size_t, size_t); void *realloc(void *, size_t); void free(void *); char *strdup(const char *);
 int vsnprintf(char *, size_t, const char *, va_list); int snprintf(char *, size_t, const char *, ...);
 int utf8_next(const char **); int utf8_put(u32, char *); int tolower(int); int toupper(int); int isspace(int); int isdigit(int); int isalpha(int);
 void qsort(void *, size_t, size_t, int (*)(const void *, const void *));
 u32 rnd(void);
+/* MP3: codificador propio (zmp3.c, MPEG-1 Layer III CBR: 32/44,1/48 kHz, 32-320 kbps) y decodificador propio (zmp3d.c: capas I, II y III de MPEG-1, 2 y 2.5) */
+typedef struct zmp3 zmp3; zmp3 *mp3e_new(int rate, int ch, int kbps); long mp3e_put(zmp3 *e, const short *pcm, long frames, u8 *out); long mp3e_end(zmp3 *e, u8 *out); void mp3e_free(zmp3 *e);
+typedef struct zmp3d zmp3d; zmp3d *mp3d_new(void); int mp3d_frame(zmp3d *d, const u8 *b, long n, short *pcm, int *used, int *hz, int *ch);
 double z_sqrt(double); double z_pow(double, double); double z_sin(double); double z_cos(double); double z_tan(double); double z_atan(double); double z_ln(double); double z_exp(double); double z_floor(double); double z_fabs(double);
 
 /* grafica */
@@ -262,6 +269,8 @@ extern int zp_default_land; int zp_dialog(const char *title, void (*build)(zpdoc
 typedef struct { int status, tls, cert; char ctype[96]; char final[1100]; char err[96]; } zhttp_info;
 int z_http(const char *method, const char *url, const char *body, long bl, const char *ctype, char **out, long *len, zhttp_info *inf);
 int z_cookies_count(void); int z_cookies_clear(void); /* cookies del navegador */
+/* gestor de cookies: politica 0 todas, 1 solo del sitio visitado, 2 ninguna; regla por sitio 0 ninguna, 1 permitir, 2 bloquear (-1 = consultar) */
+int z_cookies_policy(int set); int z_cookies_rule(const char *dom, int set); void z_cookies_site(const char *host); int z_cookies_rejected(void); int z_cookies_list(char *o, int cap); int z_cookies_del(const char *regdom); const char *z_regdom(const char *h, char *o, int cap);
 /* peticiones para APIs: cabeceras propias (lineas con \r\n), lectura progresiva (cb) y ventana viva (pump) */
 typedef struct { const char *hdrs; int (*cb)(const char *d, long n, void *ctx); int (*pump)(void *ctx); void *ctx; int timeout_ms; } zhttp_opt;
 int z_http_ex(const char *method, const char *url, const char *body, long bl, const char *ctype, const zhttp_opt *o, char **out, long *len, zhttp_info *inf);

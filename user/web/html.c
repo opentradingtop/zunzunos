@@ -120,6 +120,7 @@ struct style {
 };
 
 enum { N_ELEM, N_TEXT };
+struct xattr { char *name, *val; struct xattr *next; };   /* atributos que el motor no usa (data-*, onclick...): para JavaScript */
 
 struct node {
     u8 type, tag;
@@ -135,6 +136,10 @@ struct node {
     int dec, selidx;                     /* data-dec + 1 (0 = auto); opcion elegida */
     struct style s;
     int y;                               /* posicion para los enlaces #ancla */
+    struct xattr *xa;                    /* resto de atributos */
+    int bx, bw, bh;                      /* caja de un bloque tras maquetar (con y) */
+    u64 js;                              /* objeto de JavaScript de este nodo (navegador con JavaScript) */
+    char *tname;                         /* nombre de las etiquetas que el motor no conoce */
 };
 
 struct op {
@@ -147,6 +152,7 @@ struct op {
     char *href;
     struct node *node;                   /* control de formulario que se puede pulsar */
     u32 *px; int iw, ih2;                /* imagen */
+    struct node *owner;                  /* elemento que la dibuja (para los clics de JavaScript) */
 };
 enum { OP_RECT, OP_TEXT, OP_IMG };
 
@@ -173,6 +179,9 @@ struct html_doc {
     struct node **ctrls; int nctrls;     /* controles de formulario, en orden */
     char *imgs[96]; int nimgs;           /* imagenes que faltan por descargar */
     char submit[3072]; int submit_post;  /* formulario enviado: accion?datos */
+    void *jsd;                           /* estado de JavaScript (dom.c) */
+    int (*on_submit)(struct html_doc *, struct node *form);   /* 1: JavaScript cancela el envio */
+    void (*on_change)(struct html_doc *, struct node *ctl);   /* casilla o lista cambiada con el raton */
 };
 int (*html_img_get)(const char *src, u32 **px, int *w, int *h);
 
@@ -345,7 +354,13 @@ static void parse_css(struct html_doc *d, const char *s, const char *end);
 
 static void set_attr(struct html_doc *d, struct node *n, const char *name, int nl, char *val) {
     char k[16];
-    if (nl >= 16) return;
+    if (nl >= 16 || !strncmp(name, "data-", 5) || !strncmp(name, "aria-", 5)) {
+        if (!strncmp(name, "data-calc", 9) || !strncmp(name, "data-if", 7) || !strncmp(name, "data-dec", 8)) { if (nl < 16) goto known; }
+        struct xattr *x = aalloc(&d->a, sizeof *x); char *nm = aalloc(&d->a, (u32)nl + 1);
+        if (x && nm) { for (int i = 0; i < nl; i++) nm[i] = (char)lc((u8)name[i]); nm[nl] = 0; x->name = nm; x->val = val; x->next = n->xa; n->xa = x; }
+        return;
+    }
+known:
     for (int i = 0; i < nl; i++) k[i] = (char)lc((u8)name[i]);
     k[nl] = 0;
     if (!strcmp(k, "id")) n->id = val;
@@ -375,14 +390,21 @@ static void set_attr(struct html_doc *d, struct node *n, const char *name, int n
     else if (!strcmp(k, "data-dec")) n->dec = atoi(val) + 1;
     else if (!strcmp(k, "http-equiv")) n->equiv = val;
     else if (!strcmp(k, "content")) n->content = val;
-    (void)d;
+    else { struct xattr *x = aalloc(&d->a, sizeof *x); char *nm = aalloc(&d->a, (u32)nl + 1);
+        if (x && nm) { memcpy(nm, k, (size_t)nl + 1); x->name = nm; x->val = val; x->next = n->xa; n->xa = x; } }
 }
 
+static void parse_into(struct html_doc *d, struct node *root, const char *src, u32 len);
 static void parse_html(struct html_doc *d, const char *src, u32 len) {
-    const char *p = src, *end = src + len;
     struct node *root = new_node(d, NULL, N_ELEM, T_NONE);
-    struct node *cur = root;
     d->root = root;
+    if (root) parse_into(d, root, src, len);
+}
+
+/* analiza HTML y lo anade como hijos de root (el documento entero o un fragmento de innerHTML) */
+static void parse_into(struct html_doc *d, struct node *root, const char *src, u32 len) {
+    const char *p = src, *end = src + len;
+    struct node *cur = root;
     const char *text = p;
 
     while (p < end) {
@@ -447,6 +469,7 @@ static void parse_html(struct html_doc *d, const char *src, u32 len) {
 
         struct node *n = new_node(d, cur, N_ELEM, tag);
         if (!n) return;
+        if (tag == T_NONE && q > p + 1) { char *tn = aalloc(&d->a, (u32)(q - p)); if (tn) { for (int i = 0; i < q - p - 1; i++) tn[i] = (char)lc((u8)p[1 + i]); tn[q - p - 1] = 0; n->tname = tn; } }
 
         /* Atributos */
         int self_close = 0;
@@ -486,7 +509,11 @@ static void parse_html(struct html_doc *d, const char *src, u32 len) {
             char closing[16];
             ksnprintf(closing, sizeof closing, "</%s", tag_names[tag]);
             const char *e = find_ci(p, end, closing);
-            if (tag == T_SCRIPT) d->has_script = 1;
+            if (tag == T_SCRIPT) {   /* el codigo tal cual (UTF-8), para el navegador con JavaScript */
+                d->has_script = 1;
+                char *t = aalloc(&d->a, (u32)(e - p) + 1);
+                if (t) { memcpy(t, p, (size_t)(e - p)); t[e - p] = 0; n->text = t; n->tlen = (int)(e - p); }
+            }
             else if (tag == T_STYLE) parse_css(d, p, e);
             else if (tag == T_TITLE && !d->title) {
                 char *t = aalloc(&d->a, (u32)(e - p) + 1);
@@ -1261,6 +1288,7 @@ static int promote_blocks(struct node *n) {
 /* ====================================================================== */
 /* Maquetacion                                                             */
 
+static struct node *cur_owner;           /* elemento que se esta maquetando */
 static struct op *new_op(struct html_doc *d) {
     if (d->nops == d->capops) {
         int cap = d->capops ? d->capops * 2 : 256;
@@ -1272,6 +1300,7 @@ static struct op *new_op(struct html_doc *d) {
     }
     struct op *o = &d->ops[d->nops++];
     memset(o, 0, sizeof *o);
+    o->owner = cur_owner;
     return o;
 }
 
@@ -1320,7 +1349,7 @@ static void line_break(struct line *l, struct html_doc *d, int force_empty) {
 
 static void emit_text(struct html_doc *d, struct line *l, const char *s, int len,
                       const struct style *st, char *href) {
-    int cw = 8 * st->scale;
+    int cw = 8 * (st->scale ? st->scale : 1);   /* (un nodo recien creado sin estilo no debe dividir por cero) */
     while (len > 0) {
         int need = len * cw + (l->space && l->any ? cw : 0);
         if (l->any && l->cx + need > l->x0 + l->w) line_break(l, d, 0);
@@ -1515,16 +1544,18 @@ static void inline_walk(struct html_doc *d, struct line *l, struct node *n, char
         if (s) emit_text(d, l, s, (int)strlen(s), &n->s, href);
         return;
     }
+    struct node *was = cur_owner; cur_owner = n;
     switch (n->tag) {
-    case T_BR: line_break(l, d, 1); return;
+    case T_BR: line_break(l, d, 1); cur_owner = was; return;
     case T_IMG: case T_INPUT: case T_BUTTON: case T_SELECT: case T_TEXTAREA:
-        emit_box(d, l, n, href); return;
+        emit_box(d, l, n, href); cur_owner = was; return;
     case T_A: if (n->href) href = n->href; break;
     }
     if (n->tag == T_A && (n->id || n->name)) n->y = l->y;
     if (n->id) n->y = l->y;
     if (n->tag == T_SUP || n->tag == T_SUB) l->space = 0;
     for (struct node *c = n->first; c; c = c->next) inline_walk(d, l, c, href);
+    cur_owner = was;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1571,7 +1602,7 @@ static void collect_form(struct html_doc *d, struct node *n) {
             if (n->id && d->nids < 512) d->ids[d->nids++] = n;
             int ctrl = is_text_input(n) || is_check(n) || n->tag == T_SELECT;
             if (ctrl && d->nctrls < 256) d->ctrls[d->nctrls++] = n;
-            if (is_text_input(n)) {
+            if (is_text_input(n) && !n->edit) {
                 n->edit = aalloc(&d->a, 72);
                 if (n->edit) {
                     const char *v = n->tag == T_TEXTAREA ? n->value : n->value;
@@ -1723,6 +1754,7 @@ static int layout_block(struct html_doc *d, struct node *n, int x, int y, int w,
     pending_margin = 0;
     n->y = top;
 
+    struct node *was = cur_owner; cur_owner = n;
     int bg = s->has_bg ? rect_op(d, bx, top, bw, 0, s->bg) : -1;
     *bg_index = bg;
     int border_start = d->nops;
@@ -1757,6 +1789,7 @@ static int layout_block(struct html_doc *d, struct node *n, int x, int y, int w,
     if (bg >= 0) d->ops[bg].h = h;
     draw_borders(d, s, bx, top, bw, h);
     pending_margin = s->m[2] > pending_margin ? s->m[2] : pending_margin;
+    n->bx = bx; n->bw = bw; n->bh = h; cur_owner = was;
     return cy;
 }
 
@@ -1834,6 +1867,23 @@ static int layout_table(struct html_doc *d, struct node *t, int x, int y, int w)
 /* ====================================================================== */
 /* Interfaz                                                                */
 
+/* estilos, bloques y controles de formulario (al cargar y despues de cada cambio de JavaScript) */
+static void html_restyle_only(struct html_doc *d) {
+    struct style base;
+    memset(&base, 0, sizeof base);
+    base.color = 0x1F2328;
+    base.scale = 1;
+    base.display = D_BLOCK;
+    css_width = d->width;
+    compute_styles(d, d->root->first, &base, 0xFFFFFF);
+    struct style keep = d->root->s;
+    d->root->s = base;
+    d->root->s.p[0] = keep.p[0]; d->root->s.p[1] = keep.p[1]; d->root->s.p[2] = keep.p[2]; d->root->s.p[3] = keep.p[3];
+    promote_blocks(d->root);
+    d->nids = d->nctrls = 0;
+    if (d->ids && d->ctrls) collect_form(d, d->root->first);
+}
+
 struct html_doc *html_load(const char *src, u32 len, int width) {
     struct html_doc *d = kmalloc(sizeof *d);
     if (!d) return NULL;
@@ -1843,17 +1893,9 @@ struct html_doc *html_load(const char *src, u32 len, int width) {
     parse_html(d, src, len);
     if (!d->root) { html_free(d); return NULL; }
 
-    struct style base;
-    memset(&base, 0, sizeof base);
-    base.color = 0x1F2328;
-    base.scale = 1;
-    base.display = D_BLOCK;
-    compute_styles(d, d->root->first, &base, 0xFFFFFF);
-    d->root->s = base;
-    promote_blocks(d->root);
     d->ids = aalloc(&d->a, 512 * sizeof(struct node *));
     d->ctrls = aalloc(&d->a, 256 * sizeof(struct node *));
-    if (d->ids && d->ctrls) collect_form(d, d->root->first);
+    html_restyle_only(d);
 
     /* Fondo del documento: el de <body> o, si no, el de <html> */
     d->bg = 0xFFFFFF;
@@ -1870,8 +1912,17 @@ struct html_doc *html_load(const char *src, u32 len, int width) {
     return d;
 }
 
+/* nuevo ancho de ventana sin volver a analizar la pagina (asi no se pierde lo que hizo JavaScript) */
+void html_resize(struct html_doc *d, int width) { d->width = width; html_restyle_only(d); html_relayout(d); }
+
+#ifdef WEB_JS
+static void dom_flush(struct html_doc *d);   /* dom.c: estilos pendientes de los cambios de JavaScript */
+#endif
 void html_relayout(struct html_doc *d) {
     int dummy;
+#ifdef WEB_JS
+    dom_flush(d);
+#endif
     d->nops = 0;
     pending_margin = 0;
     css_width = d->width;
@@ -1899,6 +1950,7 @@ static void enc_add(char *o, int cap, const char *s, int cp437) { int k = (int)s
     o[k] = 0; }
 static void do_submit(struct html_doc *d, struct node *from) {
     struct node *f = from; while (f && f->tag != T_FORM) f = f->parent; if (!f) return; char q[2800]; q[0] = 0;
+    if (d->on_submit && from != f && d->on_submit(d, f)) return;   /* JavaScript: evento submit cancelado */
     for (int i = 0; i < d->nctrls; i++) { struct node *c = d->ctrls[i], *a = c; while (a && a != f) a = a->parent; if (!a || !c->name) continue;
         const char *v = 0; int cp = 0;
         if (c->tag == T_INPUT && c->itype && (!strcasecmp(c->itype, "checkbox") || !strcasecmp(c->itype, "radio"))) { if (!c->checked) continue; v = c->value ? c->value : "on"; }
@@ -1926,12 +1978,15 @@ int html_click(struct html_doc *d, int x, int y) {
                 if (is_radio(c) && c->name && n->name && !strcmp(c->name, n->name)) c->checked = 0;
             }
             n->checked = 1;
+            if (d->on_change) d->on_change(d, n);
         } else if (is_check(n)) {
             n->checked = !n->checked;
+            if (d->on_change) d->on_change(d, n);
         } else if (n->tag == T_SELECT) {
             int count;
             nth_option(n, 0, &count);
             if (count) n->selidx = (n->selidx + 1) % count;
+            if (d->on_change) d->on_change(d, n);
         }
         return 1;
     }
@@ -2050,3 +2105,7 @@ int html_anchor_y(struct html_doc *d, const char *id) {
     struct node *n = find_id(d->root, id);
     return n ? n->y : -1;
 }
+
+#ifdef WEB_JS
+#include "dom.c"
+#endif

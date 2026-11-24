@@ -36,6 +36,21 @@ La clave se limpia al guardarla (espacios, comillas, caracteres invisibles o un 
 
 ---
 
+## Proveedores
+
+En **Ajustes → Proveedor** se elige con quién habla LUMEN. Cada proveedor guarda su propia clave y su modelo:
+
+- **OpenRouter**: cientos de modelos, muchos gratuitos. Clave en <https://openrouter.ai/keys> (`sk-or-v1-...`).
+- **Lyceum (UE)**: API compatible con OpenAI en servidores europeos (París y Finlandia). Según Lyceum, no guarda
+  los mensajes ni los usa para entrenar. Se paga por uso. Clave en <https://dashboard.lyceum.technology> (`lk_...`).
+  Modelo por defecto `lyceum/router`, que elige el modelo y acepta imágenes.
+- **Otro servidor**: cualquier servidor compatible con OpenAI, por ejemplo Ollama o LM Studio en la red local.
+
+## Imágenes
+
+En **Archivos** se pueden elegir también imágenes (PNG, JPEG, GIF y BMP; hasta 4 por mensaje). Van con el próximo
+mensaje, reducidas a 1280 px como mucho y en JPEG. Hace falta un modelo que acepte imágenes.
+
 ## Modelos
 
 - **Modelo ▼** abre la lista: pestañas **Gratis** y **Todos**, búsqueda por nombre o identificador,

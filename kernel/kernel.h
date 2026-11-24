@@ -156,6 +156,7 @@ typedef struct { u64 size; u32 is_dir; u32 mtime; char name[256]; } zdirent_t;
 struct mount;
 typedef struct file {
     struct mount *m; u64 pos, size; int flags, refs, is_sock; void *priv; u64 a, b, c, d;
+    int enc; u8 nonce[8];   /* archivo cifrado (cifrado.c): los datos empiezan en el byte 16 */
 } file_t;
 typedef struct fsops {
     int (*open)(struct mount *, const char *, int, file_t *);
@@ -223,6 +224,10 @@ typedef struct { u64 t, t0; u32 seq, ip; u16 port; u8 proto, verdict; u32 count;
 typedef struct { char name[24]; u32 pol; } zrule_t;
 typedef struct { u32 id; int pid; char name[24], host[48]; u32 ip; u32 port; } zask_t;
 int guard_check(u32 ip, int port, int proto, const char *host, u32 *seq); void guard_bytes(u32 seq, u64 tx, u64 rx); long guard_syscall(int op, u64 a, u64 b); int guard_admin(void);
+/* SHA-256 (sesion.c) y cifrado de datos (cifrado.c) */
+typedef struct { u32 h[8]; u64 len; u8 buf[64]; int n; } sha_t;
+void sha_blk(sha_t *c, const u8 *p); void sha_init(sha_t *c); void sha_up(sha_t *c, const void *d, long n); void sha_end(sha_t *c, u8 *o);
+int crypt_path(const char *p); int crypt_open(file_t *f, int fl); i64 crypt_read(file_t *f, void *b, u64 n); i64 crypt_write(file_t *f, const void *b, u64 n); long crypt_syscall(int op, const char *pass);
 int net_info(znet_t *); int sock_from(file_t *f, u32 *ip, u16 *port); int net_dns(const char *, u32 *); int net_ping(u32 ip, int timeout, int seq);
 int sock_new(int type); int sock_connect(file_t *, u32 ip, int port, int timeout); i64 sock_send(file_t *, const void *, u64);
 i64 sock_recv(file_t *, void *, u64, int timeout); int sock_bind(file_t *, int port); int sock_accept(file_t *, int timeout, file_t **);

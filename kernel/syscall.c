@@ -102,6 +102,7 @@ u64 syscall_dispatch(regs_t *r) {
         if (a == 1) { UCHK(b, c * sizeof(zrule_t)); } else if (a == 2) { UCHK(b, c * sizeof(gl_t)); } else if (a == 3) { UCHK(b, sizeof(zask_t)); }
         if ((a == 0 || a == 4 || a == 5) && cur->proc && cur->proc->pid != 1 && !guard_admin()) return E_ACCES;   /* cambiar reglas: escritorio o Configuracion */
         return guard_syscall(a, b, c); }
+    case 115: { char pw[200] = ""; if (b && user_str((char *)b, pw, 200) < 0) return E_INVAL; long r = crypt_syscall((int)a, pw); memset(pw, 0, sizeof pw); return r; }
     case 113: { int o[5]; int r = acpi_battery(o); if (r) return r; UCHK(a, sizeof o); memcpy((void *)a, o, sizeof o); return 0; }
     case 109: { char pb[8] = "", pc[8] = ""; if (b && user_str((char *)b, pb, 8) < 0) return E_INVAL; if (c && user_str((char *)c, pc, 8) < 0) return E_INVAL; return sess_syscall(a, b ? pb : 0, c ? pc : 0); }
     case 108: { UCHK(b, c); extern long usbprn_write(int, const void *, long); return usbprn_write(a, (const void *)b, c); }

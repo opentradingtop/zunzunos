@@ -57,6 +57,26 @@ $(B)/w:
 	mkdir -p $@
 $(B)/w/%.o: user/web/%.c user/web/kernel.h user/lib/z.h | $(B)/w
 	$(CC) $(UCFLAGS) -w -Iuser/web -c $< -o $@
+# Colibri (user/colibri): el motor JavaScript propio de ZunzunOS; solo lo enlazan los programas que lo usan
+CBSRC := $(wildcard user/colibri/cb_*.c) user/colibri/cbhost.c
+CBOBJ := $(patsubst user/colibri/%.c,$(B)/cb/%.o,$(CBSRC))
+$(B)/cb:
+	mkdir -p $@
+$(B)/cb/%.o: user/colibri/%.c user/colibri/cb.h user/colibri/cbi.h user/colibri/cbhost.h user/lib/z.h | $(B)/cb
+	$(CC) $(UCFLAGS) -w -Iuser/colibri -c $< -o $@
+# navegador con JavaScript: el mismo motor HTML compilado con el DOM (user/web/dom.c y dom.js)
+$(B)/w/dom_js.h: user/web/dom.js tools/js2h.py | $(B)/w
+	python3 -I tools/js2h.py $< $@ DOM_JS
+$(B)/w/htmljs.o: user/web/html.c user/web/dom.c user/web/domjs.h user/web/kernel.h $(B)/w/dom_js.h user/colibri/cbhost.h user/lib/z.h | $(B)/w
+	$(CC) $(UCFLAGS) -w -Iuser/web -I$(B)/w -Iuser/colibri -DWEB_JS -c $< -o $@
+WJOBJ := $(B)/w/htmljs.o $(B)/w/calc.o $(B)/w/text.o
+$(B)/rd/navjs: EXTRA := $(WJOBJ) $(CBOBJ)
+$(B)/rd/navjs: $(WJOBJ) $(CBOBJ)
+$(B)/a/navjs.o: user/apps/browser.c user/web/domjs.h
+JSAPPS := jsconsola
+$(patsubst %,$(B)/a/%.o,$(JSAPPS)): UCFLAGS += -Iuser/colibri
+$(patsubst %,$(B)/rd/%,$(JSAPPS)): EXTRA := $(CBOBJ)
+$(patsubst %,$(B)/rd/%,$(JSAPPS)): $(CBOBJ)
 $(B)/rd/apps: EXTRA := $(WOBJ)
 $(B)/rd/apps: $(WOBJ)
 $(B)/rd/browser: EXTRA := $(WOBJ)

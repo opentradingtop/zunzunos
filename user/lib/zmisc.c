@@ -39,12 +39,13 @@ const zapp z_apps[] = {
     {"Configuración","config",0x475569,"*",5},{"Impresoras","impresoras",0x334155,"[=]",5},{"Terminal","term",0x1F2937,">_",5},{"Monitor","sysmon",0x0F766E,"%",5},{"Acerca de","acerca",0x0F766E,"i",5},
     {"Correo","correo",0x1D4ED8,"@>",2},{"LUMEN","lumen",0x7C3AED,"IA",2},{"Red local","redlocal",0x0E7490,"<>",2},
     {"Grabar pantalla","pantalla",0xDC2626,"(*)",3},{"Vídeos","video",0x7C3AED,"|>|",3},
+    {"Navegador JS","navjs",0xCA8A04,"JS",2},{"Consola JavaScript","jsconsola",0x854D0E,"{}",2},
 };
 const int z_napps = sizeof z_apps / sizeof z_apps[0];
 int z_hidden(const char *bin) { char h[400], k[24]; z_cfg_gets("ocultos", h, 400); snprintf(k, 24, ",%s,", bin); char w[404]; snprintf(w, 404, ",%s,", h); return strstr(w, k) != 0; }
 void z_set_hidden(const char *bin, int hide) { char h[400], o[420] = ""; z_cfg_gets("ocultos", h, 400); char *p = h; while (*p) { char *c = strchr(p, ','); if (c) *c = 0; if (*p && strcmp(p, bin)) { if (o[0]) strcat(o, ","); strcat(o, p); } if (!c) break; p = c + 1; } if (hide) { if (o[0]) strcat(o, ","); strcat(o, bin); } z_cfg_sets("ocultos", o); }
 static int z_iext(const char *p, const char *e) { return z_ends(p, e); }
-const char *z_app_for(const char *p) { if (z_iext(p, ".png") || z_iext(p, ".bmp") || z_iext(p, ".jpg") || z_iext(p, ".jpeg") || z_iext(p, ".gif")) return "viewer"; if (z_iext(p, ".wav")) return "player"; if (z_iext(p, ".avi")) return "video"; if (z_iext(p, ".htm") || z_iext(p, ".html")) return "apps"; if (z_iext(p, ".zes") || z_iext(p, ".docx") || z_iext(p, ".odt") || z_iext(p, ".rtf")) return "escritor"; if (z_iext(p, ".xlsx") || z_iext(p, ".csv")) return "hoja"; if (z_iext(p, ".zdp")) return "diapos"; if (z_iext(p, ".pdf")) return "pdf"; return "editor"; }
+const char *z_app_for(const char *p) { if (z_iext(p, ".png") || z_iext(p, ".bmp") || z_iext(p, ".jpg") || z_iext(p, ".jpeg") || z_iext(p, ".gif")) return "viewer"; if (z_iext(p, ".wav") || z_iext(p, ".mp3")) return "player"; if (z_iext(p, ".avi")) return "video"; if (z_iext(p, ".htm") || z_iext(p, ".html")) return "apps"; if (z_iext(p, ".zes") || z_iext(p, ".docx") || z_iext(p, ".odt") || z_iext(p, ".rtf")) return "escritor"; if (z_iext(p, ".xlsx") || z_iext(p, ".csv")) return "hoja"; if (z_iext(p, ".zdp")) return "diapos"; if (z_iext(p, ".pdf")) return "pdf"; return "editor"; }
 /* acceso directo: archivo NOMBRE.acceso con "ZACCESO1\n<ruta>\n" */
 int z_shortcut_target(const char *p, char *o, int cap) { o[0] = 0; if (!z_ends(p, ".acceso")) return -22; char *t = z_readfile(p, 0); if (!t) return -2; int r = -22; if (!strncmp(t, "ZACCESO1\n", 9)) { char *e = strchr(t + 9, '\n'); if (e) *e = 0; strncpy0(o, t + 9, cap); r = 0; } free(t); return r; }
 int z_make_shortcut(const char *target, const char *dir, char *made, int cap) { const char *n = strrchr(target, '/'); n = n && n[1] ? n + 1 : target; char p[400]; snprintf(p, 400, "%s/%s.acceso", dir, n); zdirent d; for (int k = 2; !z_stat(p, &d) && k < 100; k++) snprintf(p, 400, "%s/%s (%d).acceso", dir, n, k); char b[600]; int l = snprintf(b, 600, "ZACCESO1\n%s\n", target); int e = z_writefile(p, b, l); z_sync(); if (made) strncpy0(made, p, cap); return e; }
@@ -87,3 +88,22 @@ int z_rules_load(void) { char *t = z_readfile(RULES, 0); int n = 0; z_guard(0, "
     for (char *p = t; p && *p; ) { char *e = strchr(p, '\n'); if (e) *e = 0; char *q = strchr(p, '='); if (q) { *q = 0; z_guard(0, p, atoi(q + 1)); n++; } p = e ? e + 1 : 0; } free(t); return n; }
 int z_rules_save(void) { zrule r[64]; int n = z_guard(1, r, 64); if (n < 0) return n; char b[64 * 32]; int l = 0; for (int i = 0; i < n; i++) l += snprintf(b + l, sizeof b - l, "%s=%u\n", r[i].name, r[i].pol); int e = z_writefile(RULES, b, l); z_sync(); return e; }
 const char *z_app_name(const char *bin) { for (int i = 0; i < z_napps; i++) if (!strcmp(z_apps[i].bin, bin)) return tr(z_apps[i].name); return bin; }
+
+/* pide una frase sin mostrarla (puntos en lugar de letras). 1 si se acepto */
+int z_pass_dialog(const char *title, const char *msg, char *buf, int cap) { zsys s; z_sysinfo(&s); int w = 480, h = 150; zwin *d = zw_new(title, (s.scr_w - w) / 2, (s.scr_h - h) / 2, w, h, WF_DECOR); if (!d) return 0;
+    int cur = 0, r = -1; buf[0] = 0; zevent e; char mk[200];
+    while (r < 0) { int n = 0; for (const char *q = buf; *q; ) { utf8_next(&q); if (n < 190) mk[n++] = '*'; } mk[n] = 0; g_clear(d, UI_BG); g_text(d, 16, 16, tr(msg), UI_TEXT); ui_input(d, 16, 44, w - 32, 28, mk, n, 1);
+        ui_button(d, w - 230, h - 46, 100, 30, "Cancelar", 0); ui_button(d, w - 120, h - 46, 104, 30, "Aceptar", 2); zw_present(d);
+        if (!z_event(&e, -1) || e.win != (u32)d->id) continue; if (e.type == EV_CLOSE) r = 0;
+        else if (e.type == EV_KEY) { if (e.ch == 27) r = 0; else if (e.ch == '\n') r = 1; else ui_input_key(buf, cap, &cur, &e); }
+        else if (e.type == EV_DOWN && e.y >= h - 46 && e.y < h - 16) { if (e.x >= w - 120) r = 1; else if (e.x >= w - 230) r = 0; } }
+    zw_close(d); if (!r) { memset(buf, 0, cap); buf[0] = 0; } return r; }
+/* reescribe los datos protegidos (al activar el cifrado se cifran; al desactivarlo se guardan sin cifrar) */
+static int rw_dir(const char *dir, int depth, void (*pg)(int, void *), void *ctx, int *n) { zdirent e; char names[128][256]; int k = 0, dirs[128];
+    for (int i = 0; k < 128 && !z_readdir(dir, i, &e); i++) { if (e.name[0] == '.') continue; dirs[k] = e.is_dir; strncpy0(names[k++], e.name, 256); }
+    for (int i = 0; i < k; i++) { char p[512]; snprintf(p, 512, "%s/%s", dir, names[i]); if (dirs[i]) { if (depth > 0) rw_dir(p, depth - 1, pg, ctx, n); continue; }
+        static const char *X[] = {"KERNEL.BIN", "INITRD.BIN", "CIFRADO.TXT", "SESION.TXT", "TEMA.TXT", "AJUSTES.TXT"}; int skip = 0; for (unsigned j = 0; j < sizeof X / sizeof *X; j++) if (!strcmp(names[i], X[j])) skip = 1; if (skip) continue;   /* el sistema y lo que no se cifra */
+        if (z_ends(p, ".zztmp")) continue; long len; char *d = z_readfile(p, &len); if (!d) continue; z_writefile(p, d, len); free(d); (*n)++; if (pg && *n % 10 == 0) pg(*n, ctx); }
+    return 0; }
+int z_crypt_rewrite(void (*progress)(int, void *), void *ctx) { int n = 0; static const char *D[] = {"/sys/DOCS", "/sys/ESCRITORIO", "/sys/ZUNZUN", "/sys/ZUNZUN-PUNTOS"};
+    for (int i = 0; i < 4; i++) rw_dir(D[i], 8, progress, ctx, &n); z_sync(); return n; }

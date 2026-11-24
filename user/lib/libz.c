@@ -90,6 +90,7 @@ void free(void *v) {
     if (b->next && (u8 *)(b + 1) + b->size == (u8 *)b->next) { b->size += sizeof(blk) + b->next->size; b->next = b->next->next; }
     if (p != &fl) { blk *pr = (blk *)((u8 *)p - __builtin_offsetof(blk, next)); if ((u8 *)(pr + 1) + pr->size == (u8 *)b) { pr->size += sizeof(blk) + b->size; pr->next = b->next; } }
 }
+size_t z_msize(void *v) { return v ? ((blk *)v - 1)->size : 0; }   /* tamano util de un bloque de malloc */
 void *calloc(size_t a, size_t b) { void *p = malloc(a * b); if (p) memset(p, 0, a * b); return p; }
 void *realloc(void *v, size_t n) { if (!v) return malloc(n); blk *b = (blk *)v - 1; if (b->size >= n) return v; void *p = malloc(n); if (p) { memcpy(p, v, b->size); free(v); } return p; }
 char *strdup(const char *s) { size_t n = strlen(s) + 1; char *p = malloc(n); if (p) memcpy(p, s, n); return p; }
@@ -111,7 +112,7 @@ int vsnprintf(char *out, size_t max, const char *f, va_list ap) {
         if (*f == '-') { left = 1; f++; }
         if (*f == '0') { zero = 1; f++; }
         while (isdigit(*f)) width = width * 10 + *f++ - '0';
-        if (*f == '.') { f++; prec = 0; while (isdigit(*f)) prec = prec * 10 + *f++ - '0'; }
+        if (*f == '.') { f++; prec = 0; if (*f == '*') { prec = va_arg(ap, int); f++; if (prec < 0) prec = -1; } else while (isdigit(*f)) prec = prec * 10 + *f++ - '0'; }   /* %.*s: precision como argumento */
         while (*f == 'l' || *f == 'z') { lng = 1; f++; }
         char b[64]; int i = 0, len; const char *s = b;
         switch (*f) {
