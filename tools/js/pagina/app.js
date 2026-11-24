@@ -16,3 +16,7 @@ window.addEventListener('load', () => {
   console.log('POS boton ' + r('boton') + ' boton2 ' + r('boton2') + ' nombre ' + r('nombre'));
 });
 try { null.x; } catch (e) { if (e instanceof TypeError) ok('errores'); }
+// expresiones regulares (se guardan en la cache del motor) y una promesa rechazada sin gestionar: la segunda pagina
+// arranca otro motor y no debe tocar nada del anterior
+if (/^d(at)os\.json$/.test('datos.json') && 'a-b-c'.replace(/-/g, '+') === 'a+b+c') ok('regex');
+Promise.reject(new Error('sin gestionar a proposito'));

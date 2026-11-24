@@ -47,7 +47,7 @@ El estudio de KolibriOS y las decisiones de diseño están en
 | Seguridad | Criptografía propia: SHA-2, AES-GCM, X25519, ECDH/ECDSA P-256 y P-384, RSA (PKCS#1 y PSS); cliente TLS 1.3 y 1.2 con las autoridades raíz de Mozilla |
 | Red | Anclaje USB de iPhone (protocolo de Apple, en pruebas) y de móviles Android (RNDIS) y adaptadores Ethernet USB (CDC-ECM); e1000, e1000e (82574), Intel 82577/82578/82579 e I217/I218, RTL8139, RTL8168/8169, virtio. ARP, IPv4, ICMP, UDP, TCP, DHCP, DNS |
 | Sonido | AC'97 e Intel HD Audio |
-| Programas | Terminal, Archivos (todas las unidades, copiar, cortar y pegar), Discos, Instalar, Editor, Calculadora, Pintar, Imágenes (galería y visor de PNG, JPEG baseline y progresivo, BMP y GIF), Lector PDF, Navegador web con HTTPS (TLS 1.3 y 1.2, certificados verificados), imágenes y formularios, Correo, LUMEN (chat con IA), Música (WAV y MP3), Monitor, Configuración, Papelera, Serpiente, Campo minado, Bloques |
+| Programas | Terminal, Archivos (todas las unidades, copiar, cortar y pegar), Discos, Instalar, Editor, Calculadora, Pintar, Imágenes (galería y visor de PNG, JPEG baseline y progresivo, BMP y GIF), Lector PDF, Navegador web con HTTPS (TLS 1.3 y 1.2, certificados verificados), imágenes, formularios, marcadores e historial (con botón propio; se pueden borrar las visitas que elijas), Correo, LUMEN (chat con IA), Música (WAV y MP3), Monitor, Configuración, Papelera, Serpiente, Campo minado, Bloques |
 
 ## Compilar y probar
 

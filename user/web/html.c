@@ -1972,6 +1972,9 @@ static void do_submit(struct html_doc *d, struct node *from) {
     if (from && is_submit(from) && from->name && !strstr(q, from->name)) { if (q[0]) strcat(q, "&"); enc_add(q, sizeof q, from->name, 0); strcat(q, "="); enc_add(q, sizeof q, from->value ? from->value : "", 0); }
     d->submit_post = f->method && !strcasecmp(f->method, "post"); ksnprintf(d->submit, sizeof d->submit, "%s%s%s", f->action ? f->action : "", d->submit_post ? "\n" : "?", q); }
 const char *html_take_submit(struct html_doc *d, int *post) { if (!d->submit[0]) return 0; static char out[3072]; strlcpy(out, d->submit, sizeof out); d->submit[0] = 0; if (post) *post = d->submit_post; return out; }
+/* centro del elemento numero nth (desde 0) con ese atributo name (casillas, campos, botones); 0 si no se ve. Para las pruebas */
+int html_named_pos(struct html_doc *d, const char *name, int nth, int *x, int *y) { struct node *last = NULL;
+    for (int k = 0; k < d->nops; k++) { struct op *o = &d->ops[k]; if (!o->node || o->node == last || !o->node->name || strcmp(o->node->name, name)) continue; last = o->node; if (nth-- == 0) { *x = o->x + o->w / 2; *y = o->y + o->h / 2; return 1; } } return 0; }
 int html_nimages(struct html_doc *d) { return d->nimgs; }
 const char *html_image_src(struct html_doc *d, int i) { return i >= 0 && i < d->nimgs ? d->imgs[i] : 0; }
 static int e_word(const char *s, int i) { unsigned char c = s[i]; return c >= 0x80 || (c >= '0' && c <= '9') || ((c | 32) >= 'a' && (c | 32) <= 'z') || c == '_'; }

@@ -10,6 +10,8 @@ int cb_get_own_desc(cb_rt *R, cb_obj *o, cbv key, cbv *val, u32 *flags, cbv *get
 int cb_has_own(cb_rt *R, cb_obj *o, cbv key);
 void cb_ast_free(void);
 void cb_run_reset(void);
+void cb_re_reset(void);
+void cb_promise_reset(void);
 void *cb_stack_top(void);
 cbv cb_binop(cb_rt *R, int op, cbv a, cbv b);
 double cb_math1(int which, double x);
@@ -43,7 +45,7 @@ cb_rt *cb_new(void) {
     cb_lib_init(R); cb_lib2_init(R); cb_lib3_init(R);
     cb_gc_off = 0;
     return R; }
-void cb_free(cb_rt *R) { if (!R) return; cb_coro_free_all(); cb_mem_free(); cb_atoms_free(); cb_ast_free(); cb_run_reset(); free(R); }
+void cb_free(cb_rt *R) { if (!R) return; cb_coro_free_all(); cb_mem_free(); cb_atoms_free(); cb_ast_free(); cb_run_reset(); cb_re_reset(); cb_promise_reset(); free(R); }
 int cb_eval(cb_rt *R, const char *src, long len, const char *name, cbv *res, int module) {
     char err[400]; node *prog = cb_parse(R, src, len, name, module, err, sizeof err);
     if (!prog) { R->exc = cb_objv(cb_new_err(R, 3, cb_mkstr(R, err + (strncmp(err, "SyntaxError: ", 13) ? 0 : 13)))); R->has_exc = 1; return -1; }

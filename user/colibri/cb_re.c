@@ -244,6 +244,7 @@ static int re_exec(rprog *p, cb_str *s, u32 from, int *caps, int sticky) {
 
 /* ---------------- RegExp ---------------- */
 static cb_obj *recache;
+void cb_re_reset(void) { recache = 0; }   /* al cerrar el motor: la cache vivia en su memoria */
 static int parse_flags(cb_str *f) { int fl = 0; f = cb_flat(f); for (u32 i = 0; i < f->len; i++) { int b = 0; switch (f->c[i]) { case 'g': b = F_G; break; case 'i': b = F_I; break; case 'm': b = F_M; break; case 's': b = F_S; break; case 'u': case 'v': b = F_U; break; case 'y': b = F_Y; break; case 'd': b = F_D; break; default: return -1; } if (fl & b) return -1; fl |= b; } return fl; }
 cbv cb_regexp_new(cb_rt *R, cbv pattern, cbv flags) {
     cb_str *pat = cb_isstr(pattern) ? cb_s(pattern) : cb_s(cb_mkstr(R, "(?:)")); if (!pat->len) pat = cb_s(cb_mkstr(R, "(?:)"));

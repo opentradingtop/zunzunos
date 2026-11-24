@@ -120,6 +120,7 @@ NF(AGen_throw) { if (clsof(t) != OC_GEN) return cb_throw(R, 1, "incompatible rec
 /* ---------------- Promise ---------------- */
 /* OC_PROMISE: n1 estado (0 pendiente, 1 cumplida, 2 rechazada); v1 valor; v2 lista de reacciones [ok, err, resolve, reject]...; n2 manejada */
 static cbv unhandled;
+void cb_promise_reset(void) { unhandled = CB_UNDEF; }   /* al cerrar el motor */
 static void promise_settle(cb_rt *R, cb_obj *p, int state, cbv v);
 NF(job_reaction);
 static void trigger(cb_rt *R, cb_obj *p) {

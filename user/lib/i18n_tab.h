@@ -1413,4 +1413,9 @@ static const char *const TRT[][3] = {
     {"Preferido", 0, "Preferred"},
     {"Informe", 0, "Report"},
     {"Labs", 0, "Labs"},
+    {"No has marcado ninguna visita.", 0, "You have not ticked any visit."},
+    {"Visitas borradas del historial", 0, "Visits removed from history"},
+    {"Borrar las visitas marcadas", 0, "Delete ticked visits"},
+    {"Marca las visitas que quieras quitar y pulsa el botón.", 0, "Tick the visits you want to remove and press the button."},
+    {"Se muestran las 250 visitas más recientes.", 0, "Showing the 250 most recent visits."},
 };

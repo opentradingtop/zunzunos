@@ -1,0 +1,9 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Segunda pagina</title></head><body>
+<h1 id="t">Segunda pagina</h1>
+<script>
+  // las mismas expresiones que la primera pagina (antes caia aqui: la cache de expresiones seguia en el motor anterior)
+  const a = /^d(at)os\.json$/.test('datos.json'), b = 'x-y'.replace(/-/g, '+') === 'x+y', c = Symbol.for('zz') === Symbol.for('zz');
+  if (a && b && c) { document.getElementById('t').textContent = 'Segunda pagina con JavaScript'; console.log('OK segunda pagina'); }
+</script>
+</body></html>

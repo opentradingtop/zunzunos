@@ -21,13 +21,15 @@ O = r'pagina en (\d+),(\d+)'
 s = ['wait:escritorio listo', 'sleep:1'] + M('term') + ['type:abrir navjs /sys/pjs/index.html\n', 'wait:navjs pagina lista', 'wait:OK load', 'sleep:1', 'shot:nj-cargada',
      f'clicklog:{O}|boton (\\d+),(\\d+)', 'wait:OK clic 1', 'sleep:0.3', f'clicklog:{O}|boton (\\d+),(\\d+)', 'wait:OK clic 2', 'sleep:0.3',
      f'clicklog:{O}|boton2 (\\d+),(\\d+)', 'wait:OK onclick', 'sleep:0.3',
-     f'clicklog:{O}|nombre (\\d+),(\\d+)', 'sleep:0.4', 'type:Ana\n', 'wait:OK formulario Ana', 'sleep:1', 'shot:nj-final']
+     f'clicklog:{O}|nombre (\\d+),(\\d+)', 'sleep:0.4', 'type:Ana\n', 'wait:OK formulario Ana', 'sleep:1', 'shot:nj-final',
+     'clicklog3:barra en (\\d+),(\\d+)', 'sleep:0.4', 'type:/sys/pjs/dos.html\n', 'wait:OK segunda pagina', 'sleep:1', 'shot:nj-segunda']   # otra pagina con JavaScript: otro motor
 q = f'-device usb-ehci,id=e -device usb-kbd,bus=e.0 -device usb-tablet,bus=e.0 -drive if=none,id=st,format=raw,file={img} -device usb-storage,bus=e.0,drive=st,bootindex=0'
 r = subprocess.call(['python3', '-I', 'tools/vm.py', '--mode', 'bios', '--no-disk', '--abs', '--out', out, '--timeout', '60', '--port', '4645', '--qemu', q] + s)
 log = open(os.path.join(out, 'serial-bios.log'), errors='replace').read()
-need = ['OK dom', 'OK innerHTML', 'OK externo', 'OK fetch hola red', 'OK temporizador', 'OK localStorage', 'OK URL', 'OK errores', 'OK load', 'OK clic 2', 'OK onclick', 'OK formulario Ana']
+need = ['OK dom', 'OK innerHTML', 'OK externo', 'OK fetch hola red', 'OK temporizador', 'OK localStorage', 'OK URL', 'OK errores', 'OK load', 'OK clic 2', 'OK onclick', 'OK formulario Ana', 'OK regex', 'OK segunda pagina']
 miss = [n for n in need if n not in log]
 errs = [l for l in log.splitlines() if '[navjs] error' in l]
 for e in errs: print(e)
-if r or miss or errs or 'no-debe-ir' in log: print('navjs: FALLO, falta', miss); sys.exit(1)
+errs = [e for e in errs if 'sin gestionar a proposito' not in e]
+if r or miss or errs or 'fallo de pagina' in log or 'no-debe-ir' in log: print('navjs: FALLO, falta', miss); sys.exit(1)
 print('navjs: OK (' + ', '.join(n[3:] for n in need) + ')')

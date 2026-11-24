@@ -57,7 +57,7 @@ static int sa_i, sb_i, nsi; static void set_page(char *html, long n) { sa_i = sb
     }
 static void page_text(const char *fmt, const char *a, const char *b) { char *h = malloc(4096); long n = snprintf(h, 4096, fmt, a, b); set_page(h, n); }
 static void esc(const char *s, char *o, int cap) { int k = 0; for (; *s && k < cap - 8; s++) { if (*s == '<') { memcpy(o + k, "&lt;", 4); k += 4; } else if (*s == '&') { memcpy(o + k, "&amp;", 5); k += 5; } else if (*s == '"') { memcpy(o + k, "&quot;", 6); k += 6; } else o[k++] = *s; } o[k] = 0; }
-static void draw(void);
+static void draw(void); static int rx(int j); static int bw(int i);
 static void navigate(const char *u, const char *post, int push);
 static int pending_imgs(void) { if (!D) return 0; int n = html_nimages(D); int c = 0; for (int i = 0; i < n; i++) { char u[1100]; resolve(pbase, html_image_src(D, i), u, sizeof u); int f = 0; for (int k = 0; k < nim; k++) if (!strcmp(IM[k].url, u)) f = 1; if (!f) c++; } return c; }
 static void load_one_img(void) { int n = html_nimages(D); for (int i = 0; i < n && nim < 160; i++) { char u[1100]; resolve(pbase, html_image_src(D, i), u, sizeof u); int f = 0; for (int k = 0; k < nim; k++) if (!strcmp(IM[k].url, u)) f = 1; if (f) continue;
@@ -82,14 +82,36 @@ static void hist_add(const char *u, const char *t) { if (!z_cfg_get("historial",
     sb_f(&b, "%04u-%02u-%02u %02u:%02u\t%s\t", tm[5], tm[4], tm[3], tm[2], tm[1], u); for (const char *q = t && *t ? t : u; *q && q - (t && *t ? t : u) < 150; q++) sb_add(&b, *q == '\t' || *q == '\n' ? " " : q, 1); sb_s(&b, "\n");
     int lines = 1; for (char *q = old; q && *q && lines < 500; ) { char *e = strchr(q, '\n'); if (!e) break; sb_add(&b, q, e - q + 1); lines++; q = e + 1; } free(old); z_writefile(HISTF, b.p, b.n); free(b.p); }
 static void show_internal(char *html, long n, const char *u) { strcpy(url, u); strcpy(addr, u); acur = strlen(addr); afoc = 0; loading = 0; secure = 0; certst = 0; set_page(html, n); }
+/* huella de una linea del historial: la casilla de cada visita la lleva como valor y asi se borra justo esa linea */
+static u32 hline(const char *p, long n) { u32 h = 2166136261u; for (long i = 0; i < n; i++) { h ^= (u8)p[i]; h *= 16777619u; } return h; }
+/* borra las visitas elegidas: la consulta del formulario trae q=LINEA-HUELLA por cada casilla marcada; se borra esa linea
+   solo si su huella coincide (asi no se borra otra si el historial cambio mientras tanto) */
+static void hist_del(const char *q) { u32 sel[260]; int sl[260], ns = 0;
+    for (const char *p = q; p && *p && ns < 260; ) { if (!strncmp(p, "q=", 2)) { int ln = 0; u32 v = 0; p += 2; while (*p >= '0' && *p <= '9') ln = ln * 10 + *p++ - '0';
+            if (*p == '-') { p++; for (int i = 0; i < 8 && *p && *p != '&'; i++, p++) v = v * 16 + (*p >= 'a' ? *p - 'a' + 10 : *p >= 'A' ? *p - 'A' + 10 : *p - '0'); sl[ns] = ln; sel[ns++] = v; } } p = strchr(p, '&'); if (p) p++; }
+    if (!ns) { strcpy(msg, _("No has marcado ninguna visita.")); return; }
+    long n; char *t = z_readfile(HISTF, &n); if (!t) return; sb_t b = {0}; sb_s(&b, ""); int del = 0;
+    int ln = 0; for (char *p = t; *p; ln++) { char *e = strchr(p, '\n'); long l = e ? e - p : (long)strlen(p); u32 h = hline(p, l); int hit = 0; for (int i = 0; i < ns; i++) if (sl[i] == ln && sel[i] == h) hit = 1;
+        if (hit) del++; else { sb_add(&b, p, l); sb_s(&b, "\n"); } p = e ? e + 1 : p + l; }
+    free(t); z_writefile(HISTF, b.p, b.n); free(b.p); z_sync(); snprintf(msg, sizeof msg, "%s: %d", _("Visitas borradas del historial"), del);
+    char lg[60]; snprintf(lg, 60, "[prueba] historial borradas %d visitas", del); z_log(lg); }
 static void page_hist(const char *u) { const char *q = strchr(u, '?'); if (q && !strcmp(q + 1, "borrar")) { z_unlink(HISTF); z_sync(); strcpy(msg, _("Historial borrado")); z_log("[prueba] historial borrado"); }
+    else if (q && strstr(q, "accion=")) hist_del(q + 1);
     else if (q && !strcmp(q + 1, "no")) z_cfg_set("historial", 0); else if (q && !strcmp(q + 1, "si")) z_cfg_set("historial", 1);
     int on = z_cfg_get("historial", 1); sb_t b = {0}; sb_f(&b, "<html><head><title>%s</title></head><body><h1>%s</h1><p>", _("Historial"), _("Historial"));
     sb_f(&b, "%s <b>%s</b> &middot; <a href=\"zunzun:historial?%s\">%s</a> &middot; <a href=\"zunzun:historial?borrar\">%s</a> &middot; <a href=\"zunzun:cookies\">%s</a></p>", _("Guardar el historial:"), on ? _("sí") : _("no"), on ? "no" : "si", on ? _("No guardarlo") : _("Guardarlo"), _("Borrar todo el historial"), _("Cookies y privacidad"));
-    char *t = z_readfile(HISTF, 0); char day[12] = ""; int n = 0;
-    for (char *p = t; p && *p && n < 300; ) { char *e = strchr(p, '\n'); if (e) *e = 0; char *f2 = strchr(p, '\t'), *f3 = f2 ? strchr(f2 + 1, '\t') : 0; if (f2 && f3) { *f2 = *f3 = 0; if (strncmp(p, day, 10)) { strncpy0(day, p, 11); sb_s(&b, "<h3>"); sb_s(&b, day); sb_s(&b, "</h3>"); }
-            sb_f(&b, "<p>%s &nbsp; <a href=\"", p + 11); hesc(&b, f2 + 1); sb_s(&b, "\">"); hesc(&b, f3 + 1); sb_s(&b, "</a><br><small>"); hesc(&b, f2 + 1); sb_s(&b, "</small></p>"); n++; } p = e ? e + 1 : 0; }
-    if (!n) sb_f(&b, "<p>%s</p>", _("El historial está vacío.")); free(t); sb_s(&b, "</body></html>"); char lg[60]; snprintf(lg, 60, "[prueba] historial %d paginas", n); z_log(lg); show_internal(b.p, b.n, "zunzun:historial"); }
+    char *t = z_readfile(HISTF, 0); char day[12] = ""; int n = 0, ln = 0; char bt[200]; snprintf(bt, sizeof bt, "<p><input type=\"submit\" name=\"accion\" value=\"%s\"></p>", _("Borrar las visitas marcadas"));
+    if (t && *t) { sb_f(&b, "<p>%s</p><form action=\"zunzun:historial\">", _("Marca las visitas que quieras quitar y pulsa el botón.")); sb_s(&b, bt); }
+    for (char *p = t; p && *p && n < 250; ln++) { char *e = strchr(p, '\n'); long l = e ? e - p : (long)strlen(p); if (e) *e = 0; char *f2 = strchr(p, '\t'), *f3 = f2 ? strchr(f2 + 1, '\t') : 0; if (f2 && f3) { u32 h = hline(p, l); *f2 = *f3 = 0; if (strncmp(p, day, 10)) { strncpy0(day, p, 11); sb_s(&b, "<h3>"); sb_s(&b, day); sb_s(&b, "</h3>"); }
+            sb_f(&b, "<p><input type=\"checkbox\" name=\"q\" value=\"%d-%08x\"> %s &nbsp; <a href=\"", ln, h, p + 11); hesc(&b, f2 + 1); sb_s(&b, "\">"); hesc(&b, f3 + 1); sb_s(&b, "</a><br><small>"); hesc(&b, f2 + 1); sb_s(&b, "</small></p>"); n++; } p = e ? e + 1 : 0; }
+    if (t && *t) { if (n > 8) sb_s(&b, bt); sb_s(&b, "</form>"); }
+    if (n == 250) sb_f(&b, "<p><small>%s</small></p>", _("Se muestran las 250 visitas más recientes."));
+    if (!n) sb_f(&b, "<p>%s</p>", _("El historial está vacío.")); free(t); sb_s(&b, "</body></html>"); show_internal(b.p, b.n, "zunzun:historial");
+    /* registro para las pruebas: donde quedan las tres primeras casillas y el boton Historial (en la pantalla) */
+    char lg[300]; int k = snprintf(lg, sizeof lg, "[prueba] historial %d paginas (casillas", n);
+    for (int i = 0; i < 3 && D; i++) { int x, y, sx, sy; if (html_named_pos(D, "q", i, &x, &y)) { zw_screen(G, x + 4, y + TB + 4 - scroll, &sx, &sy); k += snprintf(lg + k, sizeof lg - k, " %d,%d", sx, sy); } }
+    { int x, y, sx, sy; if (D && html_named_pos(D, "accion", 0, &x, &y)) { zw_screen(G, x + 4, y + TB + 4 - scroll, &sx, &sy); k += snprintf(lg + k, sizeof lg - k, ") (borrar en %d,%d", sx, sy); } }
+    { int sx, sy; zw_screen(G, rx(2) + bw(8) / 2, 19, &sx, &sy); snprintf(lg + k, sizeof lg - k, ") (boton historial en %d,%d)", sx, sy); } z_log(lg); }
 static void page_cookies(const char *u) { const char *q = strchr(u, '?'); if (q) { q++; if (!strncmp(q, "politica=", 9)) z_cookies_policy(atoi(q + 9)); else if (!strncmp(q, "borrar=", 7)) z_cookies_del(q + 7); else if (!strncmp(q, "permitir=", 9)) z_cookies_rule(q + 9, 1);
         else if (!strncmp(q, "bloquear=", 9)) z_cookies_rule(q + 9, 2); else if (!strncmp(q, "quitar=", 7)) z_cookies_rule(q + 7, 0); else if (!strcmp(q, "todas")) z_cookies_clear(); char lg[160]; snprintf(lg, 160, "[prueba] cookies %s", q); z_log(lg); }
     int pol = z_cookies_policy(-1); sb_t b = {0}; sb_f(&b, "<html><head><title>%s</title></head><body><h1>%s</h1><p><b>%s</b></p>", _("Cookies y privacidad"), _("Cookies y privacidad"), _("Qué cookies se aceptan:"));
@@ -107,7 +129,7 @@ static void page_cookies(const char *u) { const char *q = strchr(u, '?'); if (q)
 static void navigate(const char *u0, const char *post, int push) {
     char u[1100]; strncpy0(u, u0, sizeof u);
     if (!strcmp(u, "zunzun:volver")) { if (nb) { char *p = hb[--nb]; if (nf < 64) hf[nf++] = strdup(url); navigate(p, 0, 0); free(p); } return; }
-    if (!strncmp(u, "zunzun:historial", 16) || !strncmp(u, "zunzun:cookies", 14)) { if (push && url[0] && strcmp(url, u)) { if (nb == 64) { free(hb[0]); memmove(hb, hb + 1, 63 * sizeof *hb); nb--; } hb[nb++] = strdup(url); } if (u[7] == 'h') page_hist(u); else page_cookies(u); return; }
+    if (!strncmp(u, "zunzun:historial", 16) || !strncmp(u, "zunzun:cookies", 14)) { int ul = 0; while (u[ul] && u[ul] != '?') ul++; if (push && url[0] && ((int)strlen(url) != ul || strncmp(url, u, ul))) { if (nb == 64) { free(hb[0]); memmove(hb, hb + 1, 63 * sizeof *hb); nb--; } hb[nb++] = strdup(url); } if (u[7] == 'h') page_hist(u); else page_cookies(u); return; }
     if (!strcmp(u, "zunzun:continuar")) { char host[128]; const char *p = strstr(url, "://"); int i = 0; if (p) { p += 3; while (*p && *p != '/' && *p != ':' && i < 127) host[i++] = *p++; } host[i] = 0; z_https_allow(host); navigate(url, 0, 0); return; }
     if (push && url[0]) { if (nb == 64) { free(hb[0]); memmove(hb, hb + 1, 63 * sizeof *hb); nb--; } hb[nb++] = strdup(url); for (int i = 0; i < nf; i++) free(hf[i]); nf = 0; }
     char *h = strchr(u, '#'); char frag[200] = ""; if (h && u[0] != '/') { strncpy0(frag, h + 1, 200); }
@@ -146,11 +168,14 @@ static void del_mark(int k) { long n; char *t = z_readfile(MARC, &n); if (!t) re
 static void marks_menu(int sx, int sy) { char *t = z_readfile(MARC, 0); const char *it[26]; char *us[24]; int n = 0; if (t) { char *p = t; while (*p && n < 24) { char *e = strchr(p, '\n'); if (e) *e = 0; char *tab = strchr(p, '\t'); if (tab) { *tab = 0; us[n] = p; it[n] = tab[1] ? tab + 1 : p; n++; } if (!e) break; p = e + 1; } }
     if (!n) { strcpy(msg, _("Aún no hay marcadores: pulsa la estrella para guardar la página.")); free(t); return; } it[n] = "Eliminar un marcador..."; int r = ui_menu(sx, sy, it, n + 1); char u[1100] = ""; if (r == n) { r = ui_menu(sx + 20, sy + 20, it, n); if (r >= 0) { char q[300]; snprintf(q, 300, "%s %.200s?", _("¿Eliminar el marcador"), it[r]); if (ui_confirm("Marcadores", q)) del_mark(r); } free(t); return; } if (r >= 0) strncpy0(u, us[r], sizeof u); free(t); if (u[0]) navigate(u, 0, 1); }
 /* ---------- dibujo ---------- */
-static const char *BT[] = {"<", ">", "R", "Inicio", "*", "Marcadores", "Imprimir", "Sitios"}; /* Sitios se dibuja junto a Inicio */
+static const char *BT[] = {"<", ">", "R", "Inicio", "*", "Marcadores", "Imprimir", "Sitios", "Historial"}; /* Sitios se dibuja junto a Inicio */
 static int bw(int i) { return g_textw(_(BT[i])) + 16; }
 static int bx(int i) { int x = 6; for (int k = 0; k < i; k++) x += bw(k) + 4; return x; }
 static int addr_x(void) { return bx(4) + bw(7) + 4 + 26; }
-static int addr_w(void) { return G->w - addr_x() - bw(4) - bw(5) - bw(6) - 24; }
+static int addr_w(void) { return G->w - addr_x() - bw(4) - bw(5) - bw(8) - bw(6) - 28; }
+/* botones a la derecha de la direccion: *, Marcadores, Historial, Imprimir */
+static const int RB[] = {4, 5, 8, 6};
+static int rx(int j) { int x = addr_x() + addr_w() + 6; for (int k = 0; k < j; k++) x += bw(RB[k]) + 4; return x; }
 #define SITIOS "/rd/res/sitios.html"
 /* ---------- seleccionar texto arrastrando; menu del boton derecho (copiar, enlaces, imagenes) ---------- */
 typedef struct { int type, x, y, w, h, len, sc; const char *s; const u32 *px; int iw, ih; } sit_t;
@@ -193,7 +218,7 @@ static void draw(void) {
     if (D) { int mx = MAX(0, html_height(D) - vh); scroll = MAX(0, MIN(scroll, mx)); zw_clip(G, 0, TB, G->w - 10, vh); html_draw(D, 4, TB + 4, G->w - 18, vh, scroll); sel_paint(vh); zw_noclip(G); if (mx) { int bh = MAX(24, vh * vh / html_height(D)); g_rect(G, G->w - 8, TB + scroll * (vh - bh) / mx, 6, bh, UI_LINE); } }
     g_rect(G, 0, 0, G->w, TB, UI_PANEL); for (int i = 0; i < 4; i++) ui_button(G, bx(i), 6, bw(i), 26, BT[i], 0); ui_button(G, bx(4), 6, bw(7), 26, BT[7], !strcmp(url, SITIOS) ? 2 : 0);
     int ax = addr_x(); u32 lk = secure ? 0x16A34A : certst ? 0xDC2626 : 0x9CA3AF; g_round(G, ax - 20, 13, 12, 10, 2, lk); g_frame(G, ax - 18, 8, 8, 7, lk);
-    ui_input(G, ax, 6, addr_w(), 26, addr, acur, afoc); ui_button(G, ax + addr_w() + 6, 6, bw(4), 26, "*", 0); ui_button(G, ax + addr_w() + 10 + bw(4), 6, bw(5), 26, "Marcadores", 0); ui_button(G, ax + addr_w() + 14 + bw(4) + bw(5), 6, bw(6), 26, "Imprimir", 0);
+    ui_input(G, ax, 6, addr_w(), 26, addr, acur, afoc); for (int j = 0; j < 4; j++) ui_button(G, rx(j), 6, bw(RB[j]), 26, BT[RB[j]], RB[j] == 8 && !strncmp(url, "zunzun:historial", 16) ? 2 : 0);
     g_rect(G, 0, G->h - SB, G->w, SB, UI_PANEL); zw_clip(G, 0, G->h - SB, G->w, SB); g_text(G, 8, G->h - SB + 3, loading ? _("Cargando...") : msg, UI_TEXT); zw_noclip(G); zw_present(G); }
 int main(const char *a) { int wp; a = z_print_arg(a, &wp);
     zsys s; z_sysinfo(&s); G = zw_new(APPNAME, -1, 0, MIN(1040, (int)s.scr_w - 40), MIN(720, (int)s.scr_h - 80), WF_DECOR | WF_RESIZE); html_img_get = img_get;
@@ -222,9 +247,10 @@ int main(const char *a) { int wp; a = z_print_arg(a, &wp);
                 else if (e.x < bx(3)) navigate(url, 0, 0);
                 else if (e.x >= bx(4) && e.x < bx(4) + bw(7)) navigate(SITIOS, 0, 1);
                 else if (e.x < bx(4)) navigate("/rd/res/inicio.html", 0, 1);
-                else if (e.x >= ax + addr_w() + 6 && e.x < ax + addr_w() + 6 + bw(4)) add_mark();
-                else if (e.x >= ax + addr_w() + 14 + bw(4) + bw(5)) print_();
-                else if (e.x >= ax + addr_w() + 10 + bw(4)) { int sx, sy; zw_screen(G, e.x, e.y + 20, &sx, &sy); marks_menu(sx, sy); } }
+                else if (e.x >= rx(3)) print_();
+                else if (e.x >= rx(2)) { z_log("[prueba] boton historial"); navigate("zunzun:historial", 0, 1); }
+                else if (e.x >= rx(1)) { int sx, sy; zw_screen(G, e.x, e.y + 20, &sx, &sy); marks_menu(sx, sy); }
+                else if (e.x >= rx(0)) add_mark(); }
             else if (D && e.y < G->h - SB && (e.btn & 2)) page_menu(e.x - 4, e.y - TB - 4 + scroll, e.x, e.y);
             else if (D && e.y < G->h - SB) { int X = e.x - 4, Y = e.y - TB - 4 + scroll; sel_clear();
 #ifdef CON_JS
