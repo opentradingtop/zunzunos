@@ -2,7 +2,8 @@
    (Forense y su protocolo de Lab). Cada funcion recibe un puntero al inicio de un valor y no pasa nunca de 'end'. */
 #include "z.h"
 
-static const char *ws(const char *p, const char *e) { while (p < e && (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t')) p++; return p; }
+static const char *ws(const char *p, const char *e) { if (!p) return e;   /* valor ausente (zj_get dio 0): como si no hubiera nada */
+    while (p < e && (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t')) p++; return p; }
 
 /* salta un valor completo; devuelve lo que viene despues o 0 si el JSON esta roto */
 const char *zj_skip(const char *p, const char *e) {

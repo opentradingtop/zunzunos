@@ -30,7 +30,7 @@ def put_docs(img):
             if x.startswith('.'): subprocess.run(['rm', '-rf', os.path.join(mnt, x)])
     finally: subprocess.run(['hdiutil', 'detach', dev], capture_output=True)
 if img: put_docs(img)
-MH = 42 + 9 * 28 + 14; MY = 800 - 36 - MH - 2; f, i, n = 2, 3, 4   # Internet > LUMEN (cuarto programa)
+MH = 42 + 9 * 28 + 14; MY = 800 - 36 - MH - 2; f, i, n = 2, 3, 8   # Internet > LUMEN (cuarto programa)
 y0 = max(42, min(42 + f * 28, MH - 6 - n * 28)); fy = MY + 42 + 28 * f + 14; ay = MY + y0 + 28 * i + 14
 OPEN = ['click:50,782', 'sleep:0.6', f'move:100,{fy}', 'sleep:0.5', f'move:245,{fy}', 'sleep:0.3', f'move:350,{ay}', 'sleep:0.3', f'click:350,{ay}']
 OX, OY = 88, 76

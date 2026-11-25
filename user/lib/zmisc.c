@@ -40,6 +40,7 @@ const zapp z_apps[] = {
     {"Correo","correo",0x1D4ED8,"@>",2},{"LUMEN","lumen",0x7C3AED,"IA",2},{"Red local","redlocal",0x0E7490,"<>",2},
     {"Grabar pantalla","pantalla",0xDC2626,"(*)",3},{"Vídeos","video",0x7C3AED,"|>|",3},
     {"Navegador JS","navjs",0xCA8A04,"JS",2},{"Consola JavaScript","jsconsola",0x854D0E,"{}",2},
+    {"Nube","nube",0x0369A1,"(c)",2},
 };
 const int z_napps = sizeof z_apps / sizeof z_apps[0];
 int z_hidden(const char *bin) { char h[400], k[24]; z_cfg_gets("ocultos", h, 400); snprintf(k, 24, ",%s,", bin); char w[404]; snprintf(w, 404, ",%s,", h); return strstr(w, k) != 0; }

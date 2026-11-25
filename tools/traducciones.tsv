@@ -1445,3 +1445,28 @@ No hay borradores.	-	There are no drafts.
 Todavía no has enviado mensajes desde este equipo.	-	You have not sent any messages from this computer yet.
 ¿Borrar este borrador?	-	Delete this draft?
 ¿Borrar este mensaje de Enviados? Solo se borra la copia de este equipo.	-	Delete this message from Sent? Only this computer's copy is deleted.
+Contraseña	-	Password
+Código de verificación en dos pasos:	-	Two-step verification code:
+Descargando	-	Downloading
+Entra con tu cuenta de pCloud. En esta memoria solo se guarda la llave de la sesión, nunca la contraseña.	-	Sign in with your pCloud account. Only the session key is kept on this drive, never the password.
+Entrar	-	Sign in
+Escribe el correo y la contraseña de pCloud	-	Type your pCloud email and password
+Falta el código de verificación	-	The verification code is missing
+La nube solo se puede usar en la sesión del administrador.	-	The cloud can only be used in the administrator session.
+La sesión de pCloud ha caducado: vuelve a entrar.	-	The pCloud session has expired: sign in again.
+No se pudo descargar	-	Could not download
+No se pudo guardar la sesión	-	Could not save the session
+Nube	-	Cloud
+Ocupado	-	Used
+Respuesta no válida de pCloud	-	Invalid response from pCloud
+Salir de pCloud	-	Sign out of pCloud
+Sesión de pCloud cerrada	-	Signed out of pCloud
+Subiendo	-	Uploading
+Subir a pCloud	-	Upload to pCloud
+error	-	error
+llegó incompleto	-	arrived incomplete
+pCloud no aceptó el correo o la contraseña	-	pCloud did not accept the email or password
+pCloud no dio el enlace de descarga	-	pCloud did not give the download link
+¿Cerrar la sesión de pCloud en este equipo? Tus archivos siguen en pCloud.	-	Sign out of pCloud on this computer? Your files stay in pCloud.
+¿Borrar la carpeta %s y todo lo que tiene? pCloud la guarda un tiempo en su papelera.	-	Delete the folder %s and everything in it? pCloud keeps it in its trash for a while.
+¿Borrar %s? pCloud lo guarda un tiempo en su papelera.	-	Delete %s? pCloud keeps it in its trash for a while.

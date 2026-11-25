@@ -3,6 +3,12 @@
 La cifra está en `user/lib/version.h` y sube con cada actualización que se graba en la memoria USB o se publica.
 Se ve en Acerca de y en la primera línea del registro de arranque (y por tanto en `DIAGNOST.TXT`).
 
+## 2.3 — 25/11/2026
+
+- Nube: archivos de pCloud (entrar con correo y contraseña; en la memoria solo queda la llave de la sesión).
+  Navegar, abrir, guardar en Documentos, subir, nueva carpeta, cambiar nombre y borrar.
+- El lector JSON acepta valores ausentes sin fallar.
+
 ## 2.2 — 24/11/2026
 
 - Mensajes de la Red local como conversaciones: el primer mensaje decide el grupo (uno o varios equipos) y las

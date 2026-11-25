@@ -9,7 +9,7 @@ def M(f, i, n):
     return ['click:50,782', 'sleep:0.6', f'move:100,{fy}', 'sleep:0.5', f'move:245,{fy}', 'sleep:0.3', f'move:350,{ay}', 'sleep:0.3', f'click:350,{ay}', 'sleep:2']
 def go(u): return ['key:ctrl-l', 'sleep:0.3', f'type:{u}\\n', 'sleep:2.5']
 W = 'http://10.0.2.2:8081'
-s = ['wait:escritorio listo', 'wait:red: IP', 'sleep:1'] + M(2, 0, 5) + ['sleep:1']
+s = ['wait:escritorio listo', 'wait:red: IP', 'sleep:1'] + M(2, 0, 8) + ['sleep:1']
 s += go(W + '/set') + go(W + '/ver') + ['key:ctrl-h', 'wait:historial 2 paginas', 'sleep:1', 'shot:n-historial']
 s += go('zunzun:cookies') + ['wait:navegador', 'sleep:0.5', 'shot:n-cookies'] + go('zunzun:cookies?politica=2') + go('zunzun:cookies?todas') + go(W + '/set') + go(W + '/ver') + ['sleep:0.5']
 s += go('zunzun:cookies?politica=0') + go('zunzun:historial?no') + go(W + '/sinjs') + go('zunzun:historial') + ['wait:historial 4 paginas', 'sleep:0.5', 'shot:n-sin-historial'] + go(W + '/ver') + [

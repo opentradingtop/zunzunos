@@ -4,7 +4,7 @@ configurar la cuenta, recibir, leer texto, latin-1 con adjunto y HTML, responder
 Uso: correo_test.py DIR_SALIDA DIR_CORREO "args de qemu" """
 import os, subprocess, sys
 out, mail, q = sys.argv[1:4]
-MH = 42 + 9 * 28 + 14; MY = 800 - 36 - MH - 2; f, i, n = 2, 2, 3   # Internet > Correo (tercer programa)
+MH = 42 + 9 * 28 + 14; MY = 800 - 36 - MH - 2; f, i, n = 2, 2, 8   # Internet > Correo (tercer programa)
 y0 = max(42, min(42 + f * 28, MH - 6 - n * 28)); fy = MY + 42 + 28 * f + 14; ay = MY + y0 + 28 * i + 14
 OPEN = ['click:50,782', 'sleep:0.6', f'move:100,{fy}', 'sleep:0.5', f'move:245,{fy}', 'sleep:0.3', f'move:350,{ay}', 'sleep:0.3', f'click:350,{ay}', 'sleep:2']
 OX, OY = 88, 76
