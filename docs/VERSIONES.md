@@ -3,6 +3,11 @@
 La cifra está en `user/lib/version.h` y sube con cada actualización que se graba en la memoria USB o se publica.
 Se ve en Acerca de y en la primera línea del registro de arranque (y por tanto en `DIAGNOST.TXT`).
 
+## 2.5 — 25/11/2026
+
+- Correo: ya se puede enviar con Gmail. Su servidor de envío pide un certificado de cliente opcional y el TLS propio
+  se paraba ahí; ahora contesta sin certificado y sigue (TLS 1.3 y 1.2).
+
 ## 2.4 — 25/11/2026
 
 - Radio: emisoras de todo el mundo (catálogo abierto Radio Browser): populares, mi país, países, géneros, búsqueda

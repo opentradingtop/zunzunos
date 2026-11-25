@@ -35,6 +35,7 @@ ok "teclado, copiar y pegar, cookies y navegador"; mkstick; rm -rf "$S/r-web"; p
 python3 -I tools/tareas_test.py "$S/r-tar" "$S/r-web" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FW 2>/dev/null; wait $FW 2>/dev/null
 ok "navegador: historial y gestor de cookies"; mkstick; rm -rf "$S/r-wb"; python3 -I tools/fake_web.py "$S/r-wb" > "$S/r-wb.log" 2>&1 & FW=$!; sleep 1
 python3 -I tools/navegador_test.py "$S/r-nav" "$S/r-wb" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FW 2>/dev/null; wait $FW 2>/dev/null
+ok "tls: certificado de cliente pedido por el servidor (smtp.gmail.com)"; tools/pruebas/tls_cliente/correr.sh "$S/r-tlscli" 2>&1 | filt
 ok "correo"; mkstick; rm -rf "$S/r-mail"; python3 -I tools/fake_mail.py "$S/r-mail" > "$S/r-mail.log" 2>&1 & FM=$!; sleep 1
 python3 -I tools/correo_test.py "$S/r-cor" "$S/r-mail" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FM 2>/dev/null; wait $FM 2>/dev/null
 ok "nube (pCloud falso)"; python3 -I tools/nube_test.py "$S/r-nube" 2>&1 | filt

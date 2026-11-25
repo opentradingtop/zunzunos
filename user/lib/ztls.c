@@ -87,17 +87,18 @@ static int sig_check(zkey *key, int sa, const u8 *data, long dl, const u8 *sg, i
     return -1; }
 static int hs12(ztls *t, const char *host, long now, int cs, int ems, const u8 *cr, const u8 *sr, const u8 *xpriv, const u8 *ppriv, const u8 *xpub, const u8 *ppub, const u8 *left, long leftl) {
     if (cs == 0xC02B || cs == 0xC02F) { t->alg = 256; t->keylen = 16; } else if (cs == 0xC02C || cs == 0xC030) { t->alg = 384; t->keylen = 32; } else { serr(t, "cifrado TLS 1.2 no admitido"); return -1; }
-    t->v12 = 1; u8 *hb = t->alloc(65536 * 4); long hbl = 0; if (leftl > 0) { cpy(hb, left, leftl); hbl = leftl; } zcert *cert = t->alloc(sizeof(zcert) * 8); u8 *certbuf = 0; int ncert = 0, done = 0, grp = 0, r = -1; u8 spub[200]; int spl = 0, H = zc_hlen(t->alg);
+    t->v12 = 1; u8 *hb = t->alloc(65536 * 4); long hbl = 0; if (leftl > 0) { cpy(hb, left, leftl); hbl = leftl; } zcert *cert = t->alloc(sizeof(zcert) * 8); u8 *certbuf = 0; int ncert = 0, done = 0, grp = 0, r = -1, creq = 0; u8 spub[200]; int spl = 0, H = zc_hlen(t->alg);
     for (int first = 1; !done; first = 0) { if (!first || !hbl) { int ty = rd_rec(t); if (ty == 21) { serr(t, "alerta del servidor (TLS 1.2)"); goto out; } if (ty != 22) { serr(t, "mensaje inesperado (TLS 1.2)"); goto out; }
         if (hbl + t->recl > 65536 * 4) goto out; cpy(hb + hbl, t->rec, t->recl); hbl += t->recl; }
         while (hbl >= 4) { long ml = (hb[1] << 16 | hb[2] << 8 | hb[3]) + 4; if (ml > hbl) break; int mt = hb[0];
             if (mt == 11) { certbuf = t->alloc(ml); cpy(certbuf, hb, ml); long q = 4, le = 7 + (hb[4] << 16 | hb[5] << 8 | hb[6]); q = 7; while (q + 3 <= le && ncert < 8) { long cl = hb[q] << 16 | hb[q + 1] << 8 | hb[q + 2]; q += 3; if (!x509_parse(certbuf + q, cl, &cert[ncert])) ncert++; q += cl; } }
             else if (mt == 12) { const u8 *k = hb + 4; if (k[0] != 3) { serr(t, "intercambio de claves no admitido"); goto out; } grp = k[1] << 8 | k[2]; spl = k[3]; if (spl > 133) goto out; cpy(spub, k + 4, spl); int pl = 4 + spl; int sa = k[pl] << 8 | k[pl + 1], sgl = k[pl + 2] << 8 | k[pl + 3];
                 u8 sd[64 + 140]; cpy(sd, cr, 32); cpy(sd + 32, sr, 32); cpy(sd + 64, k, pl); if (!ncert || sig_check(&cert[0].key, sa, sd, 64 + pl, k + pl + 4, sgl)) { serr(t, "la firma del servidor no es valida"); goto out; } }
-            else if (mt == 13) { serr(t, "el servidor pide certificado de cliente"); goto out; }
+            else if (mt == 13) creq = 1;   /* pide certificado de cliente: se contesta sin ninguno (es opcional para el servidor) */
             else if (mt == 14) done = 1;
             tr_add(t, hb, ml); for (long i = ml; i < hbl; i++) hb[i - ml] = hb[i]; hbl -= ml; } }
     u8 pms[48], ck[4 + 100]; int ckl, pmsl = 32; if (grp == 0x1d && spl == 32) { x25519(pms, xpriv, spub); ck[4] = 32; cpy(ck + 5, xpub, 32); ckl = 5 + 32; } else if (grp == 0x17 && spl == 65) { if (ecdh_p256(pms, ppriv, spub)) goto out; ck[4] = 65; cpy(ck + 5, ppub, 65); ckl = 5 + 65; } else if (grp == 0x18 && spl == 97) { u8 k3[48]; zc_random(k3, 48); k3[0] &= 0x7F; if (ecdh(384, pms, k3, spub)) goto out; ck[4] = 97; ecdh_pub(384, ck + 5, k3); ckl = 5 + 97; pmsl = 48; } else { serr(t, "grupo de claves no admitido (TLS 1.2)"); goto out; }
+    if (creq) { static const u8 nocert[] = {11, 0, 0, 3, 0, 0, 0}; tr_add(t, nocert, 7); if (wr_rec(t, 22, nocert, 7)) goto out; }
     ck[0] = 16; ck[1] = 0; ck[2] = 0; ck[3] = ckl - 4; tr_add(t, ck, ckl); if (wr_rec(t, 22, ck, ckl)) goto out;
     u8 ms[48], seed[64], kb[2 * 32 + 8], th[64]; if (ems) { th_now(t, th); prf(t->alg, pms, pmsl, "extended master secret", th, H, ms, 48); } else { cpy(seed, cr, 32); cpy(seed + 32, sr, 32); prf(t->alg, pms, pmsl, "master secret", seed, 64, ms, 48); }
     cpy(seed, sr, 32); cpy(seed + 32, cr, 32); prf(t->alg, ms, 48, "key expansion", seed, 64, kb, 2 * t->keylen + 8);
@@ -132,7 +133,7 @@ int tls_handshake(ztls *t, const char *host, long now) {
     th_now(t, th); derive(t->alg, hs, "c hs traffic", th, chs); derive(t->alg, hs, "s hs traffic", th, shs); set_keys(t, shs, 0); t->renc = 1;
     derive(t->alg, hs, "derived", eh, dr); zc_hkdf_extract(t->alg, dr, H, zero, H, ms);
     /* mensajes cifrados del servidor */
-    u8 *hb = t->alloc(65536 * 4); long hbl = 0; int got_fin = 0, ncert = 0; zcert *cert = t->alloc(sizeof(zcert) * 8); u8 *certbuf = 0; long certl = 0; int r = -1;
+    u8 *hb = t->alloc(65536 * 4), crctx[256]; long hbl = 0; int got_fin = 0, ncert = 0, creq = 0, crl = 0; zcert *cert = t->alloc(sizeof(zcert) * 8); u8 *certbuf = 0; long certl = 0; int r = -1;
     while (!got_fin) { ty = rd_rec(t); if (ty == 20) continue; if (ty == 21) { serr(t, "alerta del servidor durante el saludo"); goto out; } if (ty != 22) { serr(t, ty == -2 ? "fallo al descifrar" : "mensaje inesperado"); goto out; }
         if (hbl + t->recl > 65536 * 4) { serr(t, "saludo demasiado grande"); goto out; } cpy(hb + hbl, t->rec, t->recl); hbl += t->recl;
         while (hbl >= 4) { long ml = (hb[1] << 16 | hb[2] << 8 | hb[3]) + 4; if (ml > hbl) break; int mt = hb[0];
@@ -144,12 +145,14 @@ int tls_handshake(ztls *t, const char *host, long now) {
                 else if (sa == 0x0401 || sa == 0x0501 || sa == 0x0601) { int a = sa == 0x0401 ? 256 : sa == 0x0501 ? 384 : 512; zc_hash(a, ctx, k, hh); ok = key->type == 1 ? rsa_verify_pkcs1(key->a, key->al, key->b, key->bl, sg, sgl, a, hh) : -1; }
                 if (ok) { serr(t, "la firma del servidor no es valida"); goto out; } tr_add(t, hb, ml); }
             else if (mt == 20) { u8 fk[64], thf[64], vd[64]; exp_label(t->alg, shs, "finished", 0, 0, fk, H); th_now(t, thf); zc_hmac(t->alg, fk, H, thf, H, vd); if (ml != 4 + H || !eq(vd, hb + 4, H)) { serr(t, "Finished del servidor no valido"); goto out; } tr_add(t, hb, ml); got_fin = 1; }
-            else if (mt == 13) { serr(t, "el servidor pide certificado de cliente"); goto out; }
+            else if (mt == 13) { creq = 1; crl = hb[4] < 255 && 5 + hb[4] <= ml ? hb[4] : 0; cpy(crctx, hb + 5, crl); tr_add(t, hb, ml); }   /* certificado de cliente: se contestara sin ninguno */
             else tr_add(t, hb, ml);
             for (long i = ml; i < hbl; i++) hb[i - ml] = hb[i]; hbl -= ml; } }
     t->cert_status = x509_chain(cert, ncert, host, now);
     { u8 tha[64], cap[64], sap[64]; th_now(t, tha); derive(t->alg, ms, "c ap traffic", tha, cap); derive(t->alg, ms, "s ap traffic", tha, sap);
       static const u8 ccs[] = {0x14, 3, 3, 0, 1, 1}; t->snd(t->io, ccs, 6); set_keys(t, chs, 1); t->enc = 1;
+      if (creq) { u8 cm[4 + 1 + 255 + 3]; int k = 4; cm[k++] = crl; cpy(cm + k, crctx, crl); k += crl; cm[k++] = 0; cm[k++] = 0; cm[k++] = 0; cm[0] = 11; cm[1] = 0; cm[2] = 0; cm[3] = k - 4;
+          tr_add(t, cm, k); if (wr_rec(t, 22, cm, k)) { serr(t, "no se pudo enviar el certificado vacio"); goto out; } th_now(t, tha); }   /* Finished cubre tambien este mensaje */
       u8 fk[64], vd[64], fin[4 + 64]; exp_label(t->alg, chs, "finished", 0, 0, fk, H); zc_hmac(t->alg, fk, H, tha, H, vd); fin[0] = 20; fin[1] = 0; fin[2] = 0; fin[3] = H; cpy(fin + 4, vd, H); if (wr_rec(t, 22, fin, 4 + H)) { serr(t, "no se pudo enviar Finished"); goto out; }
       set_keys(t, cap, 1); set_keys(t, sap, 0); cpy(t->sap, sap, H); }
     r = 0;
