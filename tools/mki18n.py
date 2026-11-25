@@ -11,7 +11,8 @@ for n, ln in enumerate(open(src, encoding='utf-8'), 1):
     k, es, en = ln.split('\t')
     if fmt(k) != fmt(en) or (es != '-' and fmt(k) != fmt(es)): sys.exit('%s:%d formato distinto: %s' % (src, n, k))
     seen.setdefault(k, (es, en))
-q = lambda s: '"' + s.replace('"', '\\"') + '"'
+# \n y \t del archivo son escapes de C; cualquier otra barra invertida (rutas de Windows: WinSxS\pending.xml) es literal
+q = lambda s: '"' + re.sub(r'\\(?![nt\\])', r'\\\\', s).replace('"', '\\"') + '"'
 with open(dst, 'w', encoding='utf-8') as o:
     o.write('/* Generado por tools/mki18n.py: {clave, espanol con acentos o 0, ingles (EE. UU.)} */\nstatic const char *const TRT[][3] = {\n')
     for k, (es, en) in seen.items(): o.write('    {%s, %s, %s},\n' % (q(k), '0' if es == '-' else q(es), q(en)))

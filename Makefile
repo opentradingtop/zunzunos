@@ -47,7 +47,7 @@ $(B)/KERNEL.BIN: $(KOBJ) kernel/kernel.ld
 $(B)/u/crt0.o: user/lib/crt0.S | $(B)/u
 	$(CC) -target x86_64-unknown-none-elf -c $< -o $@
 $(B)/u/i18n.o: user/lib/i18n_tab.h
-$(B)/u/%.o: user/lib/%.c user/lib/z.h | $(B)/u
+$(B)/u/%.o: user/lib/%.c user/lib/z.h user/lib/version.h | $(B)/u
 	$(CC) $(UCFLAGS) -c $< -o $@
 $(B)/a/%.o: user/apps/%.c user/lib/z.h user/lib/version.h | $(B)/a
 	$(CC) $(UCFLAGS) -c $< -o $@

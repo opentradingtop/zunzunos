@@ -1,5 +1,6 @@
 /* Cliente HTTP/1.1 con HTTPS (TLS 1.3 y 1.2): GET y POST, redirecciones, trozos y gzip */
 #include "z.h"
+#include "version.h"
 #include "ztls.h"
 int z_https_allow_bad; static char allow_host[128];
 void z_https_allow(const char *host) { strncpy0(allow_host, host, 128); }
@@ -71,7 +72,7 @@ int z_http(const char *method, const char *url, const char *body, long bl, const
         if (tls) { ztls *t = calloc(1, sizeof(ztls)); t->io = &c.s; t->snd = io_snd; t->rcv = io_rcv; t->alloc = io_alloc; t->free_ = free;
             if (tls_handshake(t, host, now_num())) { strncpy0(inf->err, t->err, 96); free(t); z_close(c.s); return -1004; }
             inf->cert = t->cert_status; if (t->cert_status && !z_https_allow_bad && strcmp(allow_host, host)) { free(t); z_close(c.s); return -1000 - t->cert_status; } c.t = t; }
-        char req[9000]; int n = snprintf(req, sizeof req, "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: Mozilla/5.0 (ZunzunOS) ZunzunNavegador/2.2\r\nAccept: text/html,application/xhtml+xml,image/png,image/jpeg,image/gif,*/*;q=0.5\r\nAccept-Encoding: gzip\r\nAccept-Language: es-ES,es;q=0.9,en;q=0.7\r\nConnection: close\r\n", meth, path, host);
+        char req[9000]; int n = snprintf(req, sizeof req, "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: Mozilla/5.0 (ZunzunOS) ZunzunNavegador/" ZZ_VERSION "\r\nAccept: text/html,application/xhtml+xml,image/png,image/jpeg,image/gif,*/*;q=0.5\r\nAccept-Encoding: gzip\r\nAccept-Language: es-ES,es;q=0.9,en;q=0.7\r\nConnection: close\r\n", meth, path, host);
         n += ck_header(req + n, 6000, host, path, tls);
         if (body) n += snprintf(req + n, sizeof req - n, "Content-Type: %s\r\nContent-Length: %ld\r\n", ctype ? ctype : "application/x-www-form-urlencoded", bl);
         n += snprintf(req + n, sizeof req - n, "\r\n"); if (c_send(&c, req, n) < 0 || (body && bl && c_send(&c, body, bl) < 0)) { if (c.t) free(c.t); z_close(c.s); return -5; }
@@ -120,7 +121,7 @@ int z_http_ex(const char *method, const char *url, const char *body, long bl, co
         if (tls_handshake(t, host, now_num())) { strncpy0(inf->err, t->err, 96); free(t); z_close(x.s); return x.cancel ? -125 : x.err == -110 ? -110 : -1004; }
         inf->cert = t->cert_status; if (t->cert_status && !z_https_allow_bad && strcmp(allow_host, host)) { int c = t->cert_status; free(t); z_close(x.s); return -1000 - c; } }
     sb_t rq = {0}; sb_s(&rq, method ? method : "GET"); sb_s(&rq, " "); sb_s(&rq, path); sb_s(&rq, " HTTP/1.1\r\nHost: "); sb_s(&rq, host);
-    sb_s(&rq, o->cb ? "\r\nUser-Agent: ZunzunOS/2.2\r\nAccept: application/json, text/event-stream\r\nAccept-Encoding: identity\r\nConnection: close\r\n" : "\r\nUser-Agent: ZunzunOS/2.2\r\nAccept: application/json, */*;q=0.5\r\nAccept-Encoding: gzip\r\nConnection: close\r\n");
+    sb_s(&rq, o->cb ? "\r\nUser-Agent: ZunzunOS/" ZZ_VERSION "\r\nAccept: application/json, text/event-stream\r\nAccept-Encoding: identity\r\nConnection: close\r\n" : "\r\nUser-Agent: ZunzunOS/" ZZ_VERSION "\r\nAccept: application/json, */*;q=0.5\r\nAccept-Encoding: gzip\r\nConnection: close\r\n");
     if (o->hdrs) sb_s(&rq, o->hdrs); if (body) sb_f(&rq, "Content-Type: %s\r\nContent-Length: %ld\r\n", ctype ? ctype : "application/json", bl); sb_s(&rq, "\r\n");
     int ok = (t ? tls_write(t, rq.p, rq.n) : x_snd(&x, rq.p, rq.n)) == rq.n; if (ok && body && bl) { long w = 0; while (w < bl) { long r = t ? tls_write(t, body + w, bl - w) : z_send(x.s, body + w, bl - w); if (r <= 0) { ok = 0; break; } w += r; } } free(rq.p);
     if (!ok) { free(t); z_close(x.s); return x.cancel ? -125 : -5; }
@@ -130,6 +131,8 @@ int z_http_ex(const char *method, const char *url, const char *body, long bl, co
         if (he < 0) { sb_add(&hb, buf, n); char *q = 0; for (long i = 3; i < hb.n; i++) if (hb.p[i] == '\n' && hb.p[i - 1] == '\r' && hb.p[i - 2] == '\n' && hb.p[i - 3] == '\r') { q = hb.p + i + 1; break; }
             if (!q) { if (hb.n > 65536) { r = -5; break; } continue; } he = q - hb.p; char save = *q; *q = 0; char *sp = strchr(hb.p, ' '); inf->status = sp ? atoi(sp + 1) : 0;
             const char *ct = hdr(hb.p, "content-type"); if (ct) { int i = 0; while (ct[i] && ct[i] != '\r' && i < 95) { inf->ctype[i] = tolower(ct[i]); i++; } inf->ctype[i] = 0; }
+            { const char *im = hdr(hb.p, "icy-metaint"); if (im) inf->icy = atoi(im); }
+            if (inf->status >= 300 && inf->status < 400) { const char *l = hdr(hb.p, "location"); if (l) { int i = 0; while (l[i] && l[i] != '\r' && l[i] != '\n' && i < (int)sizeof inf->final - 1) { inf->final[i] = l[i]; i++; } inf->final[i] = 0; } }
             const char *te = hdr(hb.p, "transfer-encoding"); chunked = te && !strncasecmp(te, "chunked", 7); const char *ce = hdr(hb.p, "content-encoding"); gz = ce && !strncasecmp(ce, "gzip", 4); const char *cl = hdr(hb.p, "content-length"); if (cl && !chunked) clen = atol_(cl);
             *q = save; k.acc = (!o->cb || gz || inf->status < 200 || inf->status > 299) ? &acc : 0; got = hb.n - he; d_feed(&k, chunked, hb.p + he, got); }
         else { got += n; d_feed(&k, chunked, buf, n); }

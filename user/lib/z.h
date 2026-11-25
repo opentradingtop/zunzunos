@@ -268,7 +268,7 @@ int zp_print(zpdoc *d, const zprinter *p, const zpset *s, const char *job); int 
 int zp_usb_list(zusbprn *o, int max); const char *zp_guess_lang(const char *devid_or_formats);
 extern int zp_default_land; int zp_dialog(const char *title, void (*build)(zpdoc *d, const zpset *s, void *ctx), void *ctx);
 /* HTTP y HTTPS (zhttp.c) */
-typedef struct { int status, tls, cert; char ctype[96]; char final[1100]; char err[96]; } zhttp_info;
+typedef struct { int status, tls, cert; char ctype[96]; char final[1100]; char err[96]; int icy; } zhttp_info;   /* icy: cada cuantos bytes van los metadatos de una radio (icy-metaint); final: en z_http_ex, a donde redirige un 3xx */
 int z_http(const char *method, const char *url, const char *body, long bl, const char *ctype, char **out, long *len, zhttp_info *inf);
 int z_cookies_count(void); int z_cookies_clear(void); /* cookies del navegador */
 /* gestor de cookies: politica 0 todas, 1 solo del sitio visitado, 2 ninguna; regla por sitio 0 ninguna, 1 permitir, 2 bloquear (-1 = consultar) */

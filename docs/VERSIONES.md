@@ -3,6 +3,12 @@
 La cifra está en `user/lib/version.h` y sube con cada actualización que se graba en la memoria USB o se publica.
 Se ve en Acerca de y en la primera línea del registro de arranque (y por tanto en `DIAGNOST.TXT`).
 
+## 2.4 — 25/11/2026
+
+- Radio: emisoras de todo el mundo (catálogo abierto Radio Browser): populares, mi país, países, géneros, búsqueda
+  y favoritas. Emisiones MP3 por HTTP y HTTPS con el título de lo que suena (metadatos ICY) y redirecciones.
+- Traducciones con rutas de Windows (barra invertida) arregladas en inglés.
+
 ## 2.3 — 25/11/2026
 
 - Nube: archivos de pCloud (entrar con correo y contraseña; en la memoria solo queda la llave de la sesión).
