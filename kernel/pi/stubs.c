@@ -1,5 +1,5 @@
 /* ZunzunOS - lo que la Raspberry Pi 2 no tiene (todavia): PCI, ACPI, tarjeta de sonido y red por PCI.
-   La red Ethernet de la Pi 2 (LAN9514) y el teclado/raton USB van por el controlador DWC OTG: pendiente. */
+   El USB (y con el la red Ethernet de la placa, LAN9514) va por el controlador DWC OTG: pi/dwc.c. */
 #include "../kernel.h"
 pci_t pci_devs[MAXPCI]; int pci_count;
 void pci_init(void) {}

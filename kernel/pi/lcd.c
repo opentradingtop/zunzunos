@@ -47,6 +47,7 @@ static void cmd(u8 c, const u8 *d, int n) {
 static void lcd_reset(void) {
     gpio_set(LCD_PIN_RST, 1); msleep(5); gpio_set(LCD_PIN_RST, 0); msleep(20); gpio_set(LCD_PIN_RST, 1); msleep(120);
     cmd(0x01, 0, 0); msleep(120);           /* reinicio por programa */
+    C(0xB0, 0x00);                          /* modo de la interfaz: SPI con la senal DC */
     cmd(0x11, 0, 0); msleep(120);           /* salir del reposo */
     C(0x3A, 0x55);                          /* 16 bits por pixel */
     C(0xC2, 0x44);                          /* control de alimentacion 3 */
@@ -94,12 +95,19 @@ static void lcd_th(void *a) {
     }
 }
 void lcd_set_madctl(int m) { madctl = m; if (lcd_ok) { u8 v = m; cmd(0x36, &v, 1); lcd_dirty(0, 0, LCD_W, LCD_H); } }
+/* error fatal: envia toda la imagen sin esperar a nadie (las interrupciones estan cortadas) */
+void lcd_panic(void) {
+    if (!lcd_ok || !line) return;
+    spi_m.owner = 0; spi_m.depth = 0; push(0, 0, LCD_W, LCD_H);
+}
 void lcd_off(void) { if (lcd_ok) cmd(0x28, 0, 0); }   /* apagar la imagen */
 void lcd_init(void) {
     spi_ok = spi_probe();
     if (!spi_ok) { kprintf("pantalla SPI: no hay controlador SPI0: solo el framebuffer\n"); return; }
-    extern int touch_probe(void);
-    if (!touch_probe()) { kprintf("pantalla SPI: no se encuentra la pantalla de 3,5\" (su tactil no responde): solo el framebuffer\n"); return; }
+    /* la pantalla no se puede leer: en la Pi se usa siempre. Solo en QEMU (contador a 62,5 MHz; la Pi va a 19,2) se
+       deja si no hay tactil, porque alli el SPI0 existe pero no tiene nada conectado */
+    extern int touch_probe(void); extern u64 tsc_khz;
+    if (tsc_khz == 62500 && !touch_probe()) { kprintf("pantalla SPI: QEMU sin pantalla de 3,5\": solo el framebuffer\n"); return; }
     if (scr_w != LCD_W || scr_h != LCD_H) { kprintf("pantalla SPI: el escritorio mide %ux%u, no 480x320\n", scr_w, scr_h); return; }
     gpio_func(LCD_PIN_DC, 1); gpio_func(LCD_PIN_RST, 1);
     line = kmalloc(LCD_W * 2); lcd_ok = 1;

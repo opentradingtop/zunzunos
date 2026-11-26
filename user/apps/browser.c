@@ -17,7 +17,11 @@ void gfx_text_big(int x, int y, const char *s, u32 k, int sc) { for (; *s; s++, 
 void gfx_image(int x, int y, int w, int h, const u32 *px, int iw, int ih) { int y0 = MAX(y, G->cy0), y1 = MIN(y + h, G->cy1), x0 = MAX(x, G->cx0), x1 = MIN(x + w, G->cx1); for (int j = y0; j < y1; j++) { const u32 *r = px + (long)(j - y) * ih / h * iw; u32 *o = G->px + (long)j * G->w; for (int i = x0; i < x1; i++) o[i] = r[(long)(i - x) * iw / w] & 0xFFFFFF; } }
 const char *clip_get(int *l) { static char b[4096]; *l = z_clip_get(b, 4095); b[*l] = 0; return b; }
 void clip_set(const char *s, int n) { z_clip_set(s, n); }
-#define TB 38
+/* ventana estrecha (la pantalla de 3,5" de la Raspberry Pi): botones arriba, la direccion debajo a todo lo ancho
+   y Marcadores, Historial e Imprimir en el menu "Mas" */
+#define NARROW (G->w < 700)
+#define TB (NARROW ? 70 : 38)
+#define AY (NARROW ? 38 : 6)
 #define SB 22
 static void strncat0(char *d, const char *s, int cap) { int l = strlen(d); strncpy0(d + l, s, cap - l); }
 static int isal(int c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'); }
@@ -171,8 +175,18 @@ static void marks_menu(int sx, int sy) { char *t = z_readfile(MARC, 0); const ch
 static const char *BT[] = {"<", ">", "R", "Inicio", "*", "Marcadores", "Imprimir", "Sitios", "Historial"}; /* Sitios se dibuja junto a Inicio */
 static int bw(int i) { return g_textw(_(BT[i])) + 16; }
 static int bx(int i) { int x = 6; for (int k = 0; k < i; k++) x += bw(k) + 4; return x; }
-static int addr_x(void) { return bx(4) + bw(7) + 4 + 26; }
-static int addr_w(void) { return G->w - addr_x() - bw(4) - bw(5) - bw(8) - bw(6) - 28; }
+static int addr_x(void) { return NARROW ? 30 : bx(4) + bw(7) + 4 + 26; }
+static int addr_w(void) { return NARROW ? G->w - 36 : G->w - addr_x() - bw(4) - bw(5) - bw(8) - bw(6) - 28; }
+static int more_w(void) { return g_textw(_("Más")) + 16; }
+static int more_x(void) { return G->w - 6 - more_w(); }
+static void print_(void);
+static void more_menu(void) {
+    const char *it[] = {"Añadir a marcadores", "Marcadores", "Historial", "Imprimir"}; int sx, sy; zw_screen(G, more_x(), 34, &sx, &sy);
+    int r = ui_menu(sx, sy, it, 4);
+    if (r == 0) add_mark(); else if (r == 1) { zw_screen(G, more_x(), 34, &sx, &sy); marks_menu(sx, sy); }
+    else if (r == 2) { z_log("[prueba] boton historial"); navigate("zunzun:historial", 0, 1); } else if (r == 3) print_();
+}
+static void addr_focus(void) { if (NARROW) zw_op(G->id, 20, 1, 0); }   /* en pantalla tactil, saca el teclado en pantalla */
 /* botones a la derecha de la direccion: *, Marcadores, Historial, Imprimir */
 static const int RB[] = {4, 5, 8, 6};
 static int rx(int j) { int x = addr_x() + addr_w() + 6; for (int k = 0; k < j; k++) x += bw(RB[k]) + 4; return x; }
@@ -217,11 +231,14 @@ static void draw(void) {
     int vh = G->h - TB - SB; g_rect(G, 0, TB, G->w, vh, D ? html_background(D) & 0xFFFFFF : 0xFFFFFF);
     if (D) { int mx = MAX(0, html_height(D) - vh); scroll = MAX(0, MIN(scroll, mx)); zw_clip(G, 0, TB, G->w - 10, vh); html_draw(D, 4, TB + 4, G->w - 18, vh, scroll); sel_paint(vh); zw_noclip(G); if (mx) { int bh = MAX(24, vh * vh / html_height(D)); g_rect(G, G->w - 8, TB + scroll * (vh - bh) / mx, 6, bh, UI_LINE); } }
     g_rect(G, 0, 0, G->w, TB, UI_PANEL); for (int i = 0; i < 4; i++) ui_button(G, bx(i), 6, bw(i), 26, BT[i], 0); ui_button(G, bx(4), 6, bw(7), 26, BT[7], !strcmp(url, SITIOS) ? 2 : 0);
-    int ax = addr_x(); u32 lk = secure ? 0x16A34A : certst ? 0xDC2626 : 0x9CA3AF; g_round(G, ax - 20, 13, 12, 10, 2, lk); g_frame(G, ax - 18, 8, 8, 7, lk);
-    ui_input(G, ax, 6, addr_w(), 26, addr, acur, afoc); for (int j = 0; j < 4; j++) ui_button(G, rx(j), 6, bw(RB[j]), 26, BT[RB[j]], RB[j] == 8 && !strncmp(url, "zunzun:historial", 16) ? 2 : 0);
+    int ax = addr_x(); u32 lk = secure ? 0x16A34A : certst ? 0xDC2626 : 0x9CA3AF; g_round(G, ax - 20, AY + 7, 12, 10, 2, lk); g_frame(G, ax - 18, AY + 2, 8, 7, lk);
+    ui_input(G, ax, AY, addr_w(), 26, addr, acur, afoc);
+    if (NARROW) ui_button(G, more_x(), 6, more_w(), 26, "Más", 0);
+    else for (int j = 0; j < 4; j++) ui_button(G, rx(j), 6, bw(RB[j]), 26, BT[RB[j]], RB[j] == 8 && !strncmp(url, "zunzun:historial", 16) ? 2 : 0);
     g_rect(G, 0, G->h - SB, G->w, SB, UI_PANEL); zw_clip(G, 0, G->h - SB, G->w, SB); g_text(G, 8, G->h - SB + 3, loading ? _("Cargando...") : msg, UI_TEXT); zw_noclip(G); zw_present(G); }
 int main(const char *a) { int wp; a = z_print_arg(a, &wp);
-    zsys s; z_sysinfo(&s); G = zw_new(APPNAME, -1, 0, MIN(1040, (int)s.scr_w - 40), MIN(720, (int)s.scr_h - 80), WF_DECOR | WF_RESIZE); html_img_get = img_get;
+    zsys s; z_sysinfo(&s); int sm = s.scr_w < 640;   /* pantalla pequena: toda la zona de trabajo */
+    G = zw_new(APPNAME, sm ? 0 : -1, 0, sm ? (int)s.scr_w : MIN(1040, (int)s.scr_w - 40), sm ? (int)s.scr_h : MIN(720, (int)s.scr_h - 80), WF_DECOR | WF_RESIZE); html_img_get = img_get;
     navigate(a[0] ? a : "/rd/res/inicio.html", 0, 0); draw(); if (wp) { print_(); draw(); } zevent e; int sel_drag = 0; (void)sel_drag;
     for (;;) { if (pend_ref[0]) { char u[1100]; strcpy(u, pend_ref); pend_ref[0] = 0; navigate(u, 0, 1); draw(); continue; } int idle = D && pending_imgs() > 0;
 #ifdef CON_JS
@@ -239,9 +256,12 @@ int main(const char *a) { int wp; a = z_print_arg(a, &wp);
             if (D) { char *c = src; src = 0; long n = srcl; set_page(c, n); } draw(); continue; }
         int vh = G->h - TB - SB;
         if (e.type == EV_WHEEL) scroll -= (int)e.key * 60;
-        else if (e.type == EV_DOWN) { afoc = 0;
+        else if (e.type == EV_DOWN) { int had_foc = afoc; afoc = 0;
             if (e.y < TB) { int ax = addr_x();
-                if (e.x >= ax && e.x < ax + addr_w()) { afoc = 1; ui_input_click(G, &e, addr, &acur); }
+                if (e.x >= ax && e.x < ax + addr_w() && e.y >= AY && e.y < AY + 26) { afoc = 1; if (NARROW && !had_foc) ui_input_selall(addr, &acur); else ui_input_click(G, &e, addr, &acur); addr_focus(); }
+                else if (NARROW && e.y >= AY) { }
+                else if (NARROW && e.x >= more_x()) { more_menu(); }
+                else if (NARROW && e.x >= bx(4) + bw(7)) { }
                 else if (e.x < bx(1)) navigate("zunzun:volver", 0, 0);
                 else if (e.x < bx(2)) { if (nf) { char *p = hf[--nf]; if (nb < 64) hb[nb++] = strdup(url); navigate(p, 0, 0); free(p); } }
                 else if (e.x < bx(3)) navigate(url, 0, 0);
@@ -272,7 +292,7 @@ int main(const char *a) { int wp; a = z_print_arg(a, &wp);
         else if (e.type == EV_KEY) {
             if (e.ch == 16) { print_(); draw(); continue; } if (e.key == 0x0B && (e.mods & M_CTRL)) { navigate("zunzun:historial", 0, 1); draw(); continue; }
             if (!afoc && e.ch == 3 && sel_has()) { sel_copy(); draw(); continue; } if (!afoc && e.ch == 1 && !(D && html_has_focus(D))) { sel_all(); draw(); continue; }
-            if (e.ch == 12 && (e.mods & M_CTRL)) { afoc = 1; ui_input_selall(addr, &acur); }
+            if (e.ch == 12 && (e.mods & M_CTRL)) { afoc = 1; ui_input_selall(addr, &acur); addr_focus(); }
             else if (afoc) { if (e.ch == '\n') { afoc = 0; go_addr(); } else if (e.ch == 27) { afoc = 0; strcpy(addr, url); acur = strlen(addr); } else ui_input_key(addr, 1000, &acur, &e); }
             else { int k = e.key == K_UP ? KEY_UP : e.key == K_DOWN ? KEY_DOWN : e.key == K_LEFT ? KEY_LEFT : e.key == K_RIGHT ? KEY_RIGHT : e.key == K_HOME ? KEY_HOME : e.key == K_END ? KEY_END : e.key == K_PGUP ? KEY_PGUP : e.key == K_PGDN ? KEY_PGDN : e.key == K_DEL ? KEY_DEL : e.ch < 128 ? (int)e.ch : uni_to_cp437(e.ch);
 #ifdef CON_JS
@@ -312,5 +332,5 @@ static void js_page(void) {
     if (!D || !html_has_script(D)) return;
     static struct html_js_host h; static char fu[1200]; snprintf(fu, sizeof fu, "%s%s", url[0] == '/' ? "file://" : "", url); h.u = 0; h.url = fu; h.http = js_http; h.go = js_go; h.dialog = js_dialog; h.console = js_console; h.scroll = js_scroll; h.view = js_view;
     u64 t0 = z_ms(); html_js_start(D, &h); html_js_update(D); js_title();
-    int sx, sy, ax_, ay_; zw_screen(G, 4, TB + 4, &sx, &sy); zw_screen(G, addr_x() + 37, 19, &ax_, &ay_); char m[200]; snprintf(m, 200, "[prueba] navjs pagina lista en %lu ms (pagina en %d,%d) (barra en %d,%d)", z_ms() - t0, sx, sy, ax_, ay_); z_log(m); }
+    int sx, sy, ax_, ay_; zw_screen(G, 4, TB + 4, &sx, &sy); zw_screen(G, addr_x() + 37, AY + 13, &ax_, &ay_); char m[200]; snprintf(m, 200, "[prueba] navjs pagina lista en %lu ms (pagina en %d,%d) (barra en %d,%d)", z_ms() - t0, sx, sy, ax_, ay_); z_log(m); }
 #endif

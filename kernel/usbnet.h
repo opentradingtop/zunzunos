@@ -1,11 +1,12 @@
-/* Red por USB (RNDIS y CDC-ECM): lo que cada controlador debe aportar */
+/* Red por USB (RNDIS, CDC-ECM, iPhone y SMSC LAN95xx): lo que cada controlador debe aportar */
 #pragma once
 typedef struct {
-    void *dev; volatile int *gone; int kind; /* 1 RNDIS, 2 CDC-ECM */ int ctl_if, data_if, data_alt, mac_idx;
+    void *dev; volatile int *gone; int kind; /* 1 RNDIS, 2 CDC-ECM, 3 iPhone, 4 SMSC LAN95xx */ int ctl_if, data_if, data_alt, mac_idx;
     int (*ctrl)(void *dev, u8 rt, u8 rq, u16 val, u16 idx, u16 len, void *data);
     int (*out)(void *dev, const void *p, u32 n);
     int (*in_start)(void *dev, void *buf, u32 n);
     int (*in_poll)(void *dev); /* -1 en curso, >= 0 bytes recibidos, < -1 error */
+    const u8 *mac;   /* LAN95xx: la direccion que se le pone (sin EEPROM no trae ninguna) */
 } usbnet_t;
 void usbnet_attach(const usbnet_t *u);
 /* interfaz de red del iPhone (protocolo de Apple, "ipheth" en Linux) */

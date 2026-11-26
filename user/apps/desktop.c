@@ -4,9 +4,11 @@
 #define S_ ((int)TH.text_sc)
 #define PH (36 + (S_ - 1) * 16)
 #define MI (si.scr_h < 600 ? 24 : 28 * S_)   /* filas del menu Inicio (mas bajas en la pantalla de 480x320) */
-#define IS (TH.icon_sc == 0 ? 32 : TH.icon_sc == 2 ? 64 : 44)
-#define IW (IS + 64 + (S_ - 1) * 92)
-#define IH (IS + 40 + (S_ - 1) * 16)
+/* pantalla estrecha (la de 3,5" de la Raspberry Pi, 480x320): iconos pequenos y en filas, como en un movil */
+#define NARROW (si.scr_w < 640)
+#define IS (NARROW ? 24 : TH.icon_sc == 0 ? 32 : TH.icon_sc == 2 ? 64 : 44)
+#define IW (NARROW ? 78 : IS + 64 + (S_ - 1) * 92)
+#define IH (NARROW ? 52 : IS + 40 + (S_ - 1) * 16)
 #define TRAY (76 * S_)
 #define FLAGW 40
 static zwin *bg, *bar, *menu, *qs, *cal; static zsys si; static zwininfo wl[32]; static int nw, menu_hover = -1, icon_sel = -1, last_icon = -1, bright = 100, vol = 85, qs_drag, tb_x[32], tb_w, saved_diag, vis[64], nvis; static u64 menu_closed, qs_closed, cal_closed, last_click; static char clk[48];
@@ -34,13 +36,21 @@ static void desk_scan(void) { nde = 0; zdirent d; for (int i = 0; nde < 64 && !z
    encabezado abre o cierra su columna. Las posiciones no cambian al abrir o cerrar */
 static u32 fam_open = 1u << 31;   /* bit f: familia f abierta; el bit 31 es la carpeta Escritorio */
 static int fam_is_open(int f) { return f >= z_nfams ? (fam_open >> 31) & 1 : (fam_open >> f) & 1; }
-static void layout(int W, int by, int ty) { nic = 0; int HD = 18 * S_, col = -1, row = 0, rows = MAX(1, (by - ty - 20 - HD) / IH);
+/* pantalla estrecha: cada grupo es una linea con su titulo y, si esta abierto, sus iconos en filas debajo */
+static void layout_narrow(int W, int by, int ty) { int HD = 18, y = ty + 4, per = MAX(1, (W - 12) / IW);
+    for (int f = 0; f <= z_nfams; f++) { int n = f < z_nfams ? nvis : nde, cnt = 0;
+        for (int k = 0; k < n; k++) { if (f < z_nfams && z_apps[vis[k]].fam != f) continue;
+            if (!cnt) { if (nic >= 160) return; IC[nic++] = (dic_t){-1 - f, 0, 12, y, }; y += HD + 4; }
+            if (fam_is_open(f)) { if (nic >= 160) return; IC[nic++] = (dic_t){f < z_nfams ? 0 : 1, k, 8 + (cnt % per) * IW, y + (cnt / per) * IH}; }
+            cnt++; }
+        if (cnt && fam_is_open(f)) y += ((cnt + per - 1) / per) * IH + 2; } }
+static void layout(int W, int by, int ty) { nic = 0; if (W < 640) { layout_narrow(W, by, ty); return; } int HD = 18 * S_, col = -1, row = 0, rows = MAX(1, (by - ty - 20 - HD) / IH);
     for (int f = 0; f <= z_nfams; f++) { int any = 0; int n = f < z_nfams ? nvis : nde; for (int k = 0; k < n; k++) { if (f < z_nfams && z_apps[vis[k]].fam != f) continue; if (!any) { col++; row = 0; any = 1; IC[nic] = (dic_t){-1 - f, 0, 12 + col * IW, ty + 6, }; nic++; } else if (row >= rows) { col++; row = 0; } if (nic >= 160) return; if (fam_is_open(f)) IC[nic++] = (dic_t){f < z_nfams ? 0 : 1, k, 12 + col * IW, ty + 6 + HD + row * IH}; row++; } } }
-static void draw_icon(zwin *w, int x, int y, u32 col, const char *sym, const char *n, int sel, int kind) { int cx = x + IW / 2 - 2; if (sel) g_round(w, x, y, IW - 4, IH - 4, 6, TH.acc); if (kind == 1) { g_round(w, cx - IS / 2, y + 6 + IS / 6, IS, IS * 5 / 6, IS / 10, col); g_rect(w, cx - IS / 2, y + 6 + IS / 12, IS / 2, IS / 6, col); } else if (kind == 2) { g_rect(w, cx - IS / 3, y + 6, IS * 2 / 3, IS, 0xF8FAFC); g_frame(w, cx - IS / 3, y + 6, IS * 2 / 3, IS, 0x94A3B8); for (int i = 0; i < 4; i++) g_rect(w, cx - IS / 4, y + 14 + i * IS / 5, IS / 2, 2, 0x94A3B8); } else { g_round(w, cx - IS / 2, y + 6, IS, IS, IS / 6, col); g_text(w, cx - g_textw(sym) / 2, y + 6 + IS / 2 - 8, sym, 0xFFFFFF); } char t[24]; strncpy0(t, n, 15); int tw = g_textw(t) * S_; T_(w, cx - tw / 2 + 1, y + IS + 11, t, 0); T_(w, cx - tw / 2, y + IS + 10, t, 0xFFFFFF); }
+static void draw_icon(zwin *w, int x, int y, u32 col, const char *sym, const char *n, int sel, int kind) { int cx = x + IW / 2 - 2; if (sel) g_round(w, x, y, IW - 4, IH - 4, 6, TH.acc); if (kind == 1) { g_round(w, cx - IS / 2, y + 6 + IS / 6, IS, IS * 5 / 6, IS / 10, col); g_rect(w, cx - IS / 2, y + 6 + IS / 12, IS / 2, IS / 6, col); } else if (kind == 2) { g_rect(w, cx - IS / 3, y + 6, IS * 2 / 3, IS, 0xF8FAFC); g_frame(w, cx - IS / 3, y + 6, IS * 2 / 3, IS, 0x94A3B8); for (int i = 0; i < 4; i++) g_rect(w, cx - IS / 4, y + 14 + i * IS / 5, IS / 2, 2, 0x94A3B8); } else { g_round(w, cx - IS / 2, y + 6, IS, IS, IS / 6, col); g_text(w, cx - g_textw(sym) / 2, y + 6 + IS / 2 - 8, sym, 0xFFFFFF); } char t[24]; strncpy0(t, n, NARROW ? 10 : 15); int tw = g_textw(t) * S_; T_(w, cx - tw / 2 + 1, y + IS + 11, t, 0); T_(w, cx - tw / 2, y + IS + 10, t, 0xFFFFFF); }
 static void draw_bg(void) { zwin *w = bg; int by = TH.panel_top ? w->h : w->h - PH, ty = TH.panel_top ? PH : 0; if (wall) draw_wall(w); else { g_grad(w, 0, 0, w->w, w->h, TH.d1, TH.d2); if (TH.motif) { for (int i = 0; i < 90; i++) g_circle(w, w->w - 80, w->h + 40, 40 + i * 6, TH.d2 + 0x030303 * (i & 3), 0); bird(w, w->w - 320, by - 200, 120, TH.acc, TH.ui_acc2); g_text2(w, w->w - 300, by - 110, "ZunzunOS", TH.ui_acc2, 3); } }
     if (TH.show_icons) { layout(w->w, by, ty); for (int i = 0; i < nic; i++) { dic_t *c = &IC[i]; if (c->kind < 0) { int f = -1 - c->kind; const char *h = f < z_nfams ? _(z_fams[f]) : _("Escritorio"); char t[28]; strncpy0(t, h, 14); int tx = c->x + 5, ty2 = c->y + 4 * S_; if (fam_is_open(f)) for (int k = 0; k < 5; k++) g_line(w, tx + k, ty2 + 2 + k, tx + 8 - k, ty2 + 2 + k, 0xE5E7EB); else for (int k = 0; k < 5; k++) g_line(w, tx + 1 + k, ty2 + k, tx + 1 + k, ty2 + 8 - k, 0xE5E7EB);
                 tx += 13; T_(w, tx + 1, c->y + 1, t, 0); T_(w, tx, c->y, t, 0xE5E7EB); g_rect(w, c->x + 5, c->y + 16 * S_ + 1, IW - 16, 1, f < z_nfams ? z_famcol[f] : 0xE5E7EB); continue; } if (c->kind == 0) { const zapp *a = &z_apps[vis[c->idx]]; draw_icon(w, c->x, c->y, a->col, a->sym, _(a->name), i == icon_sel, 0); } else { char lab[64]; strncpy0(lab, DE[c->idx].name, 64); int kd = DE[c->idx].dir ? 1 : 2, lnk = z_ends(lab, ".acceso"); if (lnk) { char p[220], t[400]; zdirent st; snprintf(p, 220, "%s/%s", DESK, DE[c->idx].name); lab[strlen(lab) - 7] = 0; if (!z_shortcut_target(p, t, 400) && !z_stat(t, &st)) kd = st.is_dir ? 1 : 2; } draw_icon(w, c->x, c->y, 0xD97706, "", lab, i == icon_sel, kd); if (lnk) { int ax = c->x + IW / 2 - IS / 2 - 2, ay = c->y + 6 + IS - 14; g_rect(w, ax, ay, 14, 14, 0xFFFFFF); g_frame(w, ax, ay, 14, 14, 0x334155); g_line(w, ax + 3, ay + 10, ax + 10, ay + 3, 0x1D4ED8); g_line(w, ax + 6, ay + 3, ax + 10, ay + 3, 0x1D4ED8); g_line(w, ax + 10, ay + 3, ax + 10, ay + 7, 0x1D4ED8); } } } } zw_present(w); }
-static int head_at(int x, int y) { for (int i = 0; i < nic; i++) if (IC[i].kind < 0 && x >= IC[i].x && x < IC[i].x + IW - 4 && y >= IC[i].y - 3 && y < IC[i].y + 16 * S_ + 6) return -1 - IC[i].kind; return -1; }
+static int head_at(int x, int y) { for (int i = 0; i < nic; i++) if (IC[i].kind < 0 && x >= IC[i].x && x < IC[i].x + (NARROW ? 170 : IW - 4) && y >= IC[i].y - 3 && y < IC[i].y + 16 * S_ + 6) return -1 - IC[i].kind; return -1; }
 static int icon_at(int x, int y) { for (int i = 0; i < nic; i++) if (IC[i].kind >= 0 && x >= IC[i].x && x < IC[i].x + IW - 4 && y >= IC[i].y && y < IC[i].y + IH - 4) return i; return -1; }
 static int clock_w(void) { return g_textw(clk) * S_; }
 static int tray_x(void) { return bar->w - clock_w() - 16 - TRAY - FLAGW; }

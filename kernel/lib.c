@@ -164,5 +164,8 @@ void panic(const char *f, ...) {
     irq_off();
     kprintf("\n*** PANICO: %s\n", b);
     fb_early_panic(b);
+#ifdef __arm__
+    extern void pi_panic(void); pi_panic();
+#endif
     for (;;) cpu_halt();
 }

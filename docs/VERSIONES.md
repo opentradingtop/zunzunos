@@ -15,9 +15,15 @@ Se ve en Acerca de y en la primera línea del registro de arranque (y por tanto 
   - Teclado en pantalla con la distribución española o inglesa: se abre con el botón del teclado de la barra y
     sirve en todas las ventanas.
   - Pantalla pequeña: la pantalla de inicio, el PIN y el menú Inicio caben en 480x320; las ventanas que no caben
-    se muestran reducidas.
+    se muestran reducidas. Los grupos del escritorio van uno por línea, con iconos pequeños en filas. El
+    Navegador ocupa toda la pantalla y pone su barra en dos filas: botones y menú «Más» (marcadores, historial,
+    imprimir) arriba y la dirección debajo; al tocar la dirección sale el teclado en pantalla.
+  - USB con un controlador propio para el DWC2 de la Pi: teclado, ratón, memorias, impresoras, hubs y la red de
+    la placa (LAN9514), que recibe dirección por DHCP. Probado en la Pi 2 de verdad: red, teclado y ratón USB.
+  - El LED verde late mientras todo va bien y parpadea rápido si hay un error fatal; el registro del arranque se
+    guarda en `ARRANQUE.TXT` de la tarjeta. `tools/grabar-sd.sh` graba la tarjeta desde el Mac.
   - Todas las aplicaciones menos el Navegador JS y la Consola JS (el motor Colibrí aún no tiene su parte ARM).
-    Sin red, sonido ni USB todavía.
+    Sin sonido todavía.
   - `make pi` hace `build/pi/kernel7.img`; `make pi-sd` la tarjeta SD. Prueba en QEMU: `tools/pi_test.py`.
 - El código de los programas usa sufijos `LL`/`ULL` en las constantes de 64 bits (igual en x86_64).
 

@@ -11,7 +11,12 @@ calibracion se guarda en ZUNZUN/TACTIL.TXT: si la borras, la vuelve a pedir.
 Si la imagen sale girada, crea ZUNZUN/PANTALLA.TXT con la linea madctl=0xE8.
 
 El puerto micro-USB de la Pi 2 solo da corriente: no sirve para datos.
-Los registros del sistema se guardan en DIAGNOST.TXT de esta tarjeta.
+Los cuatro puertos USB grandes sirven para teclado, raton, memorias USB e
+impresoras, y el conector de red para Internet por cable (DHCP). Si algo USB
+no responde, ARRANQUE.TXT cuenta lo que vio el sistema (lineas "dwc:").
+Los registros del sistema se guardan en ARRANQUE.TXT y DIAGNOST.TXT.
+LED verde: parpadeo lento = todo bien; rapido = error (mensaje en pantalla);
+fijo = el kernel no llego a empezar.
 
 ZunzunOS for the Raspberry Pi 2 Model B
 =======================================
@@ -24,7 +29,12 @@ On first boot ZunzunOS asks you to touch three crosses to calibrate the touch
 screen; the result is kept in ZUNZUN/TACTIL.TXT (delete it to calibrate again).
 If the picture is upside down, create ZUNZUN/PANTALLA.TXT with madctl=0xE8.
 
-The Pi 2 micro-USB port is power only. System logs go to DIAGNOST.TXT here.
+The Pi 2 micro-USB port is power only. Logs go to ARRANQUE.TXT and DIAGNOST.TXT.
+The four large USB ports take a keyboard, mouse, USB sticks and printers, and
+the network jack gives wired Internet (DHCP). If a USB device does not respond,
+ARRANQUE.TXT shows what the system saw ("dwc:" lines).
+Green LED: slow blink = fine; fast = fatal error (shown on screen);
+steady = the kernel did not start.
 
 bootcode.bin, start.elf and fixup.dat are the Raspberry Pi firmware
 (Raspberry Pi Ltd / Broadcom, see LICENCE.broadcom); they are not part of

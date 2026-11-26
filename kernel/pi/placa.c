@@ -32,7 +32,8 @@ int mbox_call(u32 *buf) {
     dma_sync(buf, buf[0]);
     for (int t = 0; MBOX(0x38) & 0x80000000u; t++) if (t > 1000000) return 0;
     MBOX(0x20) = bus | 8;
-    for (int t = 0; t < 4000000; t++) {
+    u64 t0 = rdtsc(), lim = (tsc_khz ? tsc_khz : 19200) * 3000;   /* hasta 3 s: encender el USB tarda */
+    while (rdtsc() - t0 < lim) {
         if (MBOX(0x18) & 0x40000000u) continue;
         u32 r = MBOX(0x00);
         if ((r & 0xF) == 8 && (r & ~0xFu) == bus) { dma_sync(buf, buf[0]); return buf[1] == 0x80000000u; }
@@ -51,7 +52,7 @@ static void query_board(void) {
         arm_mem_size = mbx[6]; board_rev = mbx[10];
         /* la Pi 2 no tiene red propia (la Ethernet va por USB): el numero de serie hace de identidad del equipo
            (Red local, archivos por equipo), con forma de direccion MAC administrada localmente */
-        extern u8 net_first_mac[6]; u32 lo = mbx[14], hi = mbx[15];
+        extern u8 net_first_mac[6]; extern int net_mac_fija; net_mac_fija = 1; u32 lo = mbx[14], hi = mbx[15];
         u8 m[6] = {0x02, 0x52, (u8)(hi ^ (lo >> 24)), (u8)(lo >> 16), (u8)(lo >> 8), (u8)lo}; memcpy(net_first_mac, m, 6);
     }
 }
@@ -113,10 +114,24 @@ static void clock_load(void) {
     kfree(s); if (t > 1700000000LL && t > clock_now()) { clock_set(t); kprintf("reloj: hora guardada en /sys\n"); }
 }
 extern void lcd_init(void); extern void touch_init(void);
+static void log_save(void);
 static void sys_wait(void *a) {   /* cuando aparece /sys (la tarjeta SD) se lee la hora guardada; DIAGNOST.TXT lo escribe el escritorio */
-    for (int i = 0; i < 100; i++) { zdirent_t d; if (!vfs_stat("/sys", &d)) { clock_load(); return; } msleep(100); }
+    int ok = 0; for (int i = 0; i < 300 && !ok; i++) { zdirent_t d; if (!vfs_stat("/sys", &d)) { clock_load(); ok = 1; } else msleep(100); }
+    if (!ok) { kprintf("sys: no aparece la tarjeta SD como /sys\n"); return; }
+    for (int i = 0;; i++) { log_save(); msleep(i < 12 ? 5000 : 60000); }   /* el registro, a la tarjeta */
 }
 
+/* LED verde: latido lento mientras todo va bien; el kernel escribe su registro en la tarjeta (ARRANQUE.TXT) */
+#define LED_ACT 47
+static void latido(void *a) { for (int on = 0;; on = !on) { gpio_set(LED_ACT, on); msleep(on ? 150 : 850); } }
+void pi_panic(void) {   /* error fatal: el mensaje ya esta en el framebuffer; a la pantalla SPI y LED rapido */
+    extern void lcd_panic(void); lcd_panic();
+    for (int on = 0;; on = !on) { gpio_set(LED_ACT, on); udelay(100000); }
+}
+static void log_save(void) {
+    static char b[65536]; int n = dmesg_read(b, sizeof b); file_t *f;
+    if (!vfs_open("/sys/ARRANQUE.TXT", O_WRITE | O_CREATE | O_TRUNC, &f)) { vfs_write(f, b, n); vfs_close(f); vfs_sync(); blk_sync(); }
+}
 void pi_main(void) {
     serial_init();
     extern char __kend[];
@@ -138,7 +153,8 @@ void pi_main(void) {
     vfs_init(); input_init(); wm_init(); backlight_init();
     osk_on = 1; lcd_init(); touch_init();
     sdhci_init(); netdrv_init(); net_init(); snd_init();
-    kthread("serie", serial_th, 0);
+    extern void dwc_init(void); dwc_init();   /* USB: teclado, raton, memorias, impresoras y la red de la placa (LAN9514) */
+    kthread("serie", serial_th, 0); kthread("latido", latido, 0);
     kthread("sys", sys_wait, 0);
     if (wm_ready()) {
         int r = proc_spawn("/rd/bin/desktop", "");

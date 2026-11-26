@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prueba de ZunzunOS en la Raspberry Pi 2 emulada (QEMU -M raspi2b, 480x320).
 
-  pi_test.py DIR [KERNEL7] [--sd IMAGEN] [--paso]
+  pi_test.py DIR [KERNEL7] [--sd IMAGEN] [--usb]
 
 DIR es una carpeta de trabajo sin espacios (QEMU pone ahi su socket). Arranca kernel7.img como lo haria el
 firmware (-bios lo carga en 0x8000), y por el puerto serie manda toques ("!T x y" / "!U x y") y teclas
@@ -10,6 +10,8 @@ firmware (-bios lo carga en 0x8000), y por el puerto serie manda toques ("!T x y
   2. entrar como administrador tocando la pantalla y saltar el PIN ("Ahora no");
   3. el escritorio con su barra;
   4. el teclado en pantalla: abrirlo desde la barra, escribir en el Editor tocando teclas y ver el texto.
+Con --usb pone en el controlador USB (DWC2) un teclado y una tarjeta de red USB, que QEMU cuelga de un hub, y
+comprueba ademas que el teclado USB escribe en el Editor y que la red USB recibe direccion por DHCP.
 Deja capturas PNG en DIR (pi-*.png).
 """
 import os, socket, struct, subprocess, sys, threading, time, zlib
@@ -18,7 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 class Pi:
-    def __init__(self, work, kernel, sd=None):
+    def __init__(self, work, kernel, sd=None, extra=()):
         self.work = work; os.makedirs(work, exist_ok=True)
         self.log = []; self.lock = threading.Lock(); self.t0 = time.time()
         mon = os.path.join(work, 'm.sock')
@@ -26,6 +28,7 @@ class Pi:
         args = ['qemu-system-arm', '-M', 'raspi2b', '-bios', kernel, '-serial', 'stdio', '-display', 'none',
                 '-monitor', 'unix:m.sock,server,nowait']
         if sd: args += ['-drive', f'if=sd,format=raw,file={sd}']
+        args += list(extra)
         self.p = subprocess.Popen(args, cwd=work, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         threading.Thread(target=self._reader, daemon=True).start()
         try:
@@ -68,6 +71,8 @@ class Pi:
         self.p.stdin.write((line + '\n').encode()); self.p.stdin.flush()
     def tap(self, x, y, hold=0.15):
         self.send(f'!T {x} {y}'); time.sleep(hold); self.send(f'!U {x} {y}'); time.sleep(0.35)
+    def sendkey(self, k):   # tecla por el teclado USB de QEMU (monitor)
+        self.mon.sendall(f'sendkey {k}\n'.encode()); time.sleep(0.25); self._drain()
     def key(self, usage):
         self.send(f'!K {usage} 1'); time.sleep(0.05); self.send(f'!K {usage} 0'); time.sleep(0.15)
     def shot(self, name):
@@ -94,16 +99,19 @@ class Pi:
 def pixel(px, w, x, y): o = (y * w + x) * 3; return tuple(px[o:o + 3])
 
 def main():
-    a, sd, args = [], None, sys.argv[1:]
+    a, sd, usb, args = [], None, False, sys.argv[1:]
     while args:
         x = args.pop(0)
         if x == '--sd': sd = os.path.abspath(args.pop(0))
+        elif x == '--usb': usb = True
         else: a.append(x)
     if not a: raise SystemExit(__doc__)
     work = os.path.abspath(a[0]); kernel = os.path.abspath(a[1]) if len(a) > 1 else os.path.join(ROOT, 'build', 'pi', 'kernel7.img')
-    pi = Pi(work, kernel, sd)
+    extra = ['-device', 'usb-kbd', '-netdev', 'user,id=n0', '-device', 'usb-net,netdev=n0'] if usb else []
+    pi = Pi(work, kernel, sd, extra)
     try:
         if sd: print('    (con tarjeta SD: ' + sd + ')')
+        if usb: print('    (con teclado y red USB)')
         pi.wait('ZunzunOS', 20); pi.wait('[zz] sistema listo', 60)
         pi.wait('sesion: pantalla de inicio', 90)
         time.sleep(1.5)
@@ -121,6 +129,12 @@ def main():
         pi.wait('sesion: escritorio', 5, m)
         time.sleep(2); w, h, px = pi.shot('pi-3-escritorio')
         print('ok  escritorio tras tocar Administrador y "Ahora no"')
+        # grupos del escritorio en pantalla estrecha: abrir Oficina (segunda linea) y ver sus iconos en filas
+        pi.tap(40, 36); time.sleep(1.5); w, h, opened = pi.shot('pi-3b-oficina-abierta')
+        icons = sum(1 for y in range(60, 200, 2) for x in range(8, 470, 2) if pixel(opened, w, x, y) != pixel(px, w, x, y))
+        pi.tap(40, 36); time.sleep(1)
+        assert icons > 200, f'al abrir Oficina no aparecen sus iconos ({icons} pixeles cambian)'
+        print('ok  grupos del escritorio en filas (pantalla estrecha)')
         # teclado en pantalla: boton de la barra (esquina inferior derecha, junto al reloj)
         m = pi.mark(); pi.tap(*KB_BUTTON)
         pi.wait('teclado en pantalla visible', 20, m)
@@ -140,6 +154,27 @@ def main():
         assert diff > 20, f'el texto escrito con el teclado en pantalla no aparece (pixeles distintos: {diff})'
         print(f'ok  escribir "hola" en el Editor con el teclado en pantalla ({diff} pixeles cambian)')
         m = pi.mark(); pi.tap(*OSK_HIDE); pi.wait('teclado en pantalla oculto', 20, m)
+        if usb:
+            pi.wait('dwc: HID teclado', 5); time.sleep(0.5); w, h, before = pi.shot('pi-8b-antes-usb')
+            for k in ['ret', 'u', 's', 'b', 'spc', 'shift-o', 'k']: pi.sendkey(k)
+            time.sleep(1); w, h, after = pi.shot('pi-8c-usb')
+            diff = sum(1 for y in range(30, 320 - 36, 2) for x in range(0, 480, 2) if pixel(before, w, x, y) != pixel(after, w, x, y))
+            assert diff > 20, f'lo escrito con el teclado USB no aparece (pixeles distintos: {diff})'
+            print(f'ok  teclado USB (DWC2 y hub): escribe "usb Ok" en el Editor ({diff} pixeles cambian)')
+            pi.wait('red: IP', 30)
+            with pi.lock: ip = [l for l in pi.log if 'red: IP' in l][-1]
+            print('ok  red USB por DWC2: ' + ip.split('red: ', 1)[1])
+        # navegador en pantalla estrecha: botones arriba y la direccion en una segunda fila
+        pi.tap(50, 302); time.sleep(1.5); pi.tap(60, 112); time.sleep(1.5); pi.shot('pi-10-internet')
+        m = pi.mark(); pi.tap(293, 112); pi.wait('/rd/bin/browser', 20, m); time.sleep(4); w, h, px = pi.shot('pi-11-navegador')
+        m = pi.mark(); pi.tap(240, ADDR_Y); pi.wait('teclado en pantalla visible', 10, m); time.sleep(0.5)
+        for r, k in [(3, 5), (2, 0)]:   # b a
+            pi.tap(*osk_pos(r, k), hold=0.1)
+        time.sleep(1); w, h, after = pi.shot('pi-12-direccion')
+        diff = sum(1 for y in range(ADDR_Y - 10, ADDR_Y + 10) for x in range(30, 470, 2) if pixel(px, w, x, y) != pixel(after, w, x, y))
+        assert diff > 10, f'lo escrito en la direccion del navegador no aparece ({diff} pixeles cambian)'
+        m = pi.mark(); pi.tap(*OSK_HIDE); pi.wait('teclado en pantalla oculto', 20, m)
+        print(f'ok  navegador: cabecera en dos filas, tocar la direccion saca el teclado y se escribe ({diff} pixeles cambian)')
         # calibracion del tactil con lecturas crudas inventadas: crudo = (4000 - 7*y, 300 + 8*x) (ejes cambiados)
         raw = lambda x, y: (4000 - 7 * y, 300 + 8 * x)
         m = pi.mark(); pi.send('!C'); pi.wait('tactil: calibrando', 10, m); time.sleep(0.8); pi.shot('pi-9-calibrar')
@@ -161,6 +196,7 @@ def osk_pos(r, k, sw=480, sh=320, ph=36):
     x = 2 + before * (sw - 4) // tot; x2 = 2 + (before + row[k]) * (sw - 4) // tot
     return (x + x2) // 2, sh - ph - OSK_H + 2 + r * 30 + 14
 OSK_HIDE = None
+ADDR_Y = 76          # direccion del navegador en pantalla estrecha (user/apps/browser.c: AY 38 + 13 bajo el titulo)
 KB_BUTTON = (123, 302)   # boton del teclado en la barra (user/apps/desktop.c, KBX y KBW)
 OSK_HIDE = osk_pos(4, 8)
 if __name__ == '__main__':

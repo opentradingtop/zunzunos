@@ -60,7 +60,7 @@ ok "forense: reconocer un Windows y guardar el expediente"; python3 -I tools/for
 ok "forense: Lab (expediente anonimizado, pruebas pedidas y aprobadas)"; python3 -I tools/forense_lab_test.py "$S/r-fl" 2>&1 | filt
 ok "clonar: MBR y GPT, mayor y menor, sector ilegible, sistema en uso; las copias arrancan"; python3 -I tools/clonar_test.py "$S/r-clon" 2>&1 | filt
 ok "sesiones"; python3 -I tools/sesion_test.py "$S/r-ses" "$K" 2>&1 | filt
-ok "raspberry pi 2 (QEMU raspi2b): arranque, tactil, teclado en pantalla, calibracion, tarjeta SD"; make pi >/dev/null 2>&1 || echo "FALLO: make pi"
+ok "raspberry pi 2 (QEMU raspi2b): arranque, tactil, teclado en pantalla, calibracion, tarjeta SD, teclado y red USB"; make pi >/dev/null 2>&1 || echo "FALLO: make pi"
 mkdir -p "$S/r-pi/fw"; for f in bootcode.bin start.elf fixup.dat; do echo "solo para QEMU" > "$S/r-pi/fw/$f"; done
-python3 -I tools/mkpi.py sd build/pi/kernel7.img "$S/r-pi/fw" "$K/pi-sd.img" 268435456 >/dev/null && python3 -I tools/pi_test.py "$S/r-pi" --sd "$K/pi-sd.img" 2>&1 | filt
+python3 -I tools/mkpi.py sd build/pi/kernel7.img "$S/r-pi/fw" "$K/pi-sd.img" 268435456 >/dev/null && python3 -I tools/pi_test.py "$S/r-pi" --sd "$K/pi-sd.img" --usb 2>&1 | filt
 ok "fin"

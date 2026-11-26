@@ -26,6 +26,25 @@ arranque:
     mrc     p15, 0, r0, c0, c0, 5
     ands    r0, r0, #3
     bne     aparcar
+    /* LED verde (ACT, GPIO47) apagado: senal de que el kernel ha empezado. Luego parpadea despacio (todo bien)
+       o deprisa (error fatal) */
+    ldr     r0, =0x3F200010             /* GPFSEL4: GPIO47 como salida */
+    ldr     r1, [r0]
+    bic     r1, r1, #(7 << 21)
+    orr     r1, r1, #(1 << 21)
+    str     r1, [r0]
+    /* tres destellos rapidos: el firmware ha llegado a nuestro kernel (se cuentan con el contador del sistema) */
+    mov     r6, #3
+8:  ldr     r0, =0x3F20001C             /* GPSET1: encender */
+    mov     r1, #(1 << 15)
+    str     r1, [r0]
+    bl      espera
+    ldr     r0, =0x3F20002C             /* GPCLR1: apagar */
+    mov     r1, #(1 << 15)
+    str     r1, [r0]
+    bl      espera
+    subs    r6, r6, #1
+    bne     8b
     /* HYP -> SVC: el temporizador y la FPU quedan accesibles desde el modo SVC */
     mrs     r0, cpsr
     and     r1, r0, #0x1F
@@ -87,10 +106,12 @@ arranque:
     ldr     r1, =(0x40000000 | SEC_DEVICE)
     ldr     r2, =(0xF30 * 4)
     str     r1, [r4, r2]
-    /* SMP en ACTLR (lo pide el Cortex-A7 antes de usar las caches) */
+    /* SMP en ACTLR (lo pide el Cortex-A7 antes de usar las caches). En la Pi real estamos en modo no seguro y el
+       firmware ya lo ha puesto: escribir ACTLR entonces es una instruccion no definida. Solo si falta. */
     mrc     p15, 0, r0, c1, c0, 1
-    orr     r0, r0, #0x40
-    mcr     p15, 0, r0, c1, c0, 1
+    tst     r0, #0x40
+    orreq   r0, r0, #0x40
+    mcreq   p15, 0, r0, c1, c0, 1
     isb
     bl      invalidar_l1
     mov     r0, #0
@@ -136,6 +157,17 @@ alto:
 aparcar:
     wfe
     b       aparcar
+
+/* unos 150 ms con el temporizador del sistema del BCM2835 (1 MHz, 0x3F003004), que funciona sin MMU ni modo */
+espera:
+    ldr     r2, =0x3F003004
+    ldr     r3, [r2]
+9:  ldr     r1, [r2]
+    sub     r1, r1, r3
+    ldr     r0, =150000
+    cmp     r1, r0
+    blo     9b
+    bx      lr
 
 /* invalida la cache de datos de nivel 1 por conjunto/via (el firmware puede dejar lineas viejas) */
 invalidar_l1:

@@ -11,16 +11,16 @@ PUCFLAGS := $(ARMT) -mfloat-abi=hard -mfpu=neon-vfpv4 -std=gnu11 -O2 -g0 -Wall -
 	-fno-math-errno -fno-unwind-tables -fno-asynchronous-unwind-tables -ffunction-sections -fdata-sections -Iuser/lib
 
 # kernel: lo comun a las dos arquitecturas + kernel/pi
-PKCOMMON := lib kmem sched syscall vfs fat exfat fsro wm input blk sdhci sesion cifrado guardia net usbprn gpu
+PKCOMMON := lib kmem sched syscall vfs fat exfat fsro wm input blk sdhci sesion cifrado guardia net usbprn hid usbnet gpu
 PKOBJ := $(P)/k/start.o $(patsubst %,$(P)/k/%.o,$(PKCOMMON)) \
 	$(patsubst kernel/pi/%.c,$(P)/k/pi_%.o,$(wildcard kernel/pi/*.c)) $(P)/k/aeabi.o $(P)/k/aeabi_s.o
 $(P)/k $(P)/u $(P)/a $(P)/rd $(P)/w $(P)/cb:
 	mkdir -p $@
 $(P)/k/start.o: kernel/pi/start.S | $(P)/k
 	$(CC) $(ARMT) -c $< -o $@
-$(P)/k/%.o: kernel/%.c kernel/kernel.h kernel/pi/arch.h user/lib/version.h | $(P)/k
+$(P)/k/%.o: kernel/%.c kernel/kernel.h kernel/pi/arch.h user/lib/version.h kernel/usb.h kernel/usbnet.h | $(P)/k
 	$(CC) $(PKCFLAGS) -c $< -o $@
-$(P)/k/pi_%.o: kernel/pi/%.c kernel/kernel.h kernel/pi/arch.h user/lib/version.h | $(P)/k
+$(P)/k/pi_%.o: kernel/pi/%.c kernel/kernel.h kernel/pi/arch.h user/lib/version.h kernel/usb.h kernel/usbnet.h | $(P)/k
 	$(CC) $(PKCFLAGS) -c $< -o $@
 $(P)/k/aeabi.o: user/lib/arm/aeabi.c | $(P)/k
 	$(CC) $(PKCFLAGS) -c $< -o $@

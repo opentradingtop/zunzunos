@@ -1539,4 +1539,6 @@ static const char *const TRT[][3] = {
     {"Ya puedes cambiar el disco: la copia arranca igual que el original.", 0, "You can swap the disk now: the copy boots just like the original."},
     {"No arranques con las dos unidades conectadas a la vez: son identicas.", "No arranques con las dos unidades conectadas a la vez: son idénticas.", "Do not boot with both drives connected at once: they are identical."},
     {"Atencion: un sector del origen no se pudo leer y queda a cero (el %lu).", "Atención: un sector del origen no se pudo leer y queda a cero (el %lu).", "Warning: one source sector could not be read and is left as zeros (sector %lu)."},
+    {"Más", 0, "More"},
+    {"Añadir a marcadores", 0, "Add to bookmarks"},
 };
