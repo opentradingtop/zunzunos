@@ -14,7 +14,7 @@ static u32 *wall; static int wall_w, wall_h; static char wall_p[160]; static int
 static int sess(void) { return z_sess(0, 0, 0); }
 static int guest(void) { return (sess() & 7) == 2; }
 /* programas que el invitado no puede abrir (el nucleo tambien lo impide) */
-static int admin_only(const char *b) { static const char *L[] = {"config", "instalar", "discos", "rescate", "restaurar", "forense", "nube"}; for (int i = 0; i < 7; i++) if (!strcmp(b, L[i])) return 1; return 0; }
+static int admin_only(const char *b) { static const char *L[] = {"config", "instalar", "discos", "rescate", "restaurar", "forense", "nube", "clonar"}; for (int i = 0; i < 8; i++) if (!strcmp(b, L[i])) return 1; return 0; }
 static int bar_y(void) { return TH.panel_top ? 0 : si.scr_h - PH; }
 static void T_(zwin *w, int x, int y, const char *s, u32 c) { if (S_ > 1) g_text2(w, x, y, s, c, S_); else g_text(w, x, y, s, c); }
 static void visible(void) { nvis = 0; int g = guest(); for (int i = 0; i < NAPP && nvis < 64; i++) if (!z_hidden(z_apps[i].bin) && !(g && admin_only(z_apps[i].bin))) vis[nvis++] = i; }
@@ -267,13 +267,15 @@ static void ss_stop(void) {
     if (!ss) return; zw_close(ss); ss = 0; for (int i = 0; i < nss; i++) free(ssi[i]); nss = 0; if (scr_off) { z_screen(1); scr_off = 0; } z_log("[zz] salvapantallas: fin");
     int st = sess(); if (!lk && (st & 7) == 1 && (st & 8) && pin_back) open_lock(1);
 }
+/* una clonacion de un disco grande dura horas sin tocar el teclado: con Clonar abierto el equipo no se apaga solo */
+static int copying(void) { zproc p[64]; int n = z_procs(p, 64); for (int i = 0; i < n; i++) if (!strcmp(p[i].name, "clonar")) return 1; return 0; }
 static void power_tick(void) {
     u64 now = z_ms(); long idle = z_idle_ms();
     if (ss) { if (idle + 300 < (long)(now - ss_t0)) { ss_stop(); return; } if (!scr_off && now - ss_frame >= 70) ss_draw(); }
     if (ss_ask && now >= ss_ask) { ss_ask = 0; ss_start(); return; }
     if (!ss && ss_min && idle >= ss_min * 60000L) ss_start();
     if (!scr_off && off_min && idle >= off_min * 60000L) { if (!ss) ss_start(); z_screen(0); scr_off = 1; z_log("[zz] pantalla apagada"); }
-    if (off_h && idle >= off_h * 3600000L) { z_log("[zz] apagado por inactividad"); diag(); z_sync(); z_poweroff(); }
+    if (off_h && idle >= off_h * 3600000L) { if (copying()) { static int said; if (!said) { said = 1; z_log("[zz] apagado aplazado: Clonar esta abierto"); } return; } z_log("[zz] apagado por inactividad"); diag(); z_sync(); z_poweroff(); }
 }
 int main(const char *a) {
     { zdirent d; strcpy(DESK, z_stat("/sys", &d) ? "/rd/tmp/ESCRITORIO" : "/sys/ESCRITORIO"); if (!z_stat("/rd/tmp", &d) || DESK[1] == 's') z_mkdir(DESK); } desk_scan(); z_sysinfo(&si); bg = zw_new("Escritorio", 0, 0, si.scr_w, si.scr_h, WF_DESKTOP); visible(); make_bar(); load_clock(); tick_clock(); draw_bg(); draw_bar(); z_log("[zz] escritorio listo"); zevent e; u64 t0 = z_ms(); int cfgd = cfg_load(); if (cfgd) reload(); open_lock(0);

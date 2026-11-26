@@ -41,7 +41,7 @@ int blk_read(blkdev_t *dv, u64 lba, u32 n, void *b) {
     return r;
 }
 int blk_write(blkdev_t *dv, u64 lba, u32 n, const void *b) {
-    blkdev_t *d = root(dv, &lba);
+    blkdev_t *d = root(dv, &lba); d->wcount++;
     mutex_lock(&cache_lock);
     if (n > CN) { for (int i = 0; i < CN; i++) if (cache[i].d == d) cache[i].d = 0; }
     else for (u32 i = 0; i < n; i++) { centry_t *e = cslot(d, lba + i); if (e->d == d && e->lba == lba + i) { if (d->ssize <= 4096 && e->data) memcpy(e->data, (const u8 *)b + (u64)i * d->ssize, d->ssize); else e->d = 0; } } /* la cache se actualiza con lo escrito */

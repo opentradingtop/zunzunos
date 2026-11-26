@@ -107,6 +107,10 @@ u64 syscall_dispatch(regs_t *r) {
     case 109: { char pb[8] = "", pc[8] = ""; if (b && user_str((char *)b, pb, 8) < 0) return E_INVAL; if (c && user_str((char *)c, pc, 8) < 0) return E_INVAL; return sess_syscall(a, b ? pb : 0, c ? pc : 0); }
     case 108: { UCHK(b, c); extern long usbprn_write(int, const void *, long); return usbprn_write(a, (const void *)b, c); }
     case 106: { char n[16]; if (user_str((char *)a, n, 16) < 0) return E_INVAL; return blk_eject(n); }
+    /* clonador: 0 desmontar todas las particiones de un disco (sin retirarlo), 1 contador de escrituras del disco,
+       2 congelar sus unidades (solo lectura tras escribir lo pendiente), 3 descongelarlas */
+    case 116: { char n[16]; if (user_str((char *)b, n, 16) < 0) return E_INVAL; blkdev_t *k = blk_find(n); if (!k) return E_NOENT; while (k->parent) k = k->parent;
+        if (a == 0) { vfs_sync(); blk_sync(); vfs_umount_dev(k); return 0; } if (a == 1) return (long)(k->wcount & 0x3FFFFFFFFFFFFFFFUL); if (a == 2 || a == 3) return vfs_freeze(k, a == 2); return E_INVAL; }
     case 90: if (a == 1) acpi_reboot(); else acpi_poweroff(); return 0;
     case 91: { UCHK(a, b * sizeof(zpci_t)); zpci_t *o = (zpci_t *)a; int n = MIN((int)b, pci_count);
         for (int i = 0; i < n; i++) { pci_t *p = &pci_devs[i]; o[i] = (zpci_t){p->bus, p->dev, p->fn, p->cls, p->sub, p->pif, p->vendor, p->device}; } return n; }

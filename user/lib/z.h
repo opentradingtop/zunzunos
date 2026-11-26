@@ -112,6 +112,8 @@ static inline void z_theme_get(ztheme *t) { SC1(102, t); }
 static inline void z_rtc_set(const u32 *t) { SC1(104, t); }
 static inline void z_joy_inject(u32 b, int dx, int dy) { SC3(105, b, dx, dy); }
 static inline int z_eject(const char *dev) { return SC1(106, dev); }
+/* clonador: 0 desmonta las particiones de un disco, 1 cuenta sus escrituras, 2 congela sus unidades (solo lectura), 3 las descongela */
+static inline long z_disk_ctl(int op, const char *dev) { return SC2(116, op, dev); }
 static inline void z_theme_set(const ztheme *t) { SC1(103, t); }
 static inline int z_set_ro(const char *mnt, int ro) { return SC2(99, mnt, ro); }
 static inline int z_add_part(const char *d, u64 st, u64 n) { return SC3(100, d, st, n); }

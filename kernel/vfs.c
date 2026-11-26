@@ -19,6 +19,13 @@ void vfs_umount_dev(blkdev_t *d) {
     for (int i = 0; i < nmnt; i++) if (mounts[i]->dev == d || (mounts[i]->dev && mounts[i]->dev->parent == d)) { mounts[i]->dead = 1; memmove(&mounts[i], &mounts[i + 1], (nmnt - i - 1) * sizeof mounts[0]); nmnt--; i--; }
     mutex_unlock(&vfs_lock);
 }
+/* clonador: congelar las unidades de un disco (se escribe lo pendiente y quedan en solo lectura) y descongelarlas */
+int vfs_freeze(blkdev_t *d, int on) {
+    mutex_lock(&vfs_lock); int n = 0;
+    for (int i = 0; i < nmnt; i++) { mount_t *m = mounts[i]; if (m->dev != d && (!m->dev || m->dev->parent != d)) continue;
+        if (on && !m->ro) { if (m->ops->sync) m->ops->sync(m); m->ro = 1; m->frozen = 1; n++; } else if (!on && m->frozen) { m->ro = 0; m->frozen = 0; n++; } }
+    mutex_unlock(&vfs_lock); if (on) blk_sync(); return n;
+}
 int vfs_set_ro(const char *n, int ro) { mutex_lock(&vfs_lock); int r = E_NOENT; for (int i = 0; i < nmnt; i++) if (!strcmp(mounts[i]->name, n)) { mounts[i]->ro = ro; r = 0; } mutex_unlock(&vfs_lock); return r; }
 void vfs_sync(void) { mutex_lock(&vfs_lock); for (int i = 0; i < nmnt; i++) if (!mounts[i]->ro && mounts[i]->ops->sync) mounts[i]->ops->sync(mounts[i]); mutex_unlock(&vfs_lock); }
 static mount_t *resolve(const char *p, const char **rest) {

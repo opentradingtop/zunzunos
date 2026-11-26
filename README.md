@@ -24,6 +24,7 @@ El estudio de KolibriOS y las decisiones de diseño están en
 | Discos | IDE/ATAPI, AHCI, NVMe, USB y tarjetas SD. Particiones MBR y GPT |
 | Archivos | FAT12/16/32 y exFAT con lectura y escritura. NTFS, ext2/3/4 e ISO9660 de solo lectura. Los volúmenes se montan protegidos contra escritura |
 | Rescate | Copia tolerante a sectores dañados, archivos borrados (FAT, NTFS, exFAT y ext2; ext3/4 si conservan sus bloques), recuperación por firmas, imagen de disco y particiones perdidas |
+| Clonar | Copia exacta de un disco entero en otro, sector a sector (MBR, GPT, Windows, Linux o ZunzúnOS): para cambiar el disco de un equipo por otro mayor, o menor si las particiones caben, o duplicar una memoria USB. La copia arranca igual que el original. Ajusta la GPT al tamaño del destino, reintenta los sectores dañados uno a uno, puede clonar el sistema en uso y comprueba la copia al terminar |
 | Forense | Rastreador de desastres de sistemas: encuentra los Windows de los discos y, **sin modificar nada**, saca su versión, el nombre del equipo, el último apagado correcto, cómo arrancaba, si el volumen quedó dañado, los drivers cambiados justo antes del fallo, lo que dice la reparación automática de Windows y las actualizaciones a medio instalar. Lo guarda todo en un expediente en la memoria USB y lo manda a analizar a un **Lab** de IA. El Lab puede ser:
   - **local**: cualquier servidor compatible con la API de OpenAI y una API key, como el de una empresa o el de casa;
   - **Lyceum**: en la nube, con los datos personales anonimizados.

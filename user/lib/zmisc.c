@@ -31,7 +31,7 @@ const char *const z_fams[] = {"Rescate", "Oficina", "Internet", "Multimedia", "J
 const u32 z_famcol[] = {0xB91C1C, 0x15803D, 0x0284C7, 0xDB2777, 0xCA8A04, 0x475569};
 const int z_nfams = 6;
 const zapp z_apps[] = {
-    {"Rescate","rescate",0xB91C1C,"+",0},{"Archivos","files",0xD97706,"[]",0},{"Discos","discos",0xB45309,"(=)",0},{"Papelera","papelera",0x64748B,"\\_/",0},{"Restaurar","restaurar",0x1D4ED8,"<<",0},{"Instalar","instalar",0x0D9488,"->",0},{"Forense","forense",0x7F1D1D,"?!",0},
+    {"Rescate","rescate",0xB91C1C,"+",0},{"Archivos","files",0xD97706,"[]",0},{"Discos","discos",0xB45309,"(=)",0},{"Papelera","papelera",0x64748B,"\\_/",0},{"Restaurar","restaurar",0x1D4ED8,"<<",0},{"Instalar","instalar",0x0D9488,"->",0},{"Forense","forense",0x7F1D1D,"?!",0},{"Clonar","clonar",0x0E7490,"2x",0},
     {"Escritor","escritor",0x7C2D12,"Es",1},{"Hoja","hoja",0x15803D,"##",1},{"Presentar","diapos",0xC2410C,"|>",1},{"Agenda","agenda",0x0369A1,"31",1},{"Editor","editor",0x2563EB,"Aa",1},{"Calculadora","calc",0x7C3AED,"+=",1},{"Lector PDF","pdf",0xB91C1C,"PDF",1},
     {"Navegador","browser",0x0284C7,"@",2},{"Apps web","apps",0x6D28D9,"</>",2},
     {"Imágenes","viewer",0x059669,"::",3},{"Música","player",0xE11D48,"d|",3},{"Grabadora","grabadora",0xBE123C,"(o)",3},{"Pintar","paint",0xDB2777,"~*",3},

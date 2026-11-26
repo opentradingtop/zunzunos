@@ -138,6 +138,7 @@ typedef struct blkdev {
     int (*read)(struct blkdev *, u64 lba, u32 n, void *); int (*write)(struct blkdev *, u64 lba, u32 n, const void *);
     int removable;
     char model[41]; mutex_t lock; int present; u8 *bounce; u32 maxsect; int (*flush)(struct blkdev *);
+    u64 wcount;   /* escrituras en el disco entero (el clonador comprueba que el origen no cambia) */
 } blkdev_t;
 #define MAXBLK 32
 extern blkdev_t *blkdevs[MAXBLK]; extern int blk_count;
@@ -166,9 +167,9 @@ typedef struct fsops {
     int (*mkdir)(struct mount *, const char *); int (*unlink)(struct mount *, const char *);
     int (*rename)(struct mount *, const char *, const char *); void (*sync)(struct mount *); int (*contig)(struct mount *, const char *, u64, u64 *);
 } fsops_t;
-typedef struct mount { char name[16]; const fsops_t *ops; void *priv; blkdev_t *dev; char fstype[8]; char label[16]; u64 total, free_b; volatile i64 *free_src; u32 free_mul; int dead, ro; } mount_t;
+typedef struct mount { char name[16]; const fsops_t *ops; void *priv; blkdev_t *dev; char fstype[8]; char label[16]; u64 total, free_b; volatile i64 *free_src; u32 free_mul; int dead, ro, frozen; } mount_t;
 void vfs_init(void); int vfs_mount(const char *, const fsops_t *, void *, blkdev_t *, const char *, const char *);
-void vfs_umount_dev(blkdev_t *); void fs_probe(blkdev_t *);
+void vfs_umount_dev(blkdev_t *); int vfs_freeze(blkdev_t *, int on); void fs_probe(blkdev_t *);
 int vfs_open(const char *, int, file_t **); i64 vfs_read(file_t *, void *, u64); i64 vfs_write(file_t *, const void *, u64);
 i64 vfs_seek(file_t *, i64, int); void vfs_close(file_t *); int vfs_stat(const char *, zdirent_t *);
 int vfs_readdir(const char *, int, zdirent_t *); int vfs_mkdir(const char *); int vfs_unlink(const char *); int vfs_rename(const char *, const char *);

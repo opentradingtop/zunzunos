@@ -58,5 +58,6 @@ ok "clics en el texto: 1 cursor, 2 palabra, 3 todo"; python3 -I tools/clics_test
 ok "forense: lectores NTFS y registro (en el Mac, con discos estropeados)"; tools/pruebas/forense/correr.sh "$S/r-foh" 2>&1 | filt
 ok "forense: reconocer un Windows y guardar el expediente"; python3 -I tools/forense_test.py "$S/r-fo" 2>&1 | filt
 ok "forense: Lab (expediente anonimizado, pruebas pedidas y aprobadas)"; python3 -I tools/forense_lab_test.py "$S/r-fl" 2>&1 | filt
+ok "clonar: MBR y GPT, mayor y menor, sector ilegible, sistema en uso; las copias arrancan"; python3 -I tools/clonar_test.py "$S/r-clon" 2>&1 | filt
 ok "sesiones"; python3 -I tools/sesion_test.py "$S/r-ses" "$K" 2>&1 | filt
 ok "fin"
