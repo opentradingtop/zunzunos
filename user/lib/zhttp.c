@@ -18,7 +18,7 @@ static int split_url(const char *u, int *tls, char *host, int *port, char *path)
     if (*u == ':') { *port = atoi(u + 1); while (*u && *u != '/' && *u != '?') u++; }
     if (*u == '?') { path[0] = '/'; strncpy0(path + 1, u, 1023); } else strncpy0(path, *u ? u : "/", 1024); char *h = strchr(path, '#'); if (h) *h = 0; return host[0] ? 0 : -22; }
 static int isxd(int c) { return isdigit(c) || (c | 32) >= 'a' && (c | 32) <= 'f'; }
-static long now_num(void) { u32 t[6]; z_time(t); return (long)t[5] * 10000000000L + (long)t[4] * 100000000L + (long)t[3] * 1000000L + t[2] * 10000 + t[1] * 100 + t[0]; }
+static long now_num(void) { u32 t[6]; z_time(t); return (long)t[5] * 10000000000LL + (long)t[4] * 100000000LL + (long)t[3] * 1000000LL + t[2] * 10000 + t[1] * 100 + t[0]; }
 static const char *hdr(const char *h, const char *name) { int l = strlen(name); for (const char *p = h; p && *p; ) { if (!strncasecmp(p, name, l) && p[l] == ':') { p += l + 1; while (*p == ' ') p++; return p; } p = strchr(p, '\n'); if (p) p++; } return 0; }
 static long gunzip(const u8 *d, long n, u8 **out) {
     if (n < 18 || d[0] != 0x1f || d[1] != 0x8b || d[2] != 8) return -1; int fl = d[3]; long p = 10; if (fl & 4) p += 2 + (d[p] | d[p + 1] << 8); if (fl & 8) { while (p < n && d[p]) p++; p++; } if (fl & 16) { while (p < n && d[p]) p++; p++; } if (fl & 2) p += 2; if (p >= n) return -1;
@@ -77,7 +77,7 @@ int z_http(const char *method, const char *url, const char *body, long bl, const
         if (body) n += snprintf(req + n, sizeof req - n, "Content-Type: %s\r\nContent-Length: %ld\r\n", ctype ? ctype : "application/x-www-form-urlencoded", bl);
         n += snprintf(req + n, sizeof req - n, "\r\n"); if (c_send(&c, req, n) < 0 || (body && bl && c_send(&c, body, bl) < 0)) { if (c.t) free(c.t); z_close(c.s); return -5; }
         long cap = 65536, got = 0; char *b = malloc(cap + 1);
-        for (;;) { if (got == cap) { if (cap >= (48L << 20)) break; cap *= 2; char *nb = realloc(b, cap + 1); if (!nb) break; b = nb; } long r = c_recv(&c, b + got, cap - got); if (r <= 0) break; got += r; }
+        for (;;) { if (got == cap) { if (cap >= (48LL << 20)) break; cap *= 2; char *nb = realloc(b, cap + 1); if (!nb) break; b = nb; } long r = c_recv(&c, b + got, cap - got); if (r <= 0) break; got += r; }
         if (c.t) free(c.t); z_close(c.s); b[got] = 0;
         char *he = strstr(b, "\r\n\r\n"); if (!he) { free(b); return -5; } *he = 0;
         for (char *hl = b; hl && *hl; ) { if (!strncasecmp(hl, "set-cookie:", 11)) { const char *cv = hl + 11; while (*cv == ' ') cv++; ck_set(host, path, cv); } hl = strchr(hl, '\n'); if (hl) hl++; } ck_save(); char *data = he + 4; long dl = got - (data - b); char *sp = strchr(b, ' '); inf->status = sp ? atoi(sp + 1) : 0;

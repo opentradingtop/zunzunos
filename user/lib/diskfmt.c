@@ -1,7 +1,7 @@
 /* Formateo (FAT16, FAT32, exFAT, ext2) e instalacion en disco */
 #include "z.h"
 static u8 *ZB; static const int ZN = 256;
-static int wr(const char *d, u64 l, u64 n, const void *b, u32 ss) { const u8 *p = b; while (n) { int c = MIN(n, 256UL); int e = z_disk_write(d, l, c, p); if (e) return e; l += c; n -= c; p += c * ss; } return 0; }
+static int wr(const char *d, u64 l, u64 n, const void *b, u32 ss) { const u8 *p = b; while (n) { int c = MIN(n, 256ULL); int e = z_disk_write(d, l, c, p); if (e) return e; l += c; n -= c; p += c * ss; } return 0; }
 static int zeros(const char *d, u64 l, u64 n, u32 ss) { if (!ZB) ZB = calloc(ZN, 4096); while (n) { int c = MIN(n, (u64)ZN); int e = z_disk_write(d, l, c, ZB); if (e) return e; l += c; n -= c; } return 0; }
 static void msg(dk_cb c, int p, const char *m) { if (c) c(p, m); }
 static u32 serial(void) { return rnd(); }
@@ -9,14 +9,14 @@ static void label11(char *o, const char *l) { memset(o, ' ', 11); for (int i = 0
 typedef struct { u32 ss, spc, rs, fz, roots, ncl; u64 data, total; int type; } fatl;
 static int fat_layout(u64 total, u32 ss, int type, fatl *f) {
     memset(f, 0, sizeof *f); f->ss = ss; f->type = type; f->total = total; u64 by = total * ss;
-    if (total > 0xFFFFFFFFUL) return -22;
+    if (total > 0xFFFFFFFFULL) return -22;
     if (type == 32) {
-        u32 cb = by <= (260UL << 20) ? 512 : by <= (8UL << 30) ? 4096 : by <= (16UL << 30) ? 8192 : by <= (32UL << 30) ? 16384 : 32768; if (cb < ss) cb = ss;
-        f->spc = cb / ss; f->rs = 32; u32 fz = 1; u64 cl; for (;;) { u64 d = f->rs + 2UL * fz; if (d >= total) return -28; cl = (total - d) / f->spc; u32 n = (cl + 2) * 4 / ss + 1; if (n <= fz) break; fz = n; }
-        if (cl < 65525) return -28; f->fz = fz; f->ncl = cl; f->data = f->rs + 2UL * fz; return 0;
+        u32 cb = by <= (260ULL << 20) ? 512 : by <= (8ULL << 30) ? 4096 : by <= (16ULL << 30) ? 8192 : by <= (32ULL << 30) ? 16384 : 32768; if (cb < ss) cb = ss;
+        f->spc = cb / ss; f->rs = 32; u32 fz = 1; u64 cl; for (;;) { u64 d = f->rs + 2ULL * fz; if (d >= total) return -28; cl = (total - d) / f->spc; u32 n = (cl + 2) * 4 / ss + 1; if (n <= fz) break; fz = n; }
+        if (cl < 65525) return -28; f->fz = fz; f->ncl = cl; f->data = f->rs + 2ULL * fz; return 0;
     }
     f->rs = 1; f->roots = 512; u32 rsec = (512 * 32 + ss - 1) / ss;
-    for (u32 cb = ss; cb <= 32768; cb *= 2) { u32 spc = cb / ss, fz = 1; u64 cl; for (;;) { u64 d = 1 + 2UL * fz + rsec; if (d >= total) return -28; cl = (total - d) / spc; u32 n = (cl + 2) * 2 / ss + 1; if (n <= fz) break; fz = n; } if (cl < 65525) { if (cl < 4085) return -28; f->spc = spc; f->fz = fz; f->ncl = cl; f->data = 1 + 2UL * fz + rsec; return 0; } }
+    for (u32 cb = ss; cb <= 32768; cb *= 2) { u32 spc = cb / ss, fz = 1; u64 cl; for (;;) { u64 d = 1 + 2ULL * fz + rsec; if (d >= total) return -28; cl = (total - d) / spc; u32 n = (cl + 2) * 2 / ss + 1; if (n <= fz) break; fz = n; } if (cl < 65525) { if (cl < 4085) return -28; f->spc = spc; f->fz = fz; f->ncl = cl; f->data = 1 + 2ULL * fz + rsec; return 0; } }
     return -28;
 }
 static int fat_mk(const char *d, u64 base, const fatl *f, const char *label, u64 hidden, dk_cb cb) {
@@ -28,17 +28,17 @@ static int fat_mk(const char *d, u64 base, const fatl *f, const char *label, u64
     if (f->type == 32) { z_disk_write(d, base + 6, 1, b); memset(b, 0, ss); *(u32 *)b = 0x41615252; *(u32 *)(b + 484) = 0x61417272; *(u32 *)(b + 488) = f->ncl - 1; *(u32 *)(b + 492) = 3; b[ss - 2] = 0x55; b[ss - 1] = 0xAA; z_disk_write(d, base + 1, 1, b); z_disk_write(d, base + 7, 1, b); }
     memset(b, 0, ss); if (f->type == 32) { ((u32 *)b)[0] = 0x0FFFFFF8; ((u32 *)b)[1] = 0x0FFFFFFF; ((u32 *)b)[2] = 0x0FFFFFFF; } else { ((u16 *)b)[0] = 0xFFF8; ((u16 *)b)[1] = 0xFFFF; }
     z_disk_write(d, base + f->rs, 1, b); e = z_disk_write(d, base + f->rs + f->fz, 1, b); if (e) goto out;
-    memset(b, 0, ss); memcpy(b, l, 11); b[11] = 8; e = z_disk_write(d, base + (f->type == 32 ? f->data : f->rs + 2UL * f->fz), 1, b);
+    memset(b, 0, ss); memcpy(b, l, 11); b[11] = 8; e = z_disk_write(d, base + (f->type == 32 ? f->data : f->rs + 2ULL * f->fz), 1, b);
 out: free(b); return e;
 }
 /* ----- exFAT ----- */
 static u32 rotsum(u32 c, u8 v) { return ((c & 1) ? 0x80000000u : 0) + (c >> 1) + v; }
 static int ex_mk(const char *d, u64 base, u64 total, u32 ss, const char *label, u64 hidden, dk_cb cb) {
-    int sb = 0; while ((1u << sb) < ss) sb++; u64 by = total * ss; u32 cb_ = by <= (256UL << 20) ? 4096 : by <= (32UL << 30) ? 32768 : 131072; int cs = 0; while ((ss << cs) < cb_) cs++; u32 spc = 1u << cs;
+    int sb = 0; while ((1u << sb) < ss) sb++; u64 by = total * ss; u32 cb_ = by <= (256ULL << 20) ? 4096 : by <= (32ULL << 30) ? 32768 : 131072; int cs = 0; while ((ss << cs) < cb_) cs++; u32 spc = 1u << cs;
     if (total < 16384) return -28; u32 fo = 2048 / (ss / 512), fl = 1, ho = 0, cc = 0;
-    for (int it = 0; it < 8; it++) { ho = (fo + fl + spc - 1) / spc * spc; cc = (total - ho) / spc; fl = ((u64)cc + 2) * 4 / ss + 1; } ho = (fo + fl + spc - 1) / spc * spc; cc = (total - ho) / spc; if (total > 0xFFFFFFFFUL * 4) return -28;
+    for (int it = 0; it < 8; it++) { ho = (fo + fl + spc - 1) / spc * spc; cc = (total - ho) / spc; fl = ((u64)cc + 2) * 4 / ss + 1; } ho = (fo + fl + spc - 1) / spc * spc; cc = (total - ho) / spc; if (total > 0xFFFFFFFFULL * 4) return -28;
     u32 csz = spc * ss, bml = (cc + 7) / 8, bmc = (bml + csz - 1) / csz; static const u16 runs[]={0}; (void)runs;
-    u16 *up = malloc(1024); int n = 0; up[n++] = 0xFFFF; up[n++] = 0x61; for (int c = 0x61; c <= 0x7A; c++) up[n++] = c - 32; up[n++] = 0xFFFF; up[n++] = 0xE0 - 0x7B; for (int c = 0xE0; c <= 0xFE; c++) up[n++] = c == 0xF7 ? c : c - 32; up[n++] = 0xFFFF; up[n++] = 0xFFFF; up[n++] = 0xFFFF; up[n++] = 0xFF; (void)0; n -= 4; up[n++] = 0xFFFF; up[n++] = (u16)(0x10000UL - 0xFF);
+    u16 *up = malloc(1024); int n = 0; up[n++] = 0xFFFF; up[n++] = 0x61; for (int c = 0x61; c <= 0x7A; c++) up[n++] = c - 32; up[n++] = 0xFFFF; up[n++] = 0xE0 - 0x7B; for (int c = 0xE0; c <= 0xFE; c++) up[n++] = c == 0xF7 ? c : c - 32; up[n++] = 0xFFFF; up[n++] = 0xFFFF; up[n++] = 0xFFFF; up[n++] = 0xFF; (void)0; n -= 4; up[n++] = 0xFFFF; up[n++] = (u16)(0x10000ULL - 0xFF);
     u32 ul = n * 2, us = 0; for (u32 i = 0; i < ul; i++) us = rotsum(us, ((u8 *)up)[i]);
     u32 c_bm = 2, c_up = 2 + bmc, c_rt = c_up + 1, used = bmc + 2; msg(cb, 5, "Escribiendo tablas..."); int e = zeros(d, base, ho + (u64)(bmc + 2) * spc, ss); if (e) return e;
     u8 *s = calloc(12, ss); s[0] = 0xEB; s[1] = 0x76; s[2] = 0x90; memcpy(s + 3, "EXFAT   ", 8); *(u64 *)(s + 64) = hidden; *(u64 *)(s + 72) = total; *(u32 *)(s + 80) = fo; *(u32 *)(s + 84) = fl; *(u32 *)(s + 88) = ho; *(u32 *)(s + 92) = cc; *(u32 *)(s + 96) = c_rt; *(u32 *)(s + 100) = serial(); *(u16 *)(s + 104) = 0x100; s[108] = sb; s[109] = cs; s[110] = 1; s[111] = 0x80; s[112] = 0; s[510] = 0x55; s[511] = 0xAA;
@@ -53,7 +53,7 @@ static int ex_mk(const char *d, u64 base, u64 total, u32 ss, const char *label, 
 }
 /* ----- ext2 ----- */
 static int ext_mk(const char *d, u64 base, u64 total, u32 ss, const char *label, dk_cb cb) {
-    if (ss > 4096) return -22; u32 spb = 4096 / ss; u64 blocks = total / spb; if (blocks < 2048 || blocks > 0xFFFFFFFFUL) return -28; u32 bpg = 32768, ipg = 2048, itb = ipg * 128 / 4096; u32 groups = (blocks + bpg - 1) / bpg; u32 last = blocks - (u64)(groups - 1) * bpg, gdb = (groups * 32 + 4095) / 4096, meta = 1 + gdb + 2 + itb;
+    if (ss > 4096) return -22; u32 spb = 4096 / ss; u64 blocks = total / spb; if (blocks < 2048 || blocks > 0xFFFFFFFFULL) return -28; u32 bpg = 32768, ipg = 2048, itb = ipg * 128 / 4096; u32 groups = (blocks + bpg - 1) / bpg; u32 last = blocks - (u64)(groups - 1) * bpg, gdb = (groups * 32 + 4095) / 4096, meta = 1 + gdb + 2 + itb;
     if (last < meta + 32) { if (groups == 1) return -28; groups--; blocks = (u64)groups * bpg; last = bpg; } u8 *b = malloc(4096); u8 *gd = calloc(gdb, 4096); u64 freeb = 0; u32 now = 1700000000;
 #define BW(n, c, p) wr(d, base + (u64)(n) * spb, (u64)(c) * spb, p, ss)
     for (u32 g = 0; g < groups; g++) { u64 st = (u64)g * bpg; u32 gb = g + 1 == groups ? last : bpg, us = meta + (g == 0 ? 2 : 0); u32 *e = (u32 *)(gd + g * 32); e[0] = st + 1 + gdb; e[1] = st + 2 + gdb; e[2] = st + 3 + gdb; *(u16 *)(gd + g * 32 + 12) = gb - us; *(u16 *)(gd + g * 32 + 14) = ipg - (g == 0 ? 11 : 0); *(u16 *)(gd + g * 32 + 16) = g == 0 ? 2 : 0; freeb += gb - us; }
@@ -74,10 +74,10 @@ int dk_mkfs(const char *d, u64 base, u64 total, u32 ss, int fs, const char *labe
     msg(cb, 100, e ? "Error" : "Terminado"); return e;
 }
 static const u8 ptype[] = {0x0C, 0x0E, 0x07, 0x83};
-static void chs(u32 l, u8 *o) { if (l >= 1024UL * 255 * 63) { o[0] = 0xFE; o[1] = 0xFF; o[2] = 0xFF; return; } u32 c = l / (255 * 63); o[0] = (l / 63) % 255; o[1] = ((c >> 2) & 0xC0) | (l % 63 + 1); o[2] = c; }
-static void pentry(u8 *e, int active, u8 type, u64 st, u64 n) { u32 a = st, c = MIN(n, 0xFFFFFFFFUL); e[0] = active ? 0x80 : 0; chs(a, e + 1); e[4] = type; chs(a + c - 1, e + 5); *(u32 *)(e + 8) = a; *(u32 *)(e + 12) = c; }
+static void chs(u32 l, u8 *o) { if (l >= 1024ULL * 255 * 63) { o[0] = 0xFE; o[1] = 0xFF; o[2] = 0xFF; return; } u32 c = l / (255 * 63); o[0] = (l / 63) % 255; o[1] = ((c >> 2) & 0xC0) | (l % 63 + 1); o[2] = c; }
+static void pentry(u8 *e, int active, u8 type, u64 st, u64 n) { u32 a = st, c = MIN(n, 0xFFFFFFFFULL); e[0] = active ? 0x80 : 0; chs(a, e + 1); e[4] = type; chs(a + c - 1, e + 5); *(u32 *)(e + 8) = a; *(u32 *)(e + 12) = c; }
 int dk_format_disk(const char *disk, u64 total, u32 ss, int fs, const char *label, dk_cb cb) {
-    u64 st = (1UL << 20) / ss, n = MIN(total - st, 0xFFFFFFFFUL); msg(cb, 1, "Borrando tabla de particiones..."); int e = zeros(disk, 0, 64, ss); if (!e) e = zeros(disk, total - 64, 64, ss); if (e) return e;
+    u64 st = (1ULL << 20) / ss, n = MIN(total - st, 0xFFFFFFFFULL); msg(cb, 1, "Borrando tabla de particiones..."); int e = zeros(disk, 0, 64, ss); if (!e) e = zeros(disk, total - 64, 64, ss); if (e) return e;
     e = dk_mkfs(disk, st, n, ss, fs, label, st, cb); if (e) return e; u8 *b = calloc(1, ss); pentry(b + 446, 0, ptype[fs], st, n); *(u32 *)(b + 440) = serial(); b[510] = 0x55; b[511] = 0xAA; e = z_disk_write(disk, 0, 1, b); free(b); z_sync(); z_disk_rescan(disk); return e;
 }
 int dk_format_part(const char *disk, const zpart *p, u32 ss, int fs, const char *label, dk_cb cb) {
@@ -91,9 +91,9 @@ static u32 ialloc(ib_t *b, const void *data, u32 len) { u32 n = MAX((len + b->cs
 static void dent(ib_t *b, u8 *e, const char *n83, u8 attr, u32 cl, u32 size) { memcpy(e, n83, 11); e[11] = attr; *(u16 *)(e + 14) = b->tt; *(u16 *)(e + 16) = b->dd; *(u16 *)(e + 18) = b->dd; *(u16 *)(e + 20) = cl >> 16; *(u16 *)(e + 22) = b->tt; *(u16 *)(e + 24) = b->dd; *(u16 *)(e + 26) = cl; *(u32 *)(e + 28) = size; }
 int dk_install(const char *disk, u64 total, u32 ss, dk_cb cb) {
     if (ss != 512) return -22; long kl, il, el, bl, ll; msg(cb, 2, "Preparando archivos..."); u8 *K = z_readfile("/rd/inst/KERNEL.BIN", &kl), *I = z_readfile("/rd/inst/INITRD.BIN", &il), *E = z_readfile("/rd/inst/BOOTX64.EFI", &el), *B = z_readfile("/rd/inst/boot.bin", &bl), *L = z_readfile("/rd/inst/LEEME.TXT", &ll); if (!K || !I || !E || !B || !L) return -2;
-    u64 st = 2048, n = MIN(total - st, 0xFFFFFFFFUL); fatl f; int e = fat_layout(n, ss, 32, &f); if (e) return e; if (bl > 2047 * 512) return -22;
+    u64 st = 2048, n = MIN(total - st, 0xFFFFFFFFULL); fatl f; int e = fat_layout(n, ss, 32, &f); if (e) return e; if (bl > 2047 * 512) return -22;
     msg(cb, 5, "Borrando el inicio y el final del disco..."); if ((e = zeros(disk, 0, 2048, ss)) || (e = zeros(disk, total - 64, 64, ss))) return e; msg(cb, 10, "Creando el sistema de archivos..."); if ((e = fat_mk(disk, st, &f, "ZUNZUN", st, 0))) return e;
-    ib_t b; memset(&b, 0, sizeof b); b.f = &f; b.d = disk; b.base = st; b.cs = f.spc * ss; b.cap = MIN(f.ncl + 2, (u32)(24UL << 20) / b.cs + 64); b.fat = calloc(b.cap, 4); b.next = 3; b.fat[0] = 0x0FFFFFF8; b.fat[1] = 0x0FFFFFFF; b.fat[2] = 0x0FFFFFFF; u32 t[6]; z_time(t); b.dd = (t[5] - 1980) << 9 | t[4] << 5 | t[3]; b.tt = t[2] << 11 | t[1] << 5;
+    ib_t b; memset(&b, 0, sizeof b); b.f = &f; b.d = disk; b.base = st; b.cs = f.spc * ss; b.cap = MIN(f.ncl + 2, (u32)(24ULL << 20) / b.cs + 64); b.fat = calloc(b.cap, 4); b.next = 3; b.fat[0] = 0x0FFFFFF8; b.fat[1] = 0x0FFFFFFF; b.fat[2] = 0x0FFFFFFF; u32 t[6]; z_time(t); b.dd = (t[5] - 1980) << 9 | t[4] << 5 | t[3]; b.tt = t[2] << 11 | t[1] << 5;
     msg(cb, 25, "Copiando el kernel..."); u32 ck = ialloc(&b, K, kl); msg(cb, 40, "Copiando los programas..."); u32 ci = ialloc(&b, I, il); msg(cb, 60, "Copiando el cargador UEFI..."); u32 ce = ialloc(&b, E, el), cl = ialloc(&b, L, ll);
     u8 *dir = calloc(1, b.cs); u32 zz = b.next; dent(&b, dir, ".          ", 0x10, zz, 0); dent(&b, dir + 32, "..         ", 0x10, 0, 0); dent(&b, dir + 64, "KERNEL  BIN", 5, ck, kl); dent(&b, dir + 96, "INITRD  BIN", 5, ci, il); ialloc(&b, dir, b.cs);
     memset(dir, 0, b.cs); u32 ef = b.next, bt = ef + 1; dent(&b, dir, ".          ", 0x10, ef, 0); dent(&b, dir + 32, "..         ", 0x10, 0, 0); dent(&b, dir + 64, "BOOT       ", 0x10, bt, 0); ialloc(&b, dir, b.cs);
@@ -101,14 +101,14 @@ int dk_install(const char *disk, u64 total, u32 ss, dk_cb cb) {
     memset(dir, 0, b.cs); char l[11]; label11(l, "ZUNZUN"); memcpy(dir, l, 11); dir[11] = 8; dent(&b, dir + 32, "EFI        ", 0x10, ef, 0); dent(&b, dir + 64, "ZUNZUN     ", 0x10, zz, 0); dent(&b, dir + 96, "LEEME   TXT", 0x20, cl, ll); if (!e) e = wr(disk, cl_lba(&b, 2), f.spc, dir, ss); free(dir); if (b.err) return b.err; if (e) return e;
     msg(cb, 75, "Escribiendo la tabla FAT..."); u32 fs = (b.next * 4 + ss - 1) / ss; u8 *q = calloc(fs, ss); memcpy(q, b.fat, b.next * 4); e = wr(disk, st + f.rs, fs, q, ss); if (!e) e = wr(disk, st + f.rs + f.fz, fs, q, ss); free(q); if (e) return e;
     u8 *fi = calloc(1, ss); *(u32 *)fi = 0x41615252; *(u32 *)(fi + 484) = 0x61417272; *(u32 *)(fi + 488) = f.ncl - (b.next - 2); *(u32 *)(fi + 492) = b.next; fi[510] = 0x55; fi[511] = 0xAA; z_disk_write(disk, st + 1, 1, fi); z_disk_write(disk, st + 7, 1, fi); free(fi);
-    msg(cb, 85, "Comprobando lo escrito..."); for (int w = 0; w < 2; w++) { u8 *src = w ? I : K; long len = w ? il : kl; u32 c0 = w ? ci : ck; u64 secs = (len + 511) / 512; u8 *r = malloc(secs * 512); long off = 0; u64 lba = cl_lba(&b, c0); while (off < (long)(secs * 512)) { int c = MIN((secs * 512 - off) / 512, 256UL); if ((e = z_disk_read(disk, lba, c, r + off))) break; off += c * 512L; lba += c; } if (!e && memcmp(src, r, len)) e = -5; free(r); if (e) return e; }
+    msg(cb, 85, "Comprobando lo escrito..."); for (int w = 0; w < 2; w++) { u8 *src = w ? I : K; long len = w ? il : kl; u32 c0 = w ? ci : ck; u64 secs = (len + 511) / 512; u8 *r = malloc(secs * 512); long off = 0; u64 lba = cl_lba(&b, c0); while (off < (long)(secs * 512)) { int c = MIN((secs * 512 - off) / 512, 256ULL); if ((e = z_disk_read(disk, lba, c, r + off))) break; off += c * 512LL; lba += c; } if (!e && memcmp(src, r, len)) e = -5; free(r); if (e) return e; }
     msg(cb, 92, "Instalando el arranque..."); u32 secs = (bl + 511) / 512; u8 *bb = calloc(MAX(secs, 2U), 512); memcpy(bb, B, bl); if (memcmp(bb + 512, "ZZBOOT01", 8)) { free(bb); return -22; } ((u32 *)(bb + 520))[0] = cl_lba(&b, ck); ((u32 *)(bb + 520))[1] = (kl + 511) / 512; ((u32 *)(bb + 520))[2] = cl_lba(&b, ci); ((u32 *)(bb + 520))[3] = (il + 511) / 512; *(u32 *)(bb + 440) = serial(); pentry(bb + 446, 1, 0x0C, st, n); bb[510] = 0x55; bb[511] = 0xAA;
     e = wr(disk, 1, secs - 1, bb + 512, ss); if (!e) e = z_disk_write(disk, 0, 1, bb); free(bb); free(b.fat); z_sync(); if (!e) { z_disk_rescan(disk); char mn[24], dst[60]; snprintf(mn, 24, "%sp1", disk); z_set_ro(mn, 0); snprintf(dst, 60, "/%s/PROGRAMAS", mn); zdirent de; if (!z_stat("/sys/PROGRAMAS", &de)) { msg(cb, 96, "Copiando apps web..."); z_mkdir(dst); char a[360], c[360]; for (int i = 0; !z_readdir("/sys/PROGRAMAS", i, &de); i++) if (!de.is_dir) { snprintf(a, 360, "/sys/PROGRAMAS/%s", de.name); snprintf(c, 360, "%s/%s", dst, de.name); long l; char *dt = z_readfile(a, &l); if (dt) { z_writefile(c, dt, l); free(dt); } } } z_set_ro(mn, 1); } msg(cb, 100, e ? "Error" : "Instalado"); return e;
 }
 /* Sustituye kernel, programas y cargador UEFI de forma segura: primero se escriben y
  * comprueban copias nuevas, luego se apunta el arranque a ellas y al final se renombran. */
 void dk_root(const char *d, char *o) { strncpy0(o, d, 16); char *p = strrchr(o, 'p'); if (p && p > o && isdigit(p[1]) && isdigit(p[-1])) *p = 0; }
-static int put_contig(const char *disk, u64 start, const char *path, const u8 *d, long n, u64 *lba) { z_unlink(path); int e = z_fat_contig(path, n, lba); if (e) return e; int f = z_open(path, O_WRITE); if (f < 0) return f; long w = z_write(f, d, n); z_close(f); z_sync(); if (w != n) return -5; u64 s = (n + 511) / 512; u8 *r = malloc(s * 512); u64 off = 0; while (off < s && !e) { int c = MIN(s - off, 256UL); e = z_disk_read(disk, start + *lba + off, c, r + off * 512); off += c; } if (!e && memcmp(r, d, n)) e = -5; free(r); return e; }
+static int put_contig(const char *disk, u64 start, const char *path, const u8 *d, long n, u64 *lba) { z_unlink(path); int e = z_fat_contig(path, n, lba); if (e) return e; int f = z_open(path, O_WRITE); if (f < 0) return f; long w = z_write(f, d, n); z_close(f); z_sync(); if (w != n) return -5; u64 s = (n + 511) / 512; u8 *r = malloc(s * 512); u64 off = 0; while (off < s && !e) { int c = MIN(s - off, 256ULL); e = z_disk_read(disk, start + *lba + off, c, r + off * 512); off += c; } if (!e && memcmp(r, d, n)) e = -5; free(r); return e; }
 int dk_update_system(const char *mn, const char *dev, const char *kp, const char *ip, const char *ep, const char *bp, dk_cb cb) {
     char disk[16], p[80], q[80]; dk_root(dev, disk); zpart pt[16]; int np = z_parts(disk, pt, 16); u64 start = 0; int found = 0; for (int i = 0; i < np; i++) if (!strcmp(pt[i].name, dev)) { start = pt[i].start; found = 1; } if (!found) return -22; u8 *s1 = malloc(512); int e = z_disk_read(disk, 1, 1, s1); if (e || memcmp(s1, "ZZBOOT01", 8)) { free(s1); return e ? e : -22; }
     long kl, il, el = 0, bl = 0; msg(cb, 5, "Leyendo el sistema nuevo..."); u8 *K = z_readfile(kp, &kl), *I = z_readfile(ip, &il), *E = ep ? z_readfile(ep, &el) : 0, *B = bp ? z_readfile(bp, &bl) : 0; if (!K || !I || memcmp(K, "ZUNKERN1", 8) || memcmp(I, "ZRD1", 4)) { free(s1); return -22; } u64 kb, ib;

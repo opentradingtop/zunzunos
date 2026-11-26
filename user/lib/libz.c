@@ -26,12 +26,14 @@ extern void z_thread_entry(void);
 int z_thread(void (*fn)(void *), void *arg, int stack) {
     if (!stack) stack = 65536;
     u64 *m = malloc(stack); if (!m) return -12;
-    u64 *t = (u64 *)(((u64)m + stack - 64) & ~15UL), *a = malloc(16);
+    u64 *t = (u64 *)(((u64)m + stack - 64) & ~15ULL), *a = malloc(16);
     a[0] = (u64)fn; a[1] = (u64)arg;
     return sc5(10, (long)z_thread_entry, (long)t, (long)a, 0, 0);
 }
+#ifndef __arm__   /* en ARM estan en user/lib/arm/mates.c */
 void *memcpy(void *d, const void *s, size_t n) { void *r = d; __asm__ volatile("rep movsb" : "+D"(d), "+S"(s), "+c"(n) : : "memory"); return r; }
 void *memset(void *d, int v, size_t n) { void *r = d; __asm__ volatile("rep stosb" : "+D"(d), "+c"(n) : "a"(v) : "memory"); return r; }
+#endif
 void *memmove(void *d, const void *s, size_t n) { u8 *a = d; const u8 *b = s; if (a <= b || a >= b + n) return memcpy(d, s, n); while (n--) a[n] = b[n]; return d; }
 int memcmp(const void *x, const void *y, size_t n) { const u8 *a = x, *b = y; for (; n; n--, a++, b++) if (*a != *b) return *a - *b; return 0; }
 size_t strlen(const char *s) { size_t n = 0; while (s[n]) n++; return n; }
@@ -57,8 +59,8 @@ double atof(const char *s) {
     if (*s == '.' || *s == ',') { s++; while (isdigit(*s)) { v += (*s++ - '0') * f; f /= 10; } }
     return g ? -v : v;
 }
-static u64 rs = 0x9E3779B97F4A7C15UL;
-u32 rnd(void) { if (rs == 0x9E3779B97F4A7C15UL) rs ^= __builtin_ia32_rdtsc(); rs ^= rs << 13; rs ^= rs >> 7; rs ^= rs << 17; return rs >> 16; }
+static u64 rs = 0x9E3779B97F4A7C15ULL;
+u32 rnd(void) { if (rs == 0x9E3779B97F4A7C15ULL) rs ^= z_cycles(); rs ^= rs << 13; rs ^= rs >> 7; rs ^= rs << 17; return rs >> 16; }
 int utf8_next(const char **ps) {
     const u8 *s = (const u8 *)*ps; u32 c = *s; int n = 0;
     if (!c) return 0;
@@ -74,7 +76,7 @@ int utf8_put(u32 c, char *o) {
 typedef struct blk { size_t size; struct blk *next; } blk;
 static blk *fl;
 void *malloc(size_t n) {
-    n = (n + 15) & ~15UL; if (!n) n = 16;
+    n = (n + 15) & ~15ULL; if (!n) n = 16;
     blk **p = &fl;
     for (blk *b = fl; b; p = &b->next, b = b->next) if (b->size >= n) {
         if (b->size >= n + 64) { blk *r = (blk *)((u8 *)(b + 1) + n); r->size = b->size - n - sizeof(blk); r->next = b->next; *p = r; b->size = n; } else *p = b->next;
@@ -185,6 +187,7 @@ int z_parse_ip(const char *s, u32 *ip) {
 }
 void z_fmt_ip(u32 ip, char *o) { snprintf(o, 16, "%u.%u.%u.%u", ip & 255, ip >> 8 & 255, ip >> 16 & 255, ip >> 24); }
 
+#ifndef __arm__
 /* matematicas con x87 */
 double z_sqrt(double x) { __asm__("fsqrt" : "+t"(x)); return x; }
 double z_sin(double x) { __asm__("fsin" : "+t"(x)); return x; }
@@ -195,5 +198,6 @@ double z_ln(double x) { double o; __asm__("fldln2; fxch; fyl2x" : "=t"(o) : "0"(
 double z_exp(double x) { double o; __asm__("fldln2; fdivrp; fld %%st(0); frndint; fsub %%st, %%st(1); fxch; f2xm1; fld1; faddp; fscale; fstp %%st(1)" : "=t"(o) : "0"(x)); return o; }
 double z_pow(double a, double b) { if (a == 0) return b == 0 ? 1 : 0; if (a < 0) { long i = (long)b; if ((double)i != b) return 0; double r = z_exp(z_ln(-a) * b); return i & 1 ? -r : r; } return z_exp(z_ln(a) * b); }
 double z_floor(double x) { long i = (long)x; double d = i; return d > x ? d - 1 : d; }
+#endif
 double z_fabs(double x) { return x < 0 ? -x : x; }
 int strncasecmp(const char *a, const char *b, size_t n) { for (; n; n--, a++, b++) { int x = tolower((u8)*a), y = tolower((u8)*b); if (x != y) return x - y; if (!x) break; } return 0; }

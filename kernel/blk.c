@@ -108,6 +108,10 @@ static void scan_parts(blkdev_t *d) {
 }
 
 /* ===== IDE / ATAPI (PIO) ===== */
+#ifdef __arm__
+/* la Raspberry Pi no tiene ATA, AHCI ni NVMe: solo la tarjeta SD (sdhci.c) */
+void ata_init(void) {} void ahci_init(void) {} void nvme_init(void) {}
+#else
 typedef struct { u16 io, ctl; int slave, atapi, lba48; } ata_t;
 static int ata_wait(ata_t *a, u8 mask, u8 val, int ms) {
     u64 end = ticks + ms;
@@ -293,3 +297,4 @@ void nvme_init(void) {
         dma_free(id, 4096); if (sz) blk_register(d);
     }
 }
+#endif

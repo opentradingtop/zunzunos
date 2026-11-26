@@ -112,7 +112,7 @@ static void granule(zmp3 *e, const float *xr, int budget, gi_t *g, int *ix, int 
     quant(a34, lo, ix); g->p23 = count(ix, g, e->sfb, c1end); g->gg = lo; }
 
 static int frame(zmp3 *e, u8 *out) {
-    int br = KBPS[e->bri] * 1000, fb = 144 * br / e->rate, pad = 0; e->rem += 144L * br % e->rate; if (e->rem >= e->rate) { e->rem -= e->rate; pad = 1; } fb += pad;
+    int br = KBPS[e->bri] * 1000, fb = 144 * br / e->rate, pad = 0; e->rem += 144LL * br % e->rate; if (e->rem >= e->rate) { e->rem -= e->rate; pad = 1; } fb += pad;
     int side = e->ch == 1 ? 17 : 32; static float xr[2][2][576]; static int ix[2][2][576]; gi_t g[2][2]; int c1e[2][2];
     for (int gr = 0; gr < 2; gr++) for (int c = 0; c < e->ch; c++) analyze(e, c, e->in[c] + gr * 576, xr[gr][c]);
     int left = fb * 8 - 32 - side * 8, parts = 2 * e->ch;

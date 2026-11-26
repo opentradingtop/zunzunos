@@ -49,7 +49,7 @@ char *zr_read(const char *path, long *len, char *err, int ecap, int (*pump)(void
         r = z_readfile(out, 0); z_unlink(out); if (!r && err) strncpy0(err, tr("no tiene texto legible"), ecap); }
     else if (z_ends(path, ".html") || z_ends(path, ".htm")) { char *h = z_readfile(path, 0); if (h) { r = strip_tags(h); free(h); } }
     else if (z_ends(path, ".xlsx")) { long n; u8 *d = z_readfile(path, &n); if (d) { r = xlsx_text(d, n); free(d); } }
-    else { long n; r = doc_import(path, &n); if (r) { long bin = 0; for (long i = 0; i < MIN(n, 4096L); i++) if (!r[i] || ((u8)r[i] < 9)) bin++; if (bin > 8) { free(r); r = 0; if (err) strncpy0(err, tr("no es un documento de texto"), ecap); } } }
+    else { long n; r = doc_import(path, &n); if (r) { long bin = 0; for (long i = 0; i < MIN(n, 4096LL); i++) if (!r[i] || ((u8)r[i] < 9)) bin++; if (bin > 8) { free(r); r = 0; if (err) strncpy0(err, tr("no es un documento de texto"), ecap); } } }
     if (!r) { if (err && !err[0]) strncpy0(err, tr("no se pudo leer"), ecap); return 0; }
     /* sin espacios al final de las lineas, sin \r, saltos de pagina como linea en blanco y como mucho una linea vacia seguida */
     long w = 0, nl = 0; for (long i = 0; r[i]; i++) { char c = r[i]; if (c == '\r') continue; if (c == '\f') c = '\n'; if (c == '\t') c = ' ';

@@ -316,7 +316,7 @@ zmp3d *mp3d_new(void) { init(); return calloc(1, sizeof(zmp3d)); }
    los bytes consumidos (0: no queda ningun cuadro). pcm puede ser 0 para solo recorrer el archivo (duracion). */
 int mp3d_frame(zmp3d *d, const u8 *b, long n, short *pcm, int *used, int *hz, int *ch) {
     long i = 0; hdr_t h; *used = 0;
-    if (n >= 10 && !memcmp(b, "ID3", 3)) { long t = 10 + ((b[6] & 127L) << 21 | (b[7] & 127L) << 14 | (b[8] & 127L) << 7 | (b[9] & 127L)) + (b[5] & 0x10 ? 10 : 0);
+    if (n >= 10 && !memcmp(b, "ID3", 3)) { long t = 10 + ((b[6] & 127LL) << 21 | (b[7] & 127LL) << 14 | (b[8] & 127LL) << 7 | (b[9] & 127LL)) + (b[5] & 0x10 ? 10 : 0);
         if (t <= n) { *used = (int)t; return 0; } return 0; }
     for (; i + 4 <= n; i++) {
         if (!parse_hdr(b + i, &h)) continue;

@@ -10,9 +10,9 @@
 #define SB 22
 #define MAXE 2000
 static zwin *W; static char msg[300], srv[128], auth[80], email[128], fixed_srv[128];
-typedef struct { char name[200]; long long id; long size, mtime; int dir; } ent_t;
+typedef struct { char name[200]; i64 id; long size, mtime; int dir; } ent_t;
 static ent_t *E; static int ne, top, sel = -1;
-static struct { long long id; char name[120]; } ST[32]; static int nst;   /* carpetas abiertas, desde la raiz */
+static struct { i64 id; char name[120]; } ST[32]; static int nst;   /* carpetas abiertas, desde la raiz */
 static long quota, used; static int busy;
 /* formulario de entrada */
 static char f_mail[128], f_pass[128]; static int f_foc, f_cur;
@@ -24,13 +24,13 @@ static void kv(const char *t, const char *k, char *o, int cap) { int l = strlen(
 static void cfg_load(void) { char *t = z_readfile(CFG, 0); kv(t, "servidor", srv, 128); kv(t, "llave", auth, 80); kv(t, "correo", email, 128); kv(t, "servidor_fijo", fixed_srv, 128); free(t); }
 static int cfg_save(void) { sb_t b = {0}; sb_f(&b, "servidor=%s\nllave=%s\ncorreo=%s\n", srv, auth, email); if (fixed_srv[0]) sb_f(&b, "servidor_fijo=%s\n", fixed_srv); z_mkdir("/sys/ZUNZUN"); int e = z_writefile(CFG, b.p, b.n); free(b.p); z_sync(); return e; }
 static void enc(sb_t *b, const char *s) { static const char hx[] = "0123456789ABCDEF"; for (const u8 *p = (const u8 *)s; *p; p++) { if (isalnum(*p) || *p == '-' || *p == '_' || *p == '.' || *p == '~') sb_add(b, (const char *)p, 1); else { char t[3] = {'%', hx[*p >> 4], hx[*p & 15]}; sb_add(b, t, 3); } } }
-static long long jint(const char *v, const char *e) { if (!v) return 0; while (v < e && (*v == ' ' || *v == '"')) v++; int neg = v < e && *v == '-'; if (neg) v++; long long n = 0; while (v < e && *v >= '0' && *v <= '9') n = n * 10 + *v++ - '0'; return neg ? -n : n; }
-static void human(long n, char *o, int cap) { if (n < 1024) snprintf(o, cap, "%ld B", n); else if (n < 1048576) snprintf(o, cap, "%ld KB", (n + 1023) / 1024); else if (n < 1073741824L) snprintf(o, cap, "%ld.%ld MB", n / 1048576, n % 1048576 * 10 / 1048576); else snprintf(o, cap, "%ld.%ld GB", n / 1073741824L, n % 1073741824L * 10 / 1073741824L); }
+static i64 jint(const char *v, const char *e) { if (!v) return 0; while (v < e && (*v == ' ' || *v == '"')) v++; int neg = v < e && *v == '-'; if (neg) v++; i64 n = 0; while (v < e && *v >= '0' && *v <= '9') n = n * 10 + *v++ - '0'; return neg ? -n : n; }
+static void human(long n, char *o, int cap) { if (n < 1024) snprintf(o, cap, "%ld B", n); else if (n < 1048576) snprintf(o, cap, "%ld KB", (n + 1023) / 1024); else if (n < 1073741824LL) snprintf(o, cap, "%ld.%ld MB", n / 1048576, n % 1048576 * 10 / 1048576); else snprintf(o, cap, "%ld.%ld GB", n / 1073741824LL, n % 1073741824LL * 10 / 1073741824LL); }
 void draw(void);
 static int pump(void *c) { zevent e; while (z_event(&e, 0)) { if (e.type == EV_REDRAW) draw(); if (e.type == EV_CLOSE && e.win == (u32)W->id) return 1; } return 0; }
 
 /* ---------- llamadas a la API: GET {srv}/metodo?parametros; respuesta JSON con "result" (0 = bien) ---------- */
-typedef struct { char *b; long n; long long result; char err[160]; } resp_t;
+typedef struct { char *b; long n; i64 result; char err[160]; } resp_t;
 static void resp_free(resp_t *r) { free(r->b); r->b = 0; }
 /* q: parametros ya codificados ("a=1&b=2"), sin la llave; la llave se anade si hay sesion */
 static int api(const char *base, const char *method, const char *q, int with_auth, resp_t *r) {
@@ -96,7 +96,7 @@ static void upload(void) { char p[260]; if (!z_pick_file(tr("Subir a pCloud"), 0
     const char *nm = strrchr(p, '/'); nm = nm ? nm + 1 : p; sb_t u = {0}; sb_f(&u, "%s/uploadfile?auth=", srv); enc(&u, auth); sb_f(&u, "&folderid=%lld&nopartial=1&renameifexists=1&filename=", ST[nst - 1].id); enc(&u, nm);
     char a[24]; human(n, a, 24); snprintf(msg, 300, "%s %s (%s)...", tr("Subiendo"), nm, a); draw();
     zhttp_opt o = {0, 0, pump, 0, 120000}; zhttp_info inf; char *b = 0; long bl = 0; busy = 1; int e = z_http_ex("PUT", u.p, d, n, "application/octet-stream", &o, &b, &bl, &inf); busy = 0; free(u.p); free(d);
-    long long res = -1; if (!e && b) { const char *v = zj_get(b, b + bl, "result"); if (v) res = jint(v, b + bl); }
+    i64 res = -1; if (!e && b) { const char *v = zj_get(b, b + bl, "result"); if (v) res = jint(v, b + bl); }
     if (e || res) { snprintf(msg, 300, "%s: %s", tr("No se pudo subir"), e ? z_http_err(e) : b ? b : "?"); free(b); return; } free(b);
     char lg[400]; snprintf(lg, 400, "[prueba] nube subido %s: %ld bytes", nm, n); z_log(lg); list_dir(); snprintf(msg, 300, "%s %s", tr("Subido"), nm); }
 static void mkdir_(void) { char n[120] = ""; if (!ui_prompt("Nueva carpeta", "Nombre:", n, 110) || !n[0]) return; sb_t q = {0}; sb_f(&q, "folderid=%lld&name=", ST[nst - 1].id); enc(&q, n); resp_t r; int e = call("createfolderifnotexists", q.p, &r); free(q.p); resp_free(&r); if (!e) { char lg[200]; snprintf(lg, 200, "[prueba] nube carpeta creada %s", n); z_log(lg); list_dir(); } }

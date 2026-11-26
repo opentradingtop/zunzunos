@@ -3,7 +3,7 @@
 #define NAPP z_napps
 #define S_ ((int)TH.text_sc)
 #define PH (36 + (S_ - 1) * 16)
-#define MI (28 * S_)
+#define MI (si.scr_h < 600 ? 24 : 28 * S_)   /* filas del menu Inicio (mas bajas en la pantalla de 480x320) */
 #define IS (TH.icon_sc == 0 ? 32 : TH.icon_sc == 2 ? 64 : 44)
 #define IW (IS + 64 + (S_ - 1) * 92)
 #define IH (IS + 40 + (S_ - 1) * 16)
@@ -17,14 +17,15 @@ static int guest(void) { return (sess() & 7) == 2; }
 static int admin_only(const char *b) { static const char *L[] = {"config", "instalar", "discos", "rescate", "restaurar", "forense", "nube", "clonar"}; for (int i = 0; i < 8; i++) if (!strcmp(b, L[i])) return 1; return 0; }
 static int bar_y(void) { return TH.panel_top ? 0 : si.scr_h - PH; }
 static void T_(zwin *w, int x, int y, const char *s, u32 c) { if (S_ > 1) g_text2(w, x, y, s, c, S_); else g_text(w, x, y, s, c); }
-static void visible(void) { nvis = 0; int g = guest(); for (int i = 0; i < NAPP && nvis < 64; i++) if (!z_hidden(z_apps[i].bin) && !(g && admin_only(z_apps[i].bin))) vis[nvis++] = i; }
+static int has_bin(const char *b) { char p[64]; zdirent d; snprintf(p, 64, "/rd/bin/%s", b); return !z_stat(p, &d); }   /* en la Pi faltan algunos */
+static void visible(void) { nvis = 0; int g = guest(); for (int i = 0; i < NAPP && nvis < 64; i++) if (!z_hidden(z_apps[i].bin) && !(g && admin_only(z_apps[i].bin)) && has_bin(z_apps[i].bin)) vis[nvis++] = i; }
 static void load_wall(void) { char p[160]; z_cfg_gets("fondo", p, 160); if (!strcmp(p, wall_p) && (wall || !p[0])) return; strcpy(wall_p, p); free(wall); wall = 0; if (p[0] && z_img_load(p, &wall, &wall_w, &wall_h)) wall = 0; }
 static void load_clock(void) { h24 = z_cfg_get("reloj24", 1); secs = z_cfg_get("segundos", 0); dfmt = z_cfg_get("fecha", 1); }
 static int cfg_load(void) { zdirent st; if (z_stat("/sys", &st)) return 0; ztheme t; z_theme_get(&t); if (!z_theme_load(&t)) { t.lang = z_cfg_get("idioma", 0); z_theme_set(&t); } else { t.lang = z_cfg_get("idioma", 0); if (t.lang != TH.lang) z_theme_set(&t); } bright = z_cfg_get("brillo", z_bright_get() & 255); z_bright_set(bright); vol = z_cfg_get("volumen", z_audio_vol(-1)); z_audio_vol(vol); z_setlayout(z_cfg_get("teclado", 1)); return 1; }
 static void diag(void) { zdirent d; if (z_stat("/sys", &d)) return; char *b = malloc(90000); int n = snprintf(b, 2000, "ZunzunOS diagnostico\nPCI:\n"); zpci p[64]; int k = z_pci(p, 64); for (int i = 0; i < k; i++) n += snprintf(b + n, 80, "%02x:%02x.%d %04x:%04x clase %02x.%02x.%02x\n", p[i].bus, p[i].dev, p[i].fn, p[i].vendor, p[i].device, p[i].cls, p[i].sub, p[i].pif); n += snprintf(b + n, 40, "\nREGISTRO:\n"); n += z_dmesg(b + n, 65536); z_writefile("/sys/DIAGNOST.TXT", b, n); free(b); }
 static void launch(const char *b, const char *arg) { char p[64]; snprintf(p, 64, "/rd/bin/%s", b); int r = z_spawn(p, arg ? arg : ""); if (r < 0) { char m[120]; snprintf(m, 120, "%s %s: %s", _("No se pudo abrir"), b, z_errstr(r)); ui_confirm("Error", m); } }
 static void bird(zwin *w, int x, int y, int s, u32 c, u32 d) { for (int i = 0; i < s; i++) { int h = i * 3 / 5; g_rect(w, x + i, y - h / 2 + s / 6, 1, h + 1, c); } g_circle(w, x + s + s / 8, y + s / 8, s / 4, d, 1); g_line(w, x + s + s / 3, y + s / 8, x + s * 2, y, d); for (int i = 0; i < s / 2; i++) g_line(w, x + s / 2 + i, y - i / 8, x + s / 4 + i / 2, y - s / 2 - i / 3, d); }
-static void draw_wall(zwin *w) { int m = z_cfg_get("fondo_modo", 0), W = w->w, H = w->h; g_rect(w, 0, 0, W, H, TH.d1); if (m == 3) { for (int y = 0; y < H; y += wall_h) for (int x = 0; x < W; x += wall_w) g_image(w, x, y, wall_w, wall_h, wall); return; } if (m == 2) { g_image(w, (W - wall_w) / 2, (H - wall_h) / 2, wall_w, wall_h, wall); return; } long sw = W * 1024L / wall_w, sh = H * 1024L / wall_h, s = m == 0 ? MAX(sw, sh) : MIN(sw, sh); int dw = m == 4 ? W : wall_w * s / 1024, dh = m == 4 ? H : wall_h * s / 1024, ox = (W - dw) / 2, oy = (H - dh) / 2; for (int y = MAX(0, oy); y < MIN(H, oy + dh); y++) { u32 *o = w->px + y * W, *r = wall + (long)(y - oy) * wall_h / dh * wall_w; for (int x = MAX(0, ox); x < MIN(W, ox + dw); x++) o[x] = r[(long)(x - ox) * wall_w / dw]; } }
+static void draw_wall(zwin *w) { int m = z_cfg_get("fondo_modo", 0), W = w->w, H = w->h; g_rect(w, 0, 0, W, H, TH.d1); if (m == 3) { for (int y = 0; y < H; y += wall_h) for (int x = 0; x < W; x += wall_w) g_image(w, x, y, wall_w, wall_h, wall); return; } if (m == 2) { g_image(w, (W - wall_w) / 2, (H - wall_h) / 2, wall_w, wall_h, wall); return; } long sw = W * 1024LL / wall_w, sh = H * 1024LL / wall_h, s = m == 0 ? MAX(sw, sh) : MIN(sw, sh); int dw = m == 4 ? W : wall_w * s / 1024, dh = m == 4 ? H : wall_h * s / 1024, ox = (W - dw) / 2, oy = (H - dh) / 2; for (int y = MAX(0, oy); y < MIN(H, oy + dh); y++) { u32 *o = w->px + y * W, *r = wall + (long)(y - oy) * wall_h / dh * wall_w; for (int x = MAX(0, ox); x < MIN(W, ox + dw); x++) o[x] = r[(long)(x - ox) * wall_w / dw]; } }
 /* iconos del escritorio: apps por familias (una columna nueva por familia) y lo que hay en la carpeta Escritorio */
 typedef struct { short kind, idx, x, y; } dic_t; static dic_t IC[160]; static int nic; static char DESK[48];
 typedef struct { char name[64]; u8 dir; } dent_t; static dent_t DE[64]; static int nde;
@@ -70,7 +71,13 @@ static void draw_icons(zwin *w) { int x = icons_x(), cy = PH / 2;
         if (bat[2]) { g_line(w, bx + 12, by + 1, bx + 9, by + 6, 0x111827); g_line(w, bx + 9, by + 6, bx + 14, by + 6, 0x111827); g_line(w, bx + 14, by + 6, bx + 11, by + 11, 0x111827); }
         char t[8]; snprintf(t, 8, "%d%%", pc); g_text(w, bx + 27, cy - 8, t, 0xFFFFFF); }
     if (!prn_st) return; x += ICW + 4; u32 pc = prn_st == 3 ? 0xFCA5A5 : 0xE5E7EB; g_rect(w, x + 7, cy - 9, 12, 6, 0xF8FAFC); g_round(w, x + 3, cy - 4, 20, 10, 2, pc); g_rect(w, x + 7, cy + 4, 12, 5, 0xF8FAFC); if (prn_st == 2) g_circle(w, x + 21, cy - 7, 4, 0x38BDF8, 1); if (prn_st == 3) g_circle(w, x + 21, cy - 7, 4, 0xEF4444, 1); }
-static void draw_bar(void) { zwin *w = bar; g_grad(w, 0, 0, w->w, PH, TH.panel1, TH.panel2); g_rect(w, 0, TH.panel_top ? PH - 1 : 0, w->w, 1, TH.acc); int th = 16 * S_, ty = (PH - th) / 2, bw = 96 * S_; g_round(w, 6, 5, bw, PH - 10, 4, TH.acc); bird(w, 12, PH / 2 + 1, 12, 0xFFFFFF, TH.ui_acc2); T_(w, 40, ty, _("Inicio"), 0xFFFFFF); nw = zw_list(wl, 32); int x = bw + 16, tx = icons_x(); tb_w = nw ? MIN(170 * S_, (tx - x - 6) / nw) : 170; for (int i = 0; i < nw; i++) { int foc = wl[i].state & 0x100, min = wl[i].state & 1; tb_x[i] = x; g_round(w, x, 5, tb_w - 4, PH - 10, 3, foc ? TH.acc : min ? TH.panel2 : TH.inact); zw_clip(w, x + 6, 5, tb_w - 16, PH - 10); T_(w, x + 8, ty, wl[i].title, min ? 0x9CA3AF : 0xFFFFFF); zw_noclip(w); x += tb_w; } draw_icons(w); if (toast[0] && z_ms() < toast_until) { int tw = g_textw(toast) + 20, x0 = MAX(bw + 16, icons_x() - tw - 8); g_round(w, x0, 4, tw, PH - 8, 4, 0x065F46); g_text(w, x0 + 10, (PH - 16) / 2, toast, 0xFFFFFF); } tx = tray_x(); g_round(w, tx, 5, TRAY - 8, PH - 10, 4, qs ? TH.acc : TH.inact); g_glyph(w, tx + 10 * S_, PH / 2 - 8, 15, 0xFDE68A); g_glyph(w, tx + 40 * S_, PH / 2 - 8, 14, 0xBFDBFE); z_flag(w, tx + TRAY + 2, PH / 2 - 10, TH.lang); T_(w, w->w - clock_w() - 12, ty, clk, 0xE5E7EB); zw_present(w); }
+/* teclado en pantalla (solo con pantalla tactil, p. ej. la Raspberry Pi): boton en la barra, junto a Inicio */
+static int osk_ok, osk_shown;
+#define KBX (96 * S_ + 12)
+#define KBW (34 * S_)
+static void draw_kb_btn(zwin *w) { if (!osk_ok) return; osk_shown = zw_op(bar->id, 20, 2, 0) > 0; g_round(w, KBX, 5, KBW - 4, PH - 10, 4, osk_shown ? TH.acc : TH.inact); int x0 = KBX + (KBW - 4) / 2 - 11, y0 = PH / 2 - 7;
+    g_round(w, x0, y0, 22, 14, 2, 0xE5E7EB); for (int r = 0; r < 2; r++) for (int c = 0; c < 5; c++) g_rect(w, x0 + 2 + c * 4, y0 + 2 + r * 4, 3, 3, TH.panel2); g_rect(w, x0 + 5, y0 + 10, 12, 2, TH.panel2); }
+static void draw_bar(void) { zwin *w = bar; g_grad(w, 0, 0, w->w, PH, TH.panel1, TH.panel2); g_rect(w, 0, TH.panel_top ? PH - 1 : 0, w->w, 1, TH.acc); int th = 16 * S_, ty = (PH - th) / 2, bw = 96 * S_; g_round(w, 6, 5, bw, PH - 10, 4, TH.acc); bird(w, 12, PH / 2 + 1, 12, 0xFFFFFF, TH.ui_acc2); T_(w, 40, ty, _("Inicio"), 0xFFFFFF); nw = zw_list(wl, 32); int x = bw + 16 + (osk_ok ? KBW : 0), tx = icons_x(); draw_kb_btn(w); tb_w = nw ? MIN(170 * S_, (tx - x - 6) / nw) : 170; for (int i = 0; i < nw; i++) { int foc = wl[i].state & 0x100, min = wl[i].state & 1; tb_x[i] = x; g_round(w, x, 5, tb_w - 4, PH - 10, 3, foc ? TH.acc : min ? TH.panel2 : TH.inact); zw_clip(w, x + 6, 5, tb_w - 16, PH - 10); T_(w, x + 8, ty, wl[i].title, min ? 0x9CA3AF : 0xFFFFFF); zw_noclip(w); x += tb_w; } draw_icons(w); if (toast[0] && z_ms() < toast_until) { int tw = g_textw(toast) + 20, x0 = MAX(bw + 16, icons_x() - tw - 8); g_round(w, x0, 4, tw, PH - 8, 4, 0x065F46); g_text(w, x0 + 10, (PH - 16) / 2, toast, 0xFFFFFF); } tx = tray_x(); g_round(w, tx, 5, TRAY - 8, PH - 10, 4, qs ? TH.acc : TH.inact); g_glyph(w, tx + 10 * S_, PH / 2 - 8, 15, 0xFDE68A); g_glyph(w, tx + 40 * S_, PH / 2 - 8, 14, 0xBFDBFE); z_flag(w, tx + TRAY + 2, PH / 2 - 10, TH.lang); T_(w, w->w - clock_w() - 12, ty, clk, 0xE5E7EB); zw_present(w); }
 #define QW 260
 #define QH 104
 static void draw_qs(void) { zwin *w = qs; g_clear(w, TH.panel1); g_frame(w, 0, 0, w->w, w->h, TH.acc); char b[48]; for (int k = 0; k < 2; k++) { int y = 12 + k * 46, v = k ? vol : bright; snprintf(b, 48, "%s  %d%%", k ? _("Volumen") : _("Brillo"), v); g_text(w, 14, y, b, 0xFFFFFF); g_round(w, 14, y + 20, QW - 28, 8, 3, 0x4B5563); g_round(w, 14, y + 20, MAX(8, (QW - 28) * v / 100), 8, 3, k ? 0x38BDF8 : 0xFBBF24); g_circle(w, 14 + (QW - 28) * v / 100, y + 24, 7, 0xFFFFFF, 1); } zw_present(w); }
@@ -143,7 +150,7 @@ static void new_folder(void) { char n[64] = ""; if (!ui_prompt("Nueva carpeta", 
 static void new_doc(void) { char n[64] = ""; if (!ui_prompt("Nuevo documento de texto", "Nombre:", n, 56) || !n[0]) return; if (!z_ends(n, ".txt")) strcat(n, ".txt"); char p[160]; snprintf(p, 160, "%s/%s", DESK, n); int f = z_open(p, O_WRITE | O_CREATE); if (f >= 0) z_close(f); z_sync(); desk_scan(); draw_bg(); }
 static void desk_ctx(int k, int sx, int sy) { static const char *it[] = {"Abrir", "Renombrar", "Mover a la papelera", "Copiar", "Cortar"}; int r = ui_menu(sx, sy, it, 5); char p[160]; desk_path(k, p); if (r == 3 || r == 4) { char c[200]; int l = snprintf(c, 200, "ZFILES1 %c\n%s\n", r == 4 ? 'X' : 'C', p); z_clip_set(c, l); return; } if (r == 0) z_open_path(p); else if (r == 1) { char n[64]; strncpy0(n, DE[k].name, 64); if (ui_prompt("Renombrar", "Nuevo nombre:", n, 60) && n[0]) { char q[160]; snprintf(q, 160, "%s/%s", DESK, n); z_rename(p, q); z_sync(); } } else if (r == 2) { z_trash(p); z_sync(); } desk_scan(); draw_bg(); }
 static void tick_clock(void) { u32 t[6]; z_time(t); char a[24], b[40], n[48]; z_fmt_time(t, h24, secs, a, 24); z_fmt_date(t, dfmt, b, 40); if (b[0]) snprintf(n, 48, "%s  %s", a, b); else strcpy(n, a); if (strcmp(n, clk)) { strcpy(clk, n); draw_bar(); } }
-static void make_bar(void) { if (bar) zw_close(bar); bar = zw_new("Panel", 0, bar_y(), si.scr_w, PH, WF_PANEL); }
+static void make_bar(void) { if (bar) zw_close(bar); bar = zw_new("Panel", 0, bar_y(), si.scr_w, PH, WF_PANEL); int k = zw_op(bar->id, 20, 2, 0); osk_ok = k >= 0; osk_shown = k > 0; }
 static void power_cfg(void);
 static void reload(void) { power_cfg(); z_theme_get(&TH); visible(); desk_scan(); load_wall(); load_clock(); close_menu(); close_cal(); make_bar(); clk[0] = 0; tick_clock(); draw_bg(); draw_bar(); }
 static void set_lang(int l) { ztheme t; z_theme_get(&t); t.lang = l; z_theme_set(&t); z_cfg_set("idioma", l); char m[40]; snprintf(m, 40, "[prueba] idioma %d", l); z_log(m); }
@@ -157,22 +164,32 @@ static void lbtn(zwin *w, int x, int y, int bw, int bh, const char *s, u32 bgc) 
 #define LCY ((int)lk->h / 2)
 static const char *ltitle(void) { switch (lst) { case L_PIN: return unlocking ? "Pantalla bloqueada: introduce tu PIN" : "Introduce tu PIN"; case L_NEW1: return "Crea un PIN de 4 cifras para el administrador"; case L_NEW2: case L_CHG2: return "Repite el PIN"; case L_OLD: return "PIN actual"; case L_CHG1: return "PIN nuevo"; } return ""; }
 static const char *lsecond(void) { return lst == L_NEW1 || lst == L_NEW2 ? "Ahora no" : lst >= L_OLD && lst <= L_CHG2 ? "Cancelar" : 0; }
+/* pantalla pequena (la de 3,5" de la Raspberry Pi, 480x320): todo en una sola pagina, sin el reloj grande */
+static int lsmall(void) { return lk->h < 600; }
+static void card_xy(int k, int *x, int *y, int *sz) { if (lsmall()) { *sz = 190; *x = LCX - 200 + k * 210; *y = 46; } else { *sz = 200; *x = LCX - 220 + k * 240; *y = LCY - 100; } }
+static void kp_rect(int i, int *x, int *y, int *bw, int *bh) { int r = i / 3, c = i % 3; if (lsmall()) { *bw = 64; *bh = 50; *x = (int)lk->w - 232 + c * 72; *y = 46 + r * 56; } else { *bw = 72; *bh = 56; *x = LCX - 120 + c * 84; *y = LCY - 100 + r * 68; } }
+static int pin_cx(void) { return lsmall() ? ((int)lk->w - 232) / 2 + 4 : LCX; }
+static void sb_rect(int *x, int *y) { if (lsmall()) { *x = pin_cx() - 90; *y = 210; } else { *x = LCX - 90; *y = LCY + 186; } }
 static void draw_lock(void) {
-    zwin *w = lk; int cx = LCX, cy = LCY; if (wall) draw_wall(w); else g_grad(w, 0, 0, w->w, w->h, TH.d1, TH.d2);
-    u32 t[6]; z_time(t); char a[24], b[40]; z_fmt_time(t, h24, 0, a, 24); z_fmt_date(t, 1, b, 40); ctext(w, cx + 2, 42, a, 0, 4); ctext(w, cx, 40, a, 0xFFFFFF, 4); ctext(w, cx + 1, 111, b, 0, 1); ctext(w, cx, 110, b, 0xE5E7EB, 1);
+    zwin *w = lk; int cx = LCX, cy = LCY, sm = lsmall(); if (wall) draw_wall(w); else g_grad(w, 0, 0, w->w, w->h, TH.d1, TH.d2);
+    u32 t[6]; z_time(t); char a[24], b[40]; z_fmt_time(t, h24, 0, a, 24); z_fmt_date(t, 1, b, 40);
+    if (!sm || lst == L_WAIT) { ctext(w, cx + 2, 42, a, 0, 4); ctext(w, cx, 40, a, 0xFFFFFF, 4); ctext(w, cx + 1, 111, b, 0, 1); ctext(w, cx, 110, b, 0xE5E7EB, 1); }
     if (lst == L_PICK || lst == L_CONT) {
-        g_round(w, cx - 250, cy - 170, 500, 330, 14, TH.panel1); ctext(w, cx, cy - 145, _(lst == L_PICK ? "¿Quién va a usar el equipo?" : "Pantalla bloqueada"), 0xFFFFFF, 1); if (lst == L_PICK) ctext(w, cx, cy + 130, _("Flechas o Tab para elegir, Intro para entrar"), 0x9CA3AF, 1);
+        if (sm) { g_round(w, cx - 236, 6, 472, w->h - 12, 14, TH.panel1); ctext(w, cx, 18, _(lst == L_PICK ? "¿Quién va a usar el equipo?" : "Pantalla bloqueada"), 0xFFFFFF, 1); if (lst == L_PICK) ctext(w, cx, w->h - 34, _("Flechas o Tab para elegir, Intro para entrar"), 0x9CA3AF, 1); }
+        else { g_round(w, cx - 250, cy - 170, 500, 330, 14, TH.panel1); ctext(w, cx, cy - 145, _(lst == L_PICK ? "¿Quién va a usar el equipo?" : "Pantalla bloqueada"), 0xFFFFFF, 1); if (lst == L_PICK) ctext(w, cx, cy + 130, _("Flechas o Tab para elegir, Intro para entrar"), 0x9CA3AF, 1); }
         if (lst == L_CONT) { lbtn(w, cx - 100, cy - 40, 200, 80, _("Continuar"), TH.acc); }
-        else for (int k = 0; k < 2; k++) { int x = cx - 220 + k * 240, y = cy - 100; if (k == lsel) g_round(w, x - 5, y - 5, 210, 210, 15, 0xFFFFFF); g_round(w, x, y, 200, 200, 12, k ? TH.panel2 : TH.acc); { u32 ic = k ? TH.panel2 : TH.acc; g_circle(w, x + 100, y + 70, 40, 0xFFFFFF, 1); g_circle(w, x + 100, y + 58, 14, ic, 1); g_round(w, x + 78, y + 76, 44, 22, 10, ic); if (!k) { g_circle(w, x + 128, y + 96, 11, TH.ui_acc2, 1); g_text(w, x + 125, y + 89, "*", 0xFFFFFF); } }
+        else for (int k = 0; k < 2; k++) { int x, y, cs; card_xy(k, &x, &y, &cs); if (k == lsel) g_round(w, x - 5, y - 5, cs + 10, cs + 10, 15, 0xFFFFFF); g_round(w, x, y, cs, cs, 12, k ? TH.panel2 : TH.acc); { u32 ic = k ? TH.panel2 : TH.acc; g_circle(w, x + 100, y + 70, 40, 0xFFFFFF, 1); g_circle(w, x + 100, y + 58, 14, ic, 1); g_round(w, x + 78, y + 76, 44, 22, 10, ic); if (!k) { g_circle(w, x + 128, y + 96, 11, TH.ui_acc2, 1); g_text(w, x + 125, y + 89, "*", 0xFFFFFF); } }
             ctext(w, x + 100, y + 128, _(k ? "Invitado" : "Administrador"), 0xFFFFFF, 1); int st = sess(); ctext(w, x + 100, y + 154, _(k ? "Se borra al salir" : (st & 16) && !(st & 8) ? "Sin PIN" : "Con PIN"), 0xCBD5E1, 1); }
-    } else if (lst == L_WAIT) { g_round(w, cx - 250, cy - 60, 500, 120, 14, TH.panel1); ctext(w, cx, cy - 8, _("Esperando la memoria del sistema..."), 0xFFFFFF, 1); }
+    } else if (lst == L_WAIT) { int y = sm ? (int)w->h - 130 : cy - 60; g_round(w, cx - (sm ? 230 : 250), y, sm ? 460 : 500, 120, 14, TH.panel1); ctext(w, cx, y + 52, _("Esperando la memoria del sistema..."), 0xFFFFFF, 1); }
     else {
-        g_round(w, cx - 200, cy - 230, 400, 470, 14, TH.panel1); ctext(w, cx, cy - 205, _(ltitle()), 0xFFFFFF, 1);
-        for (int i = 0; i < 4; i++) g_circle(w, cx - 54 + i * 36, cy - 150, 10, 0xFFFFFF, i < (int)strlen(pin));
+        int pcx = pin_cx(), dy = sm ? 100 : cy - 150, my = sm ? 150 : cy + 166;
+        if (sm) { g_round(w, cx - 236, 6, 472, w->h - 12, 14, TH.panel1); ctext(w, cx, 18, _(ltitle()), 0xFFFFFF, 1); }
+        else { g_round(w, cx - 200, cy - 230, 400, 470, 14, TH.panel1); ctext(w, cx, cy - 205, _(ltitle()), 0xFFFFFF, 1); }
+        for (int i = 0; i < 4; i++) g_circle(w, pcx - 54 + i * 36, dy, 10, 0xFFFFFF, i < (int)strlen(pin));
         static const char *KP[12] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "Borrar", "0", "Volver"};
-        for (int i = 0; i < 12; i++) { int r = i / 3, c = i % 3; if (i == 11 && (unlocking && lst == L_PIN)) continue; lbtn(w, cx - 120 + c * 84, cy - 100 + r * 68, 72, 56, i == 9 || i == 11 ? _(KP[i]) : KP[i], i == 9 || i == 11 ? TH.panel2 : TH.inact); }
-        if (lmsg[0]) ctext(w, cx, cy + 166, lmsg, 0xFCA5A5, 1);
-        const char *s2 = lsecond(); if (s2) { if (lfoc2) g_round(w, cx - 94, cy + 182, 188, 44, 10, 0xFFFFFF); lbtn(w, cx - 90, cy + 186, 180, 36, _(s2), TH.panel2); }
+        for (int i = 0; i < 12; i++) { int bx, by, bw, bh; kp_rect(i, &bx, &by, &bw, &bh); if (i == 11 && (unlocking && lst == L_PIN)) continue; lbtn(w, bx, by, bw, bh, i == 9 || i == 11 ? _(KP[i]) : KP[i], i == 9 || i == 11 ? TH.panel2 : TH.inact); }
+        if (lmsg[0]) ctext(w, pcx, my, lmsg, 0xFCA5A5, 1);
+        const char *s2 = lsecond(); if (s2) { int sx, sy; sb_rect(&sx, &sy); if (lfoc2) g_round(w, sx - 4, sy - 4, 188, 44, 10, 0xFFFFFF); lbtn(w, sx, sy, 180, 36, _(s2), TH.panel2); }
     }
     zw_present(w);
 }
@@ -227,11 +244,11 @@ static void lock_ev(zevent *e) {
     if (e->type == EV_KEY && pin_state() && lsecond() && (e->key == K_TAB || (lfoc2 && (e->ch == '\n' || e->ch == 13)))) { if (e->key == K_TAB) lfoc2 = !lfoc2; else { lfoc2 = 0; lock_second(); return; } if (lk) draw_lock(); return; }
     if (e->type == EV_KEY) { if (pin_state()) { lfoc2 = 0; if (e->ch == 27) lock_back(); else pin_key(e->ch); } else if (lst == L_CONT && (e->ch == '\n' || e->ch == 13 || e->ch == ' ')) { lock_done(); return; } if (lk) draw_lock(); return; }
     if (e->type != EV_DOWN || z_ms() - lk_open_t < 700) return; int x = e->x, y = e->y; /* el clic que despierta la pantalla no cuenta como tecla */
-    if (lst == L_PICK) { if (y >= cy - 100 && y < cy + 100) { if (x >= cx - 220 && x < cx - 20) { lwait_t = z_ms(); admin_enter(); } else if (x >= cx + 20 && x < cx + 220) { z_sess(2, 0, 0); lock_done(); return; } } }
+    if (lst == L_PICK) { for (int k = 0; k < 2; k++) { int bx, by, cs; card_xy(k, &bx, &by, &cs); if (x < bx || x >= bx + cs || y < by || y >= by + cs) continue; if (!k) { lwait_t = z_ms(); admin_enter(); } else { z_sess(2, 0, 0); lock_done(); return; } } }
     else if (lst == L_CONT) { if (x >= cx - 100 && x < cx + 100 && y >= cy - 40 && y < cy + 40) { lock_done(); return; } }
     else if (pin_state()) {
-        for (int i = 0; i < 12; i++) { int r = i / 3, c = i % 3, bx = cx - 120 + c * 84, by = cy - 100 + r * 68; if (x < bx || x >= bx + 72 || y < by || y >= by + 56) continue; if (i == 9) pin_key(8); else if (i == 11) lock_back(); else pin_key(i == 10 ? '0' : '1' + i); break; }
-        if (lk && lsecond() && x >= cx - 90 && x < cx + 90 && y >= cy + 186 && y < cy + 222) { lock_second(); return; }
+        for (int i = 0; i < 12; i++) { int bx, by, bw, bh; kp_rect(i, &bx, &by, &bw, &bh); if (x < bx || x >= bx + bw || y < by || y >= by + bh) continue; if (i == 9) pin_key(8); else if (i == 11) lock_back(); else pin_key(i == 10 ? '0' : '1' + i); break; }
+        int sx, sy; if (lk) sb_rect(&sx, &sy); if (lk && lsecond() && x >= sx && x < sx + 180 && y >= sy && y < sy + 36) { lock_second(); return; }
     }
     if (lk) draw_lock();
 }
@@ -249,7 +266,7 @@ static void ss_draw(void) {
     zwin *w = ss; int W = w->w, H = w->h; u64 now = z_ms(), el = now - ss_t0; const u64 D = 20000; int i = nss ? (int)(el / D) % nss : 0; long t = (long)(el % D) * 1024 / D; /* 0..1024 */
     if (!nss) { g_clear(w, 0); } else {
         int iw = ssw[i], ih = ssh[i]; long s0 = MAX((long)W * 65536 / iw, (long)H * 65536 / ih), z = (i & 1) ? 1150 - 150 * t / 1024 : 1000 + 150 * t / 1024, sc = s0 * z / 1000; /* escala 16.16 */
-        long vw = (long)W * 65536 / sc, vh = (long)H * 65536 / sc, ox = (iw - vw) * ((i & 1) ? t : 1024 - t) / 1024, oy = (ih - vh) / 2; long step = 65536L * 65536 / sc;
+        long vw = (long)W * 65536 / sc, vh = (long)H * 65536 / sc, ox = (iw - vw) * ((i & 1) ? t : 1024 - t) / 1024, oy = (ih - vh) / 2; long step = (long)65536 * 65536 / sc;
         int f = t < 40 ? (int)t * 256 / 40 : t > 984 ? (int)(1024 - t) * 256 / 40 : 256; /* fundido a negro entre imagenes */
         for (int y = 0; y < H; y++) { long sy = oy + ((long)y * step >> 16); if (sy >= ih) sy = ih - 1; const u32 *r = ssi[i] + sy * iw; u32 *o = w->px + (long)y * W; long sx = (long)ox << 16;
             if (f >= 256) for (int x = 0; x < W; x++, sx += step) o[x] = r[MIN(sx >> 16, iw - 1)];
@@ -273,9 +290,9 @@ static void power_tick(void) {
     u64 now = z_ms(); long idle = z_idle_ms();
     if (ss) { if (idle + 300 < (long)(now - ss_t0)) { ss_stop(); return; } if (!scr_off && now - ss_frame >= 70) ss_draw(); }
     if (ss_ask && now >= ss_ask) { ss_ask = 0; ss_start(); return; }
-    if (!ss && ss_min && idle >= ss_min * 60000L) ss_start();
-    if (!scr_off && off_min && idle >= off_min * 60000L) { if (!ss) ss_start(); z_screen(0); scr_off = 1; z_log("[zz] pantalla apagada"); }
-    if (off_h && idle >= off_h * 3600000L) { if (copying()) { static int said; if (!said) { said = 1; z_log("[zz] apagado aplazado: Clonar esta abierto"); } return; } z_log("[zz] apagado por inactividad"); diag(); z_sync(); z_poweroff(); }
+    if (!ss && ss_min && idle >= ss_min * 60000LL) ss_start();
+    if (!scr_off && off_min && idle >= off_min * 60000LL) { if (!ss) ss_start(); z_screen(0); scr_off = 1; z_log("[zz] pantalla apagada"); }
+    if (off_h && idle >= off_h * 3600000LL) { if (copying()) { static int said; if (!said) { said = 1; z_log("[zz] apagado aplazado: Clonar esta abierto"); } return; } z_log("[zz] apagado por inactividad"); diag(); z_sync(); z_poweroff(); }
 }
 int main(const char *a) {
     { zdirent d; strcpy(DESK, z_stat("/sys", &d) ? "/rd/tmp/ESCRITORIO" : "/sys/ESCRITORIO"); if (!z_stat("/rd/tmp", &d) || DESK[1] == 's') z_mkdir(DESK); } desk_scan(); z_sysinfo(&si); bg = zw_new("Escritorio", 0, 0, si.scr_w, si.scr_h, WF_DESKTOP); visible(); make_bar(); load_clock(); tick_clock(); draw_bg(); draw_bar(); z_log("[zz] escritorio listo"); zevent e; u64 t0 = z_ms(); int cfgd = cfg_load(); if (cfgd) reload(); open_lock(0);
@@ -291,7 +308,7 @@ int main(const char *a) {
         else if (e.win == (u32)bar->id && e.type == EV_KEY && e.key == 0x46) screenshot(!!(e.mods & M_ALT));
         /* atajos del sistema (el gestor de ventanas los manda a la barra): Win, Win+E, Win+L, Ctrl+Mayus+Esc */
         else if (e.win == (u32)bar->id && e.type == EV_KEY && e.key >= 0x100 && e.key <= 0x103) { if (e.key == 0x100) { if (menu) close_menu(); else open_menu(); } else if (e.key == 0x101) launch("files", ""); else if (e.key == 0x102) open_lock(1); else launch("sysmon", ""); char lg[48]; snprintf(lg, 48, "[prueba] atajo %x", e.key); z_log(lg); }
-        else if (e.win == (u32)bar->id && e.type == EV_DOWN) { int tx = tray_x(); if (e.x < 8 + 96 * S_) { if (menu) close_menu(); else if (now - menu_closed > 200) open_menu(); } else if (e.x >= tx && e.x < tx + TRAY - 8) { if (qs) close_qs(); else if (now - qs_closed > 200) { qs = zw_new("Ajustes rápidos", MIN(tx, (int)si.scr_w - QW - 4), TH.panel_top ? PH + 2 : (int)si.scr_h - PH - QH - 2, QW, QH, WF_POPUP); draw_qs(); draw_bar(); } } else if (e.x >= icons_x() && e.x < icons_x() + ICW) { if (nwin) close_net(); else if (now - nwin_closed > 200) open_net(); } else if (bat_ok && e.x >= icons_x() + 2 * ICW + 4 && e.x < tray_x() - 4) { char b[120]; snprintf(toast, 160, "%s", bat_text(b)); toast_until = now + 5000; draw_bar(); } else if (prn_st && e.x >= icons_x() + ICW + 4 && e.x < icons_x() + 2 * ICW + 4) { if (pwin) close_prn(); else if (now - pwin_closed > 200) open_prn(); } else if (e.x >= tx + TRAY && e.x < tx + TRAY + FLAGW) set_lang(!TH.lang); else if (e.x >= bar->w - clock_w() - 16) { if (cal) close_cal(); else if (now - cal_closed > 200) open_cal(); } else for (int i = 0; i < nw; i++) if (e.x >= tb_x[i] && e.x < tb_x[i] + tb_w) { if ((wl[i].state & 0x100) && !(wl[i].state & 1)) zw_op(wl[i].id, 2, 0, 0); else zw_op(wl[i].id, 1, 0, 0); } }
+        else if (e.win == (u32)bar->id && e.type == EV_DOWN) { int tx = tray_x(); if (osk_ok && e.x >= KBX && e.x < KBX + KBW - 4) { osk_shown = zw_op(bar->id, 20, -1, 0) > 0; draw_bar(); } else if (e.x < 8 + 96 * S_) { if (menu) close_menu(); else if (now - menu_closed > 200) open_menu(); } else if (e.x >= tx && e.x < tx + TRAY - 8) { if (qs) close_qs(); else if (now - qs_closed > 200) { qs = zw_new("Ajustes rápidos", MIN(tx, (int)si.scr_w - QW - 4), TH.panel_top ? PH + 2 : (int)si.scr_h - PH - QH - 2, QW, QH, WF_POPUP); draw_qs(); draw_bar(); } } else if (e.x >= icons_x() && e.x < icons_x() + ICW) { if (nwin) close_net(); else if (now - nwin_closed > 200) open_net(); } else if (bat_ok && e.x >= icons_x() + 2 * ICW + 4 && e.x < tray_x() - 4) { char b[120]; snprintf(toast, 160, "%s", bat_text(b)); toast_until = now + 5000; draw_bar(); } else if (prn_st && e.x >= icons_x() + ICW + 4 && e.x < icons_x() + 2 * ICW + 4) { if (pwin) close_prn(); else if (now - pwin_closed > 200) open_prn(); } else if (e.x >= tx + TRAY && e.x < tx + TRAY + FLAGW) set_lang(!TH.lang); else if (e.x >= bar->w - clock_w() - 16) { if (cal) close_cal(); else if (now - cal_closed > 200) open_cal(); } else for (int i = 0; i < nw; i++) if (e.x >= tb_x[i] && e.x < tb_x[i] + tb_w) { if ((wl[i].state & 0x100) && !(wl[i].state & 1)) zw_op(wl[i].id, 2, 0, 0); else zw_op(wl[i].id, 1, 0, 0); } }
         else if (e.win == (u32)bg->id && e.type == EV_DOWN) { int k = TH.show_icons ? icon_at(e.x, e.y) : -1; (void)ty;
             int hf = TH.show_icons && !(e.btn & 2) ? head_at(e.x, e.y) : -1;
             if (hf >= 0) { u32 bit = hf >= z_nfams ? 1u << 31 : 1u << hf; fam_open ^= bit; icon_sel = last_icon = -1; draw_bg(); char lg[80]; snprintf(lg, 80, "[prueba] escritorio categoria %d %s", hf, fam_open & bit ? "abierta" : "cerrada"); z_log(lg); continue; }

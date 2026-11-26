@@ -61,7 +61,7 @@ static void draw(void); static int rx(int j); static int bw(int i);
 static void navigate(const char *u, const char *post, int push);
 static int pending_imgs(void) { if (!D) return 0; int n = html_nimages(D); int c = 0; for (int i = 0; i < n; i++) { char u[1100]; resolve(pbase, html_image_src(D, i), u, sizeof u); int f = 0; for (int k = 0; k < nim; k++) if (!strcmp(IM[k].url, u)) f = 1; if (!f) c++; } return c; }
 static void load_one_img(void) { int n = html_nimages(D); for (int i = 0; i < n && nim < 160; i++) { char u[1100]; resolve(pbase, html_image_src(D, i), u, sizeof u); int f = 0; for (int k = 0; k < nim; k++) if (!strcmp(IM[k].url, u)) f = 1; if (f) continue;
-        img_t *m = &IM[nim++]; memset(m, 0, sizeof *m); m->url = strdup(u); m->state = 2; if (strncasecmp(u, "http", 4) && u[0] != '/') return; if (impx > 24L << 20) return;
+        img_t *m = &IM[nim++]; memset(m, 0, sizeof *m); m->url = strdup(u); m->state = 2; if (strncasecmp(u, "http", 4) && u[0] != '/') return; if (impx > 24LL << 20) return;
         char *b = 0; long l = 0; int e; snprintf(msg, sizeof msg, "%s %s", _("Imagen"), u); draw();
         if (u[0] == '/') { b = z_readfile(u, &l); e = b ? 0 : -2; } else { zhttp_info inf; e = z_http("GET", u, 0, 0, 0, &b, &l, &inf); if (!e && inf.status != 200) e = -5; }
         if (!e && b) { u32 *px = 0; int w = 0, h = 0; u8 *d = (u8 *)b; int r = z_png_decode(d, l, &px, &w, &h); if (r) r = z_jpeg_decode(d, l, &px, &w, &h); if (r) r = z_gif_decode(d, l, &px, &w, &h); if (r) r = z_bmp_decode(d, l, &px, &w, &h);
@@ -134,7 +134,7 @@ static void navigate(const char *u0, const char *post, int push) {
     if (push && url[0]) { if (nb == 64) { free(hb[0]); memmove(hb, hb + 1, 63 * sizeof *hb); nb--; } hb[nb++] = strdup(url); for (int i = 0; i < nf; i++) free(hf[i]); nf = 0; }
     char *h = strchr(u, '#'); char frag[200] = ""; if (h && u[0] != '/') { strncpy0(frag, h + 1, 200); }
     strcpy(url, u); strcpy(addr, u); acur = strlen(addr); afoc = 0; loading = 1; img_clear(); snprintf(msg, sizeof msg, "%s %s", _("Cargando"), u); draw();
-    if (u[0] == '/') { long n; char *b = z_readfile(u, &n); secure = 0; certst = 0; loading = 0; { char m[300]; snprintf(m, 300, "[prueba] navegador %s: local %ld bytes", u, b ? n : -1L); z_log(m); } if (!b) { page_text("<html><body><h1>%s</h1><p>%s</p></body></html>", _("No se puede abrir"), u); return; } set_page(b, n); msg[0] = 0; return; }
+    if (u[0] == '/') { long n; char *b = z_readfile(u, &n); secure = 0; certst = 0; loading = 0; { char m[300]; snprintf(m, 300, "[prueba] navegador %s: local %ld bytes", u, b ? n : -1LL); z_log(m); } if (!b) { page_text("<html><body><h1>%s</h1><p>%s</p></body></html>", _("No se puede abrir"), u); return; } set_page(b, n); msg[0] = 0; return; }
     if (strncasecmp(u, "http://", 7) && strncasecmp(u, "https://", 8)) { loading = 0; page_text("<html><body><h1>%s</h1><p>%s</p></body></html>", _("Dirección no válida"), u); return; }
     { char host[128]; const char *p = strstr(u, "://"); int i = 0; if (p) { p += 3; while (*p && *p != '/' && *p != ':' && i < 127) host[i++] = *p++; } host[i] = 0; z_cookies_site(host); }
     char *b = 0; long l = 0; zhttp_info inf; u64 t0 = z_ms(); int e = post ? z_http("POST", u, post, strlen(post), 0, &b, &l, &inf) : z_http("GET", u, 0, 0, 0, &b, &l, &inf); loading = 0;
@@ -183,7 +183,7 @@ static sit_t *SI; static int nsi, capsi, sa_i = -1, sa_c, sb_i = -1, sb_c, seldr
 static void si_add(void *c, const struct html_item *it) { if (it->type == 0) return; if (nsi == capsi) { capsi = capsi * 2 + 256; SI = realloc(SI, capsi * sizeof *SI); } SI[nsi++] = (sit_t){it->type, it->x, it->y, it->w, it->h, it->len, it->scale ? it->scale : 1, it->str, it->px, it->iw, it->ih}; }
 static void si_load(void) { nsi = 0; if (D) html_walk(D, si_add, 0); }
 /* texto mas cercano al punto (coordenadas de la pagina) */
-static void si_hit(int X, int Y, int *oi, int *oc) { int best = -1; long bd = 1L << 60; for (int i = 0; i < nsi; i++) { sit_t *t = &SI[i]; if (t->type != 1) continue; long dy = Y < t->y ? t->y - Y : Y >= t->y + t->h ? Y - t->y - t->h + 1 : 0, dx = X < t->x ? t->x - X : X >= t->x + t->w ? X - t->x - t->w + 1 : 0, d = dy * 100000 + dx; if (d < bd) { bd = d; best = i; } }
+static void si_hit(int X, int Y, int *oi, int *oc) { int best = -1; long bd = (long)1 << 60; for (int i = 0; i < nsi; i++) { sit_t *t = &SI[i]; if (t->type != 1) continue; long dy = Y < t->y ? t->y - Y : Y >= t->y + t->h ? Y - t->y - t->h + 1 : 0, dx = X < t->x ? t->x - X : X >= t->x + t->w ? X - t->x - t->w + 1 : 0, d = dy * 100000 + dx; if (d < bd) { bd = d; best = i; } }
     *oi = best; if (best < 0) { *oc = 0; return; } sit_t *t = &SI[best]; int c = (X - t->x + 4 * t->sc) / (8 * t->sc); *oc = c < 0 ? 0 : c > t->len ? t->len : c; }
 static int sel_has(void) { return sa_i >= 0 && sb_i >= 0 && (sa_i != sb_i || sa_c != sb_c); }
 static void sel_order(int *i0, int *c0, int *i1, int *c1) { if (sa_i < sb_i || (sa_i == sb_i && sa_c <= sb_c)) { *i0 = sa_i; *c0 = sa_c; *i1 = sb_i; *c1 = sb_c; } else { *i0 = sb_i; *c0 = sb_c; *i1 = sa_i; *c1 = sa_c; } }

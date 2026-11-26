@@ -12,7 +12,7 @@ static void render(zwin *w, int x, int y, int W_, int H, sl_t *s, int mini) { in
 static void pbuild(zpdoc *d, const zpset *s, void *c) {
     double pw = zp_pw(d), ph = zp_ph(d), k = pw / 960.0; char *ln = malloc(4096);
     for (int i = 0; i < n; i++) { sl_t *x = &D[i]; zp_page(d); zp_rect(d, 0, 0, pw, ph, BG[theme], ZP_NONE, 0); zpflow f; zp_flow_init(&f, d, 60 * k); f.started = 1; f.y = 50 * k; zp_para(&f, ZPF_SANSB, 40 * k, FGT[theme], x->tit, 0, 24 * k);
-        const char *p = x->txt; while (p && *p) { const char *e = strchr(p, '\n'); long l = MIN(e ? e - p : (long)strlen(p), 4000L); memcpy(ln + 4, p, l); ln[l + 4] = 0; if (l) { memcpy(ln, "\xE2\x80\xA2 ", 4); zp_para(&f, ZPF_SANS, 24 * k, FGB[theme], ln, 0, 10 * k); } if (!e) break; p = e + 1; }
+        const char *p = x->txt; while (p && *p) { const char *e = strchr(p, '\n'); long l = MIN(e ? e - p : (long)strlen(p), 4000LL); memcpy(ln + 4, p, l); ln[l + 4] = 0; if (l) { memcpy(ln, "\xE2\x80\xA2 ", 4); zp_para(&f, ZPF_SANS, 24 * k, FGB[theme], ln, 0, 10 * k); } if (!e) break; p = e + 1; }
         char t[16]; snprintf(t, 16, "%d", i + 1); zp_text(d, pw - 50 * k, ph - 24 * k, ZPF_SANS, 12 * k, FGB[theme], t); }
     free(ln);
 }

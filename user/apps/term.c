@@ -40,7 +40,7 @@ static void path_of(const char *a, char *o) {
 }
 static int argv_split(char *s, char **v) { int n = 0; while (*s && n < 16) { while (isspace(*s)) *s++ = 0; if (!*s) break; if (*s == '"') { v[n++] = ++s; while (*s && *s != '"') s++; if (*s) *s++ = 0; } else { v[n++] = s; while (*s && !isspace(*s)) s++; } } return n; }
 static void err(const char *w, int e) { col = 2; say("%s: %s\n", w, z_errstr(e)); col = 0; }
-static void human(u64 n, char *o) { if (n >= 1UL << 30) snprintf(o, 16, "%lu.%lu GB", n >> 30, ((n >> 20) & 1023) * 10 / 1024); else if (n >= 1 << 20) snprintf(o, 16, "%lu MB", n >> 20); else if (n >= 1024) snprintf(o, 16, "%lu KB", n >> 10); else snprintf(o, 16, "%lu B", n); }
+static void human(u64 n, char *o) { if (n >= 1ULL << 30) snprintf(o, 16, "%lu.%lu GB", n >> 30, ((n >> 20) & 1023) * 10 / 1024); else if (n >= 1 << 20) snprintf(o, 16, "%lu MB", n >> 20); else if (n >= 1024) snprintf(o, 16, "%lu KB", n >> 10); else snprintf(o, 16, "%lu B", n); }
 static int copy(const char *a, const char *b) {
     int f = z_open(a, O_READ); if (f < 0) return f; int g = z_open(b, O_WRITE | O_CREATE | O_TRUNC); if (g < 0) { z_close(f); return g; }
     char *buf = malloc(65536); long r; int e = 0; while ((r = z_read(f, buf, 65536)) > 0) { long w = z_write(g, buf, r); if (w != r) { e = w < 0 ? (int)w : -28; break; } } if (r < 0) e = r; free(buf); z_close(f); z_close(g); return e;

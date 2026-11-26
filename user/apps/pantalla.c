@@ -19,7 +19,7 @@ static void stop(void) { if (!rec) return; rec = 0; pump_audio(); if (mic) { z_r
 static void tick(void) { u64 now = z_ms(); pump_audio(); if (now < next_t) return; u64 ta = z_ms(); int r = z_capture(px, (long)si.scr_w * si.scr_h); u64 tb = z_ms(); if (r > 0) { free(jpg); jn = z_jpeg_encode(px, r >> 16, r & 0xFFFF, 70, &jpg); } (void)ta; (void)tb;
     long due = (long)((z_ms() - t0) * fps / 1000) + 1; int first = 1; do { u64 tw = z_ms(); if (jn > 0 && zavi_frame(&A, jpg, first ? jn : 0)) { snprintf(msg, 200, "%s", _("Error al escribir el vídeo (¿memoria llena?)")); stop(); return; } frame_no++; first = 0; (void)tw; } while (frame_no < due && jn > 0);
     next_t = t0 + (u64)frame_no * 1000 / fps; { static u64 lt; if (now - lt >= 1000) { lt = now; char t[60]; long s = (now - t0) / 1000; snprintf(t, 60, "%s %ld:%02ld  %ld MB", _("Grabando"), s / 60, s % 60, A.pos >> 20); zw_title(W->id, t); } }
-    if (A.pos > (1L << 30)) { snprintf(msg, 200, "%s", _("Se alcanzó 1 GB: grabación detenida")); stop(); } }
+    if (A.pos > (1LL << 30)) { snprintf(msg, 200, "%s", _("Se alcanzó 1 GB: grabación detenida")); stop(); } }
 int main(const char *a) { z_sysinfo(&si); W = zw_new("Grabar pantalla", -1, 0, 600, 250, WF_DECOR); strcpy(msg, _("Graba todo lo que se ve en la pantalla en un vídeo.")); draw(); zevent e;
     for (;;) { int g = z_event(&e, rec ? 5 : -1); if (rec) tick(); if (!g) continue; if (e.type == EV_REDRAW) { draw(); continue; } if (e.win != (u32)W->id) continue; if (e.type == EV_CLOSE) { stop(); return 0; }
         if (e.type == EV_FOCUS && rec) { draw(); continue; }

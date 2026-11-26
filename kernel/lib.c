@@ -1,5 +1,29 @@
 #include "kernel.h"
 
+#ifdef __arm__
+/* ARM: copia por palabras cuando las dos direcciones estan alineadas igual */
+void *memcpy(void *d, const void *s, size_t n) {
+    u8 *a = d; const u8 *b = s;
+    if ((((u32)a ^ (u32)b) & 3) == 0) {
+        while (n && ((u32)a & 3)) { *a++ = *b++; n--; }
+        u32 *x = (u32 *)a; const u32 *y = (const u32 *)b;
+        while (n >= 32) { u32 t0 = y[0], t1 = y[1], t2 = y[2], t3 = y[3], t4 = y[4], t5 = y[5], t6 = y[6], t7 = y[7];
+            x[0] = t0; x[1] = t1; x[2] = t2; x[3] = t3; x[4] = t4; x[5] = t5; x[6] = t6; x[7] = t7; x += 8; y += 8; n -= 32; }
+        while (n >= 4) { *x++ = *y++; n -= 4; }
+        a = (u8 *)x; b = (const u8 *)y;
+    }
+    while (n--) *a++ = *b++;
+    return d;
+}
+void *memset(void *d, int v, size_t n) {
+    u8 *a = d; u32 w = (u8)v * 0x01010101u;
+    while (n && ((u32)a & 3)) { *a++ = (u8)v; n--; }
+    u32 *x = (u32 *)a; while (n >= 16) { x[0] = w; x[1] = w; x[2] = w; x[3] = w; x += 4; n -= 16; }
+    while (n >= 4) { *x++ = w; n -= 4; }
+    a = (u8 *)x; while (n--) *a++ = (u8)v;
+    return d;
+}
+#else
 void *memcpy(void *d, const void *s, size_t n) {
     void *r = d;
     __asm__ volatile("mov %%rcx,%%rdx; shr $3,%%rcx; rep movsq; mov %%rdx,%%rcx; and $7,%%rcx; rep movsb"
@@ -11,6 +35,7 @@ void *memset(void *d, int v, size_t n) {
     __asm__ volatile("rep stosb" : "+D"(d), "+c"(n) : "a"(v) : "memory");
     return r;
 }
+#endif
 void *memmove(void *d, const void *s, size_t n) {
     u8 *a = d; const u8 *b = s;
     if (a == b || !n) return d;
@@ -101,9 +126,16 @@ int vsnprintf(char *out, size_t max, const char *f, va_list ap) {
 }
 int snprintf(char *o, size_t m, const char *f, ...) { va_list a; va_start(a, f); int r = vsnprintf(o, m, f, a); va_end(a); return r; }
 
-#define COM1 0x3F8
 #define DMESG 65536
 static char dmesg[DMESG]; static u32 dm_pos, dm_total; static int ser_ok;
+#ifdef __arm__
+void serial_init(void) { ser_ok = uart_init(); }
+static void sput(char c) {
+    if (ser_ok) uart_putc(c);
+    dmesg[dm_pos] = c; dm_pos = (dm_pos + 1) % DMESG; dm_total++;
+}
+#else
+#define COM1 0x3F8
 void serial_init(void) {
     outb(COM1 + 1, 0); outb(COM1 + 3, 0x80); outb(COM1, 1); outb(COM1 + 1, 0); outb(COM1 + 3, 3); outb(COM1 + 2, 0xC7); outb(COM1 + 4, 3);
     ser_ok = inb(COM1 + 5) != 0xFF;
@@ -112,6 +144,7 @@ static void sput(char c) {
     if (ser_ok) { int t = 20000; while (!(inb(COM1 + 5) & 0x20) && --t); outb(COM1, c); }
     dmesg[dm_pos] = c; dm_pos = (dm_pos + 1) % DMESG; dm_total++;
 }
+#endif
 void kprintf(const char *f, ...) {
     char b[512]; va_list a; va_start(a, f); vsnprintf(b, sizeof b, f, a); va_end(a);
     u64 fl = irq_save();
@@ -128,8 +161,8 @@ int dmesg_read(char *o, int max) {
 }
 void panic(const char *f, ...) {
     char b[256]; va_list a; va_start(a, f); vsnprintf(b, sizeof b, f, a); va_end(a);
-    __asm__("cli");
+    irq_off();
     kprintf("\n*** PANICO: %s\n", b);
     fb_early_panic(b);
-    for (;;) __asm__("hlt");
+    for (;;) cpu_halt();
 }

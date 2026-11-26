@@ -25,6 +25,12 @@ struct ctx {
 static double f_sqrt(double x) { return sqrt(x); }
 static double f_floor(double x) { return floor(x); }
 static double f_pow(double a, double b) { return pow(a, b); }
+#elif defined(__arm__)
+/* Raspberry Pi: las funciones de libz (user/lib/arm/mates.c) */
+double z_sqrt(double); double z_floor(double); double z_pow(double, double);
+static double f_sqrt(double x) { return z_sqrt(x); }
+static double f_floor(double x) { return z_floor(x); }
+static double f_pow(double a, double b) { return z_pow(a, b); }
 #else
 static double f_sqrt(double x) { double r; __asm__("fsqrt" : "=t"(r) : "0"(x)); return r; }
 

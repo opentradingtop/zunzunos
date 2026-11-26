@@ -70,7 +70,7 @@ static double m_hypot(double x, double y) { if (__builtin_isinf(x) || __builtin_
 /* seno, coseno y tangente: reduccion a [-pi/4, pi/4] con pi/2 partido en trozos de 33 bits (exacta hasta 2^31 vueltas) */
 static ld u2ld(unsigned long u) { union { unsigned long u; double d; } c = { u }; return c.d; }
 static ld reduce(double x, int *q) {
-    ld P1 = u2ld(0x3FF921FB54400000UL), P2 = u2ld(0x3DD0B4611A600000UL), P3 = u2ld(0x3BA3198A2E000000UL), P4 = u2ld(0x397B839A252049C1UL);
+    ld P1 = u2ld(0x3FF921FB54400000ULL), P2 = u2ld(0x3DD0B4611A600000ULL), P3 = u2ld(0x3BA3198A2E000000ULL), P4 = u2ld(0x397B839A252049C1ULL);
     ld k = x_rnd((ld)x / (P1 + P2 + P3)); *q = (int)((long)k & 3); return (((ld)x - k * P1) - k * P2) - k * P3 - k * P4; }
 static int big(double x) { return !(__builtin_fabs(x) < 3.0e9); }
 static double m_sin(double x) { if (!__builtin_isfinite(x)) return __builtin_nan(""); if (x == 0) return x; if (big(x)) return (double)x_sin(x_prem(x, 6.28318530717958647692528676655900577L)); int q; ld r = reduce(x, &q); ld v = q == 0 ? x_sin(r) : q == 1 ? x_cos(r) : q == 2 ? -x_sin(r) : -x_cos(r); return (double)v; }

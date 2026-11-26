@@ -106,3 +106,6 @@ run-uefi: $(B)/zunzun.img
 clean:
 	rm -rf $(B)
 .PHONY: all run run-uefi clean usb-img
+
+# ===== Raspberry Pi 2 (ARMv7, 32 bits): make pi -> build/pi/kernel7.img; make pi-sd -> build/pi/sd.img =====
+include pi.mk

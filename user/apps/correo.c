@@ -32,7 +32,7 @@ static u8 *roots; static long nroots;
 static long io_snd(void *io, const void *d, long n) { return z_send(*(int *)io, d, n); }
 static long io_rcv(void *io, void *d, long n, int to) { return z_recv(*(int *)io, d, n, to); }
 static void *io_alloc(long n) { return malloc(n); }
-static long now_num(void) { u32 t[6]; z_time(t); return (long)t[5] * 10000000000L + (long)t[4] * 100000000L + (long)t[3] * 1000000L + t[2] * 10000 + t[1] * 100 + t[0]; }
+static long now_num(void) { u32 t[6]; z_time(t); return (long)t[5] * 10000000000LL + (long)t[4] * 100000000LL + (long)t[3] * 1000000LL + t[2] * 10000 + t[1] * 100 + t[0]; }
 static int cn_tls(cn_t *c, const char *host) {
     if (!roots) { roots = (u8 *)z_readfile("/rd/res/raices.bin", &nroots); if (roots) tls_set_roots(roots, nroots); }
     ztls *t = calloc(1, sizeof(ztls)); t->io = &c->s; t->snd = io_snd; t->rcv = io_rcv; t->alloc = io_alloc; t->free_ = free;
@@ -227,7 +227,7 @@ static void add_attach(void) {
     if (nca >= 8) { strcpy(msg, _("Como mucho 8 adjuntos por mensaje")); return; }
     char p[260]; if (!z_pick_file(_("Adjuntar un archivo"), 0, p, 260)) return;
     zdirent st; if (z_stat(p, &st)) return; long tot = (long)st.size; for (int k = 0; k < nca; k++) { zdirent s2; if (!z_stat(c_att[k], &s2)) tot += (long)s2.size; }
-    if (tot > 20L * 1024 * 1024) { strcpy(msg, _("Los adjuntos pasan de 20 MB: muchos servidores no los aceptan")); draw(); return; }
+    if (tot > 20LL * 1024 * 1024) { strcpy(msg, _("Los adjuntos pasan de 20 MB: muchos servidores no los aceptan")); draw(); return; }
     strncpy0(c_att[nca++], p, 260); char lg[300]; snprintf(lg, 300, "[prueba] correo adjuntado %s", p); z_log(lg); }
 static void compose_ev(zevent *e) { if (e->type == EV_CLOSE) { compose_close(); return; } if (e->type == EV_RESIZE) { zw_resized(CW, e->x, e->y); draw_compose(); return; } if (e->type == EV_REDRAW) { draw_compose(); return; }
     if (e->type == EV_DOWN) { if (e->y < 40) { if (e->x < 100) { if (!smtp_send(c_to, c_subj, CT.t ? CT.t : "", c_inrep)) { char f[40] = ""; loc_save(2, f, c_to, c_subj, c_inrep, c_att, nca, CT.t ? CT.t : "");

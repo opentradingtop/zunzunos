@@ -225,7 +225,7 @@ static i64 f_read(file_t *o, void *b, u64 n) {
         }
         u32 run = f->spc - sec; u64 want = (n - done) / f->ss;
         /* clusters contiguos en una sola lectura */
-        u32 cc = c; while (run < want && run < 2048) { u32 nx = fat_get(f, cc); if (nx != cc + 1) break; cc = nx; run += f->spc; o->d += 1UL << 32; o->d = (o->d & ~0xFFFFFFFFUL) | cc; }
+        u32 cc = c; while (run < want && run < 2048) { u32 nx = fat_get(f, cc); if (nx != cc + 1) break; cc = nx; run += f->spc; o->d += (u64)1 << 32; o->d = (o->d & ~(u64)0xFFFFFFFF) | cc; }
         u32 cnt = MIN(run, want);
         if (blk_read(f->d, lba, cnt, p + done)) break;
         done += (u64)cnt * f->ss; pos += (u64)cnt * f->ss;
@@ -333,7 +333,11 @@ int fat_probe(blkdev_t *d, const char *name) {
     }
     if (f->freec < 0 && cl <= 70000) { f->freec = 0; for (u32 c = 2; c < cl + 2; c++) if (!fat_get(f, c)) f->freec++; }
     char tp[8]; snprintf(tp, 8, "fat%u", f->type);
-    ent_t *e = kmalloc(sizeof *e); int sys = !walk(f, "ZUNZUN/KERNEL.BIN", e, 0, 0); kfree(e);
+    ent_t *e = kmalloc(sizeof *e); int sys = !walk(f, "ZUNZUN/KERNEL.BIN", e, 0, 0);
+#ifdef __arm__
+    if (!sys) sys = !walk(f, "kernel7.img", e, 0, 0) && !walk(f, "ZUNZUN", e, 0, 0);   /* tarjeta SD de la Raspberry Pi */
+#endif
+    kfree(e);
     zdirent_t q; u32 ser = *(u32 *)(b + (f->type == 32 ? 67 : 39)); if (sys && bi.boot_serial && ser != bi.boot_serial) sys = 0; if (sys && !vfs_stat("/sys", &q)) sys = 0;
     int mi = vfs_mount(sys ? "sys" : name, &ops, f, d, tp, lab[0] && lab[0] != ' ' ? lab : 0);
     extern void vfs_set_size(int, u64, u64), vfs_set_free(int, volatile i64 *, u32);

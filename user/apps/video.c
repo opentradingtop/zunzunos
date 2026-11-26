@@ -27,7 +27,7 @@ int main(const char *a) { zsys s; z_sysinfo(&s); W = zw_new("Vídeos", -1, 0, MI
     for (;;) { int g = z_event(&e, playing ? 5 : -1); if (playing) { int f = f_play + (int)((z_ms() - t_play) * 1000 / R.us_frame); if (f >= R.nf) { playing = 0; show(R.nf - 1); z_log("[prueba] video terminado"); } else if (f != cur) show(f); feed_audio(); { static u64 ld; if (z_ms() - ld > 30) { ld = z_ms(); draw(); } } }
         if (!g) continue; if (e.type == EV_REDRAW) { draw(); continue; } if (e.win != (u32)W->id) continue; if (e.type == EV_CLOSE) return 0; if (e.type == EV_RESIZE) { zw_resized(W, e.x, e.y); draw(); continue; }
         int H = W->h - CB;
-        if (e.type == EV_KEY) { if (e.ch == ' ') play(!playing); else if (loaded && (e.key == K_RIGHT || e.key == K_LEFT)) seek_to(cur + (e.key == K_RIGHT ? 1 : -1) * (int)(5000000L / R.us_frame)); draw(); continue; }
+        if (e.type == EV_KEY) { if (e.ch == ' ') play(!playing); else if (loaded && (e.key == K_RIGHT || e.key == K_LEFT)) seek_to(cur + (e.key == K_RIGHT ? 1 : -1) * (int)(5000000LL / R.us_frame)); draw(); continue; }
         if (e.type != EV_DOWN) continue;
         if (e.y >= H) { if (e.x < 52) play(!playing); else if (e.x < 100) { playing = 0; if (loaded) seek_to(0); } else if (e.x >= W->w - 84) { char p[300]; strcpy(p, path[0] ? path : "/sys/DOCS/Videos/"); if (ui_prompt("Abrir vídeo", "Ruta del archivo AVI:", p, 290) && p[0]) { open_(p); if (loaded) play(1); } }
             else if (loaded) { int bx = 110, bw = W->w - 84 - 16 - bx - 110; if (e.x >= bx && e.x < bx + bw) { seek_to((long)(e.x - bx) * R.nf / bw); } } }

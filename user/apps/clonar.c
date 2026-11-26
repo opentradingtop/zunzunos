@@ -67,7 +67,7 @@ static int mkplan(void) {
     else { hum(p->T * ss, a); hum((p->kind ? p->end + (p->kind == 2 ? p->es + 1 : 0) : p->S) * ss, b); snprintf(p->why, 200, _("No cabe: el destino tiene %s y hacen falta al menos %s."), a, b); return 0; }
     if (gpt && p->T != p->S) {   /* la GPT dice donde acaba el disco: la cabecera, su copia y el MBR protector se ajustan */
         p->gfix = 1; u64 T = p->T; p64(g + 32, T - 1); p64(g + 48, T - 2 - p->es); hdr_crc(g);
-        u8 *e = h + 446 + pe * 16; u32 old = g32(e + 12); if (g32(e + 8) == 1 && old >= MIN(p->S - 1, 0xFFFFFFFFUL)) p32(e + 12, (u32)MIN(T - 1, 0xFFFFFFFFUL));
+        u8 *e = h + 446 + pe * 16; u32 old = g32(e + 12); if (g32(e + 8) == 1 && old >= MIN(p->S - 1, 0xFFFFFFFFULL)) p32(e + 12, (u32)MIN(T - 1, 0xFFFFFFFFULL));
         u8 *bh = p->bk + p->es * ss; memcpy(bh, g, ss); p64(bh + 24, T - 1); p64(bh + 32, 1); p64(bh + 72, T - 1 - p->es); hdr_crc(bh); p->bk_lba = T - 1 - p->es;
         if (p->T > p->S) { p->z0 = p->S - 1 - p->es; p->z1 = p->S; }   /* la copia vieja queda en el espacio libre: se borra para que nadie la confunda */
     }

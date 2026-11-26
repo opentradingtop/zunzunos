@@ -155,7 +155,7 @@ static u64 tsc(void) {
 #ifdef ZC_HOST
     static u64 x = 88172645463325252ULL; x ^= x << 13; x ^= x >> 7; x ^= x << 17; return x;
 #else
-    u32 lo, hi; __asm__ volatile("rdtsc" : "=a"(lo), "=d"(hi)); return (u64)hi << 32 | lo;
+    return z_cycles();
 #endif
 }
 void zc_random(u8 *out, int n) {

@@ -121,11 +121,11 @@ out: for (int c = 0; c < 3; c++) { free(pl[c]); free(cf[c]); } free(H); return o
 }
 /* ===== GIF (primer fotograma) ===== */
 int z_gif_decode(const u8 *d, long n, u32 **out, int *ow, int *oh) {
-    if (n < 13 || memcmp(d, "GIF8", 4)) return -1; int W = d[6] | d[7] << 8, H = d[8] | d[9] << 8, f = d[10]; if (!W || !H || W > 8192 || H > 8192) return -1; long p = 13; const u8 *gct = f & 0x80 ? d + 13 : 0; if (gct) p += 3L << ((f & 7) + 1); int tr_ = -1;
+    if (n < 13 || memcmp(d, "GIF8", 4)) return -1; int W = d[6] | d[7] << 8, H = d[8] | d[9] << 8, f = d[10]; if (!W || !H || W > 8192 || H > 8192) return -1; long p = 13; const u8 *gct = f & 0x80 ? d + 13 : 0; if (gct) p += 3LL << ((f & 7) + 1); int tr_ = -1;
     u32 *o = malloc(W * H * 4); for (int i = 0; i < W * H; i++) o[i] = 0xFFFFFF;
     while (p < n) { u8 b = d[p++];
         if (b == 0x21) { u8 l = d[p++]; if (l == 0xF9 && d[p] >= 4 && (d[p + 1] & 1)) tr_ = d[p + 4]; while (p < n && d[p]) p += d[p] + 1; p++; continue; }
-        if (b != 0x2C) break; int x0 = d[p] | d[p + 1] << 8, y0 = d[p + 2] | d[p + 3] << 8, iw = d[p + 4] | d[p + 5] << 8, ih = d[p + 6] | d[p + 7] << 8, lf = d[p + 8]; p += 9; const u8 *pal = gct; if (lf & 0x80) { pal = d + p; p += 3L << ((lf & 7) + 1); } if (!pal) break;
+        if (b != 0x2C) break; int x0 = d[p] | d[p + 1] << 8, y0 = d[p + 2] | d[p + 3] << 8, iw = d[p + 4] | d[p + 5] << 8, ih = d[p + 6] | d[p + 7] << 8, lf = d[p + 8]; p += 9; const u8 *pal = gct; if (lf & 0x80) { pal = d + p; p += 3LL << ((lf & 7) + 1); } if (!pal) break;
         int mcs = d[p++]; u8 *data = malloc(n); long dl = 0; while (p < n && d[p]) { memcpy(data + dl, d + p + 1, d[p]); dl += d[p]; p += d[p] + 1; } p++;
         u16 *pre = malloc(4096 * 2); u8 *suf = malloc(4096), *stk = malloc(4097); int clr = 1 << mcs, eoi = clr + 1, cs = mcs + 1, nx = clr + 2, old = -1, first = 0; long bp = 0, px = 0, tot = (long)iw * ih;
         for (int i = 0; i < clr; i++) { pre[i] = 0xFFFF; suf[i] = i; }
@@ -144,6 +144,6 @@ int z_png_encode(const u32 *px, int w, int h, u8 **out, long *n) {
     long raw = (long)(w * 3 + 1) * h, blocks = (raw + 65534) / 65535, zl = 2 + raw + blocks * 5 + 4, tot = 8 + 25 + 12 + zl + 12; u8 *o = malloc(tot), *q = o; memcpy(q, "\x89PNG\r\n\x1a\n", 8); q += 8;
     be32(q, 13); memcpy(q + 4, "IHDR", 4); be32(q + 8, w); be32(q + 12, h); q[16] = 8; q[17] = 2; q[18] = q[19] = q[20] = 0; be32(q + 21, z_crc32(q + 4, 17)); q += 25;
     be32(q, zl); memcpy(q + 4, "IDAT", 4); u8 *z = q + 8, *zp = z; *zp++ = 0x78; *zp++ = 1; u32 a = 1, b = 0; long left = raw, row = 0, col = 0;
-    while (left) { long c = MIN(left, 65535L); *zp++ = left == c; *zp++ = c; *zp++ = c >> 8; *zp++ = ~c; *zp++ = ~c >> 8; for (long i = 0; i < c; i++) { u8 v; if (col == 0) v = 0; else { u32 pxl = px[row * w + (col - 1) / 3]; int k = (col - 1) % 3; v = pxl >> (16 - 8 * k); } *zp++ = v; a = (a + v) % 65521; b = (b + a) % 65521; if (++col == w * 3 + 1) { col = 0; row++; } } left -= c; }
+    while (left) { long c = MIN(left, 65535LL); *zp++ = left == c; *zp++ = c; *zp++ = c >> 8; *zp++ = ~c; *zp++ = ~c >> 8; for (long i = 0; i < c; i++) { u8 v; if (col == 0) v = 0; else { u32 pxl = px[row * w + (col - 1) / 3]; int k = (col - 1) % 3; v = pxl >> (16 - 8 * k); } *zp++ = v; a = (a + v) % 65521; b = (b + a) % 65521; if (++col == w * 3 + 1) { col = 0; row++; } } left -= c; }
     be32(zp, b << 16 | a); zp += 4; be32(zp, z_crc32(q + 4, 4 + zl)); q = zp + 4; be32(q, 0); memcpy(q + 4, "IEND", 4); be32(q + 8, z_crc32(q + 4, 4)); q += 12; *out = o; *n = q - o; return 0;
 }

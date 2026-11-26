@@ -26,7 +26,7 @@ static po *parse(lx_t *l, int depth) {
     if (c == '<') { l->p++; po *o = mk(PN_STR); char *b = malloc((l->e - l->p) / 2 + 2); int k = 0, hi = -1; while (l->p < l->e && *l->p != '>') { int v = hexv(*l->p++); if (v < 0) continue; if (hi < 0) hi = v; else { b[k++] = hi * 16 + v; hi = -1; } } if (hi >= 0) b[k++] = hi * 16; if (l->p < l->e) l->p++; o->s = b; o->sl = k; return o; }
     if (c == '[') { l->p++; po *o = mk(PN_ARR); for (;;) { skip(l); if (l->p >= l->e) break; if (*l->p == ']') { l->p++; break; } push(o, parse(l, depth + 1), 0); } return o; }
     if ((c >= '0' && c <= '9') || c == '-' || c == '+' || c == '.') {
-        const u8 *s = l->p; l->p++; while (l->p < l->e && !delim(*l->p)) l->p++; char t[40]; int n = MIN(l->p - s, 39L); memcpy(t, s, n); t[n] = 0; po *o = mk(PN_NUM); o->n = atof(t);
+        const u8 *s = l->p; l->p++; while (l->p < l->e && !delim(*l->p)) l->p++; char t[40]; int n = MIN(l->p - s, 39LL); memcpy(t, s, n); t[n] = 0; po *o = mk(PN_NUM); o->n = atof(t);
         lx_t q = *l; skip(&q); const u8 *s2 = q.p; while (q.p < q.e && *q.p >= '0' && *q.p <= '9') q.p++; if (q.p > s2 && q.p < q.e && !strchr("0123456789", t[0] == '-' ? 'x' : '0') ) {}
         if (q.p > s2) { lx_t r = q; skip(&r); if (r.p < r.e && *r.p == 'R' && (r.p + 1 >= r.e || delim(r.p[1]))) { o->t = PN_REF; o->ref = (int)o->n; l->p = r.p + 1; } }
         return o; }

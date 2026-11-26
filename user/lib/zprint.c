@@ -259,7 +259,7 @@ int zp_save_printers(const zprinter *o, int n) { ob_t b = {0}; for (int i = 0; i
 
 /* ---------- envio ---------- */
 static int host_port(const char *s, u32 *ip, int *port, char *path, int defp) { char h[128]; int i = 0; while (*s && *s != ':' && *s != '/' && i < 127) h[i++] = *s++; h[i] = 0; *port = defp; if (*s == ':') { *port = atoi(s + 1); while (*s && *s != '/') s++; } if (path) strcpy(path, *s ? s : "/ipp/print"); if (z_parse_ip(h, ip)) return z_dns(h, ip); return 0; }
-static int send_all(int sk, const u8 *d, long n) { long o = 0; while (o < n) { if (q_cancelled()) return ZP_CANCELADO; long r = z_send(sk, d + o, MIN(65536L, n - o)); if (r <= 0) return r < 0 ? (int)r : -5; o += r; } return 0; }
+static int send_all(int sk, const u8 *d, long n) { long o = 0; while (o < n) { if (q_cancelled()) return ZP_CANCELADO; long r = z_send(sk, d + o, MIN(65536LL, n - o)); if (r <= 0) return r < 0 ? (int)r : -5; o += r; } return 0; }
 static const char *mime(const char *lang) { return !strcmp(lang, "pdf") ? "application/pdf" : !strcmp(lang, "ps") ? "application/postscript" : !strcmp(lang, "pcl") ? "application/vnd.hp-PCL" : !strcmp(lang, "pwg") ? "image/pwg-raster" : "text/plain"; }
 static void ipp_attr(ob_t *b, int tag, const char *name, const char *val, int vlen) { ob_c(b, tag); ob_be16(b, strlen(name)); ob_s(b, name); ob_be16(b, vlen < 0 ? (int)strlen(val) : vlen); ob_add(b, val, vlen < 0 ? (long)strlen(val) : vlen); }
 static int ipp_call(const char *uri, int op, const char *fmt, const char *job, const u8 *doc, long dlen, u8 **resp, long *rlen) {
@@ -295,7 +295,7 @@ int zp_send(const zprinter *pr, const u8 *data, long len, const char *job) {
         for (;;) { char *r = z_readfile(res, 0); if (r) { int rc = atoi(r); free(r); z_unlink(res); return rc; }
             if (q_cancelled()) { char g[160]; snprintf(g, 160, "%s.inf", b); if (!z_unlink(g)) { snprintf(g, 160, "%s.bin", b); z_unlink(g); } return ZP_CANCELADO; }
             if (z_ms() - t0 > 180000) return -110; z_sleep(200); } }
-    if (!strncmp(u, "usb://", 6)) { zusbprn l[8]; int n = zp_usb_list(l, 8), k = -1; for (int i = 0; i < n; i++) if (!strcmp(l[i].id, u + 6) || (k < 0 && atoi(u + 6) == i && isdigit(u[6]))) k = i; if (k < 0) return -2; long o = 0; while (o < len) { if (q_cancelled()) { SC3(108, k, "\x1B%-12345X", 9); return ZP_CANCELADO; } long r = SC3(108, k, data + o, MIN(65536L, len - o)); if (r <= 0) return r < 0 ? (int)r : -5; o += r; } return 0; }
+    if (!strncmp(u, "usb://", 6)) { zusbprn l[8]; int n = zp_usb_list(l, 8), k = -1; for (int i = 0; i < n; i++) if (!strcmp(l[i].id, u + 6) || (k < 0 && atoi(u + 6) == i && isdigit(u[6]))) k = i; if (k < 0) return -2; long o = 0; while (o < len) { if (q_cancelled()) { SC3(108, k, "\x1B%-12345X", 9); return ZP_CANCELADO; } long r = SC3(108, k, data + o, MIN(65536LL, len - o)); if (r <= 0) return r < 0 ? (int)r : -5; o += r; } return 0; }
     return -22;
 }
 long zp_render(zpdoc *d, const zpset *s, const char *lang, u8 **out) { if (!strcmp(lang, "pdf")) return zp_render_pdf(d, s, out); if (!strcmp(lang, "ps")) return zp_render_ps(d, s, out); if (!strcmp(lang, "pcl")) return zp_render_pcl(d, s, out); if (!strcmp(lang, "pwg")) return zp_render_pwg(d, s, out); if (!strcmp(lang, "qpdl")) return zp_render_qpdl(d, s, out); return zp_render_txt(d, s, out); }

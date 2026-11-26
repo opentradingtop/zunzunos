@@ -15,9 +15,9 @@ static file_t *getfd(u64 i) { return i < MAXFD ? cur->proc->fds[i] : 0; }
 #define FD(v, n) file_t *v = getfd(n); if (!v) return E_BADF
 
 u64 syscall_dispatch(regs_t *r) {
-    u64 a = r->rbx, b = r->rcx, c = r->rdx, d = r->rsi, e = r->rdi;
-    if (r->rax >= 95 && r->rax <= 101 && sess_guest()) return E_ACCES; /* el invitado no accede a los discos en bruto */
-    switch (r->rax) {
+    SC_ARGS(r, a, b, c, d, e);
+    if (SC_NUM(r) >= 95 && SC_NUM(r) <= 101 && sess_guest()) return E_ACCES; /* el invitado no accede a los discos en bruto */
+    switch (SC_NUM(r)) {
     case 0: proc_exit((int)a);
     case 1: yield(); return 0;
     case 2: msleep(a); return 0;
@@ -29,7 +29,7 @@ u64 syscall_dispatch(regs_t *r) {
     case 8: { UCHK(a, sizeof(zsys_t)); zsys_t *s = (zsys_t *)a; zproc_t t[64];
         { extern u8 net_first_mac[6]; memcpy(s->hwmac, net_first_mac, 6); } s->mem_total = pmm_total_pages() * 4096; s->mem_free = pmm_free_pages() * 4096; s->uptime_ms = ticks * 1000 / HZ; s->scr_w = scr_w; s->scr_h = scr_h;
         s->nproc = proc_list(t, 64); s->boot_mode = bi.boot_mode; memcpy(s->cpu, cpu_brand, 49); s->tsc_khz = tsc_khz; s->layout = key_layout; return 0; }
-    case 9: { proc_t *p = cur->proc; u64 o = p->brk; i64 inc = a; if (inc < 0 || o + inc > 0x1000000000UL) return 0; p->brk = o + ALIGN(inc, 16); return o; }
+    case 9: { proc_t *p = cur->proc; u64 o = p->brk; i64 inc = a; if (inc < 0 || o + inc > USER_BRK_MAX) return 0; p->brk = o + ALIGN(inc, 16); return o; }
     case 10: UCHK(b - 8, 8); return thread_create(a, b, c);
     case 11: UCHK(a, 1024); memcpy((void *)a, cur->proc->args, 1024); return 0;
     case 12: { char m[256]; if (user_str((char *)a, m, 256) < 0) return E_INVAL; kprintf("[%s] %s\n", cur->proc->name, m); return 0; }
@@ -84,7 +84,7 @@ u64 syscall_dispatch(regs_t *r) {
 
     case 93: return backlight_set(a);
     case 94: return backlight_get();
-    case 95: case 96: { char n[16]; if (user_str((char *)a, n, 16) < 0) return E_INVAL; blkdev_t *k = blk_find(n); if (!k) return E_NOENT; if (c > 2048 || b + c > k->sectors) return E_INVAL; UCHK(d, c * k->ssize); return r->rax == 95 ? blk_read(k, b, c, (void *)d) : blk_write(k, b, c, (void *)d); }
+    case 95: case 96: { char n[16]; if (user_str((char *)a, n, 16) < 0) return E_INVAL; blkdev_t *k = blk_find(n); if (!k) return E_NOENT; if (c > 2048 || b + c > k->sectors) return E_INVAL; UCHK(d, c * k->ssize); return SC_NUM(r) == 95 ? blk_read(k, b, c, (void *)d) : blk_write(k, b, c, (void *)d); }
     case 97: { char n[16]; if (user_str((char *)a, n, 16) < 0) return E_INVAL; blkdev_t *k = blk_find(n); if (!k) return E_NOENT; vfs_sync(); blk_sync(); return blk_rescan(k); }
     case 98: { char n[16]; if (user_str((char *)a, n, 16) < 0) return E_INVAL; UCHK(b, c * sizeof(zpart_t)); blkdev_t *k = blk_find(n); if (!k) return E_NOENT; zpart_t *o = (zpart_t *)b; int m = 0; for (int i = 0; i < blk_count && m < (int)c; i++) { blkdev_t *p = blkdevs[i]; if (p && p->parent == k) { memcpy(o[m].name, p->name, 16); o[m].start = p->offset; o[m].sectors = p->sectors; m++; } } return m; }
     case 99: { char n[16]; if (user_str((char *)a, n, 16) < 0) return E_INVAL; return vfs_set_ro(n, b); }
@@ -110,7 +110,7 @@ u64 syscall_dispatch(regs_t *r) {
     /* clonador: 0 desmontar todas las particiones de un disco (sin retirarlo), 1 contador de escrituras del disco,
        2 congelar sus unidades (solo lectura tras escribir lo pendiente), 3 descongelarlas */
     case 116: { char n[16]; if (user_str((char *)b, n, 16) < 0) return E_INVAL; blkdev_t *k = blk_find(n); if (!k) return E_NOENT; while (k->parent) k = k->parent;
-        if (a == 0) { vfs_sync(); blk_sync(); vfs_umount_dev(k); return 0; } if (a == 1) return (long)(k->wcount & 0x3FFFFFFFFFFFFFFFUL); if (a == 2 || a == 3) return vfs_freeze(k, a == 2); return E_INVAL; }
+        if (a == 0) { vfs_sync(); blk_sync(); vfs_umount_dev(k); return 0; } if (a == 1) return (long)(k->wcount & (~0UL >> 2)); if (a == 2 || a == 3) return vfs_freeze(k, a == 2); return E_INVAL; }
     case 90: if (a == 1) acpi_reboot(); else acpi_poweroff(); return 0;
     case 91: { UCHK(a, b * sizeof(zpci_t)); zpci_t *o = (zpci_t *)a; int n = MIN((int)b, pci_count);
         for (int i = 0; i < n; i++) { pci_t *p = &pci_devs[i]; o[i] = (zpci_t){p->bus, p->dev, p->fn, p->cls, p->sub, p->pif, p->vendor, p->device}; } return n; }

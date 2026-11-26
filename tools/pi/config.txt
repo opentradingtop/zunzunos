@@ -1,0 +1,20 @@
+# ZunzunOS para la Raspberry Pi 2 Model B (BCM2836). Lo lee el firmware de la tarjeta SD antes de arrancar.
+# El kernel (kernel7.img) lleva dentro el disco en memoria con los programas.
+kernel=kernel7.img
+kernel_address=0x8000
+arm_64bit=0
+# sin arbol de dispositivos ni etiquetas: ZunzunOS no los usa y asi no se escribe nada en la memoria baja
+device_tree=
+disable_commandline_tags=1
+# puerto serie (GPIO14 TX, GPIO15 RX) a 115200 baudios, para un cable USB-TTL de 3,3 V
+enable_uart=1
+init_uart_clock=48000000
+# imagen de 480x320: la pantalla de 3,5" va por SPI y la dibuja ZunzunOS; por HDMI se ve lo mismo
+framebuffer_width=480
+framebuffer_height=320
+framebuffer_depth=32
+# los 32 bits son 0x00RRGGBB: sin esto el firmware tomaria el byte alto como transparencia
+framebuffer_ignore_alpha=1
+disable_overscan=1
+disable_splash=1
+gpu_mem=64

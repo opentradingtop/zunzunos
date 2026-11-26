@@ -1,0 +1,31 @@
+ZunzunOS en la Raspberry Pi 2 Model B
+=====================================
+
+Esta tarjeta arranca ZunzunOS en una Raspberry Pi 2 Model B (v1.1, BCM2836).
+La pantalla es la de 3,5" de 480x320 que se enchufa en el conector GPIO
+("3.5inch RPi LCD", HUGA y clones de la Waveshare (A)). Tocar la pantalla es
+hacer clic; el teclado en pantalla se abre con el boton del teclado de la barra.
+
+La primera vez, ZunzunOS pide tocar tres cruces para calibrar el tactil. La
+calibracion se guarda en ZUNZUN/TACTIL.TXT: si la borras, la vuelve a pedir.
+Si la imagen sale girada, crea ZUNZUN/PANTALLA.TXT con la linea madctl=0xE8.
+
+El puerto micro-USB de la Pi 2 solo da corriente: no sirve para datos.
+Los registros del sistema se guardan en DIAGNOST.TXT de esta tarjeta.
+
+ZunzunOS for the Raspberry Pi 2 Model B
+=======================================
+
+This card boots ZunzunOS on a Raspberry Pi 2 Model B (v1.1, BCM2836) with the
+3.5" 480x320 touch screen on the GPIO header. A touch is a click; the
+on-screen keyboard opens from the keyboard button on the taskbar.
+
+On first boot ZunzunOS asks you to touch three crosses to calibrate the touch
+screen; the result is kept in ZUNZUN/TACTIL.TXT (delete it to calibrate again).
+If the picture is upside down, create ZUNZUN/PANTALLA.TXT with madctl=0xE8.
+
+The Pi 2 micro-USB port is power only. System logs go to DIAGNOST.TXT here.
+
+bootcode.bin, start.elf and fixup.dat are the Raspberry Pi firmware
+(Raspberry Pi Ltd / Broadcom, see LICENCE.broadcom); they are not part of
+ZunzunOS.

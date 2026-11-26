@@ -5,10 +5,6 @@ task_t *cur; static task_t *head, *idle; static u32 next_tid = 1; static int nex
 #define MAXPROC 64
 static proc_t *procs[MAXPROC]; static int quantum; static task_t *zombies_t; static u64 cur_cr3;
 #define KSTACK 32768
-#define APP_BASE 0x400000UL
-#define STACK_TOP 0x7FFFFFF00000UL
-#define STACK_SIZE (8UL << 20)
-#define USER_TOP 0x800000000000UL
 
 static task_t *task_new(const char *name) {
     task_t *t = kzalloc(sizeof *t);
@@ -77,10 +73,14 @@ void mutex_unlock(mutex_t *m) { u64 f = irq_save(); if (--m->depth == 0) m->owne
 
 task_t *kthread(const char *name, void (*fn)(void *), void *arg) {
     task_t *t = task_new(name);
+#ifdef __arm__
+    arch_kthread_init(t, fn, arg);
+#else
     u64 *s = (u64 *)t->kstack_top;
     *--s = 0; *--s = (u64)kthread_tramp; *--s = 0; *--s = 0; *--s = (u64)fn; *--s = (u64)arg; *--s = 0; *--s = 0;
     /* orden de pop: r15 r14 r13 r12 rbx rbp, ret */
     t->rsp = (u64)s;
+#endif
     task_link(t);
     return t;
 }
@@ -102,7 +102,7 @@ static void reaper(void *a) {
         }
     }
 }
-static void idle_fn(void *a) { for (;;) { __asm__("sti; hlt"); schedule(); } }
+static void idle_fn(void *a) { for (;;) { cpu_idle(); schedule(); } }
 void sched_init(void) {
     task_t *t = task_new("kernel"); t->next = t; head = t; cur = t;
     cur_cr3 = kernel_cr3; tss_set_rsp0(t->kstack_top); quantum = 10;
@@ -116,12 +116,16 @@ static task_t *user_task(proc_t *p, const char *name, u64 rip, u64 rsp, u64 rdi)
     task_t *t = task_new(name);
     if (!t) return 0;
     t->proc = p;
+#ifdef __arm__
+    arch_user_init(t, rip, rsp, rdi);
+#else
     regs_t *r = (regs_t *)(t->kstack_top - sizeof(regs_t));
     memset(r, 0, sizeof *r);
     r->rip = rip; r->cs = 0x2B; r->ss = 0x23; r->rsp = rsp; r->rflags = 0x202; r->rdi = rdi;
     u64 *s = (u64 *)r;
     *--s = (u64)isr_return; for (int i = 0; i < 6; i++) *--s = 0;
     t->rsp = (u64)s;
+#endif
     return t;
 }
 typedef struct PACKED { char magic[8]; u64 entry, memsz; } apphdr_t;
@@ -144,6 +148,9 @@ int proc_spawn(const char *path, const char *args) {
         u8 *d = P2V(pa); memset(d, 0, PAGE);
         u64 o = i * PAGE; if (o < size) memcpy(d, img + o, MIN(PAGE, size - o));
         vm_map(p->cr3, APP_BASE + o, pa, PTE_U | PTE_W);
+#ifdef __arm__
+        if (o < size) arch_code_sync(d, PAGE);
+#endif
     }
     p->mem_pages = pages;
     p->brk_base = p->brk = APP_BASE + pages * PAGE + PAGE;
@@ -163,7 +170,7 @@ int thread_create(u64 entry, u64 stack, u64 arg) {
     return t->tid;
 }
 static int live_threads(proc_t *p) { int n = 0; u64 f = irq_save(); task_t *t = head; do { if (t->proc == p && t->state != T_ZOMBIE) n++; t = t->next; } while (t != head); irq_restore(f); return n; }
-void task_exit(void) { __asm__("cli"); cur->state = T_ZOMBIE; for (;;) { schedule(); __asm__("sti; hlt; cli"); } }
+void task_exit(void) { irq_off(); cur->state = T_ZOMBIE; for (;;) { schedule(); cpu_idle(); irq_off(); } }
 void proc_exit(int code) {
     proc_t *p = cur->proc;
     p->killed = 1; p->exit_code = code;

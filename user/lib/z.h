@@ -1,7 +1,16 @@
 /* libz - biblioteca de las aplicaciones de ZunzunOS */
 #pragma once
-typedef unsigned char u8; typedef unsigned short u16; typedef unsigned int u32; typedef unsigned long u64;
-typedef int i32; typedef long i64; typedef unsigned long size_t;
+typedef unsigned char u8; typedef unsigned short u16; typedef unsigned int u32;
+typedef int i32;
+#ifdef __arm__
+/* Raspberry Pi (ARMv7 de 32 bits): los punteros y size_t miden 32 bits. El codigo de los programas usa long como
+   entero de 64 bits (tamanos, tiempos, fechas de certificados...), como en x86_64; para que siga igual, en la Pi
+   long se convierte en long long. Por eso, a partir de aqui no se puede escribir "long long": se usa i64 o u64. */
+typedef unsigned long long u64; typedef long long i64; typedef __SIZE_TYPE__ size_t;
+#define long long long
+#else
+typedef unsigned long u64; typedef long i64; typedef unsigned long size_t;
+#endif
 typedef __builtin_va_list va_list;
 #define va_start __builtin_va_start
 #define va_end __builtin_va_end
@@ -12,9 +21,21 @@ typedef __builtin_va_list va_list;
 const char *tr(const char *s); const char *trl(const char *s); const unsigned char *z_glyph(int cp);
 #define _(s) tr(s)
 
+#ifdef __arm__
+/* llamada al sistema: svc #0 con el numero en r7 y los argumentos (32 bits) en r0-r4; el resultado vuelve en r0:r1 */
+static inline long sc5(int n, int a, int b, int c, int d, int e) {
+    register int r0 __asm__("r0") = a, r1 __asm__("r1") = b, r2 __asm__("r2") = c, r3 __asm__("r3") = d, r4 __asm__("r4") = e, r7 __asm__("r7") = n;
+    __asm__ volatile("svc #0" : "+r"(r0), "+r"(r1) : "r"(r2), "r"(r3), "r"(r4), "r"(r7) : "memory", "cc");
+    return (long)((u64)(u32)r1 << 32 | (u32)r0);
+}
+/* contador del temporizador generico (el kernel deja leerlo desde los programas) */
+static inline u64 z_cycles(void) { u32 lo, hi; __asm__ volatile("isb; mrrc p15, 1, %0, %1, c14" : "=r"(lo), "=r"(hi)); return (u64)hi << 32 | lo; }
+#else
 static inline long sc5(long n, long a, long b, long c, long d, long e) {
     long r; __asm__ volatile("int $0x40" : "=a"(r) : "a"(n), "b"(a), "c"(b), "d"(c), "S"(d), "D"(e) : "memory", "cc"); return r;
 }
+static inline u64 z_cycles(void) { return __builtin_ia32_rdtsc(); }
+#endif
 #define SC0(n) sc5(n, 0, 0, 0, 0, 0)
 #define SC1(n, a) sc5(n, (long)(a), 0, 0, 0, 0)
 #define SC2(n, a, b) sc5(n, (long)(a), (long)(b), 0, 0, 0)

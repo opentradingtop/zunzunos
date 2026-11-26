@@ -39,6 +39,12 @@ static u8 set1e0(u8 s) {
     }
     return 0;
 }
+#ifdef __arm__
+/* la Raspberry Pi no tiene PS/2: el teclado y el raton llegan por la pantalla tactil (y mas adelante por USB) */
+void ps2_poll(void) {}
+static void ps2_leds(void) {}
+void input_init(void) { (void)set1; (void)set1e0; (void)mpkt; (void)mi; (void)e0; (void)has_wheel; (void)ps2_ok; }
+#else
 void ps2_poll(void) {
     if (!ps2_ok) return;
     for (int n = 0; n < 16; n++) {
@@ -91,6 +97,7 @@ void input_init(void) {
     kprintf("ps2: listo, rueda=%d\n", has_wheel);
 }
 
+#endif
 /* --- distribuciones --- */
 #define D_ACUTE 0xE001
 #define D_GRAVE 0xE002
@@ -107,7 +114,8 @@ static u32 combine(u32 d, u32 c) {
     for (int i = 0; i < 10; i++) if ((u32)(u8)v[i] == c) return t[i];
     return c;
 }
-u32 key_translate(u8 u, int m) {
+/* caracter de la tecla segun la distribucion, sin tocar el estado de las teclas muertas (0xE001-0xE004 = muerta) */
+u32 key_char(u8 u, int m) {
     int s = !!(m & M_SHIFT), ag = !!(m & M_ALTGR); u32 c = 0;
     if ((m & M_CAPS) && ((u >= 4 && u <= 0x1D) || u == 0x33 || u == 0x31 || u == 0x32)) s = !s;
     if (u == 0x28 || u == 0x58) return '\n';
@@ -142,6 +150,11 @@ u32 key_translate(u8 u, int m) {
             case 0x64: c = s ? '>' : '<'; break;
         }
     }
+    return c;
+}
+u32 key_translate(u8 u, int m) {
+    u32 c = key_char(u, m);
+    if (c == '\n' || c == 8 || c == '\t' || c == 27 || c == 127) return c;
     if (!c) return 0;
     if (c >= 0xE001 && c <= 0xE004) { deadk = c; return 0; }
     if (deadk) { u32 d = deadk; deadk = 0; c = combine(d, c); }

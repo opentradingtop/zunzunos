@@ -52,9 +52,9 @@ static int root_verify(const zcert *c) { if (!RT || RTL < 8 || !eq(RT, "ZRA1", 4
     for (long i = 0; i < n && p + 4 <= e; i++) { int sl = p[0] << 8 | p[1]; const u8 *s = p + 2; int kl = s[sl] << 8 | s[sl + 1]; const u8 *k = s + sl + 2; p = k + kl;
         if (sl == c->il && eq(s, c->issuer, sl)) { zkey key; if (!parse_spki(k, k + kl, &key) && !verify_with(c, &key)) return 0; } } return -1; }
 int x509_chain(zcert *cs, int n, const char *host, long now) {
-    if (!n) return TLS_EUNTRUSTED; if (!host_match(&cs[0], host)) return TLS_EHOST; if (now > 20240101000000L && (now < cs[0].nb || now > cs[0].na)) return TLS_EEXPIRED;
+    if (!n) return TLS_EUNTRUSTED; if (!host_match(&cs[0], host)) return TLS_EHOST; if (now > 20240101000000LL && (now < cs[0].nb || now > cs[0].na)) return TLS_EEXPIRED;
     zcert *cur = &cs[0]; for (int d = 0; d < 8; d++) { if (!root_verify(cur)) return 0; zcert *nx = 0; for (int i = 0; i < n; i++) if (&cs[i] != cur && cs[i].sl == cur->il && eq(cs[i].subject, cur->issuer, cur->il)) { nx = &cs[i]; break; }
-        if (!nx || verify_with(cur, &nx->key)) return TLS_EUNTRUSTED; if (now > 20240101000000L && (now < nx->nb || now > nx->na)) return TLS_EEXPIRED; cur = nx; } return TLS_EUNTRUSTED; }
+        if (!nx || verify_with(cur, &nx->key)) return TLS_EUNTRUSTED; if (now > 20240101000000LL && (now < nx->nb || now > nx->na)) return TLS_EEXPIRED; cur = nx; } return TLS_EUNTRUSTED; }
 /* ===================== registros ===================== */
 static int rd_full(ztls *t, u8 *b, long n) { long o = 0; while (o < n) { long r = t->rcv(t->io, b + o, n - o, 15000); if (r <= 0) return -1; o += r; } return 0; }
 static int wr_rec(ztls *t, int type, const u8 *d, long n) { u8 h[5 + 16384 + 256]; h[0] = type; h[1] = 3; h[2] = type == 22 && !t->enc && !t->v12 ? 1 : 3;

@@ -3,6 +3,24 @@
 La cifra está en `user/lib/version.h` y sube con cada actualización que se graba en la memoria USB o se publica.
 Se ve en Acerca de y en la primera línea del registro de arranque (y por tanto en `DIAGNOST.TXT`).
 
+## 2.7 — 26/11/2026
+
+- ZunzúnOS arranca en la **Raspberry Pi 2 Model B** (BCM2836, ARMv7 de 32 bits) con la pantalla táctil de 3,5"
+  de 480x320 del conector GPIO. Guía: `docs/RASPBERRY.md`.
+  - Kernel ARM propio en `kernel/pi`: arranque desde el firmware (`kernel7.img`), MMU con tablas de dos niveles,
+    excepciones, temporizador genérico, UART, buzón del firmware, tarjeta SD (EMMC) y apagado/reinicio. El resto
+    del kernel (gestor de ventanas, VFS, FAT, planificador, llamadas al sistema...) es el mismo que en x86_64.
+  - Pantalla ILI9486 por SPI (se envían solo las zonas que cambian) y táctil XPT2046 con calibración de tres
+    puntos, que se guarda en `ZUNZUN/TACTIL.TXT`. Un toque es un clic.
+  - Teclado en pantalla con la distribución española o inglesa: se abre con el botón del teclado de la barra y
+    sirve en todas las ventanas.
+  - Pantalla pequeña: la pantalla de inicio, el PIN y el menú Inicio caben en 480x320; las ventanas que no caben
+    se muestran reducidas.
+  - Todas las aplicaciones menos el Navegador JS y la Consola JS (el motor Colibrí aún no tiene su parte ARM).
+    Sin red, sonido ni USB todavía.
+  - `make pi` hace `build/pi/kernel7.img`; `make pi-sd` la tarjeta SD. Prueba en QEMU: `tools/pi_test.py`.
+- El código de los programas usa sufijos `LL`/`ULL` en las constantes de 64 bits (igual en x86_64).
+
 ## 2.6 — 26/11/2026
 
 - Clonar: copia exacta de una unidad entera en otra, sector a sector, para cambiar el disco duro o el SSD de un equipo

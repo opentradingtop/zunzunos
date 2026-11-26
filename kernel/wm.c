@@ -12,8 +12,6 @@
 #define WF_LOCK 32 /* pantalla de bloqueo: encima de todo y recibe toda la entrada (solo el escritorio) */
 #define ST_MIN 1
 #define ST_MAX 2
-#define CANVAS_BASE 0x2000000000UL
-#define CANVAS_STEP 0x4000000UL
 typedef struct win {
     int used, id, x, y, w, h, cw, ch; u32 flags, state; char title[64];
     u32 *px; u64 px_phys, px_pages; task_t *owner; proc_t *proc;
@@ -52,7 +50,7 @@ static void rect(int x, int y, int w, int h, u32 c) {
 }
 static int cp437(int c) {
     if (c < 128) return c;
-    static const u16 m[][2] = {{0xE1,160},{0xE9,130},{0xED,161},{0xF3,162},{0xFA,163},{0xF1,164},{0xD1,165},{0xFC,129},{0xDC,154},{0xC9,144},{0xBF,168},{0xA1,173},{0xBA,167},{0xAA,166},{0xE7,135},{0xC7,128},{0xE0,133},{0xE8,138},{0xF2,149},{0xC1,65},{0xCD,73},{0xD3,79},{0xDA,85}};
+    static const u16 m[][2] = {{0xE1,160},{0xE9,130},{0xED,161},{0xF3,162},{0xFA,163},{0xF1,164},{0xD1,165},{0xFC,129},{0xDC,154},{0xC9,144},{0xBF,168},{0xA1,173},{0xBA,167},{0xAA,166},{0xE7,135},{0xC7,128},{0xE0,133},{0xE8,138},{0xF2,149},{0xC1,65},{0xCD,73},{0xD3,79},{0xDA,85},{0xB7,250},{0xAC,170},{0xB4,39},{0xA8,34}};
     for (unsigned i = 0; i < sizeof m / sizeof m[0]; i++) if (m[i][0] == c) return m[i][1];
     return '?';
 }
@@ -101,6 +99,98 @@ static void draw_win(win_t *w) {
     if (w->cw == w->w && w->ch == w->h) { for (int j = b; j < f; j++) memcpy(bb + j * scr_w + a, w->px + (j - w->y) * w->cw + (a - w->x), (e - a) * 4); return; }
     for (int j = b; j < f; j++) { u32 *s = w->px + (u64)(j - w->y) * w->ch / w->h * w->cw, *d = bb + j * scr_w; for (int i = a; i < e; i++) d[i] = s[(u64)(i - w->x) * w->cw / w->w]; }
 }
+#ifdef ZZ_TACTIL
+/* ===== Teclado en pantalla (Raspberry Pi con pantalla tactil): lo dibuja el gestor de ventanas encima de todo,
+   asi sirve tambien en la pantalla de inicio. Las teclas son codigos HID: las etiquetas salen de la distribucion
+   (ES/US) con key_char, y al pulsar se generan las mismas teclas que con un teclado de verdad. ===== */
+#define K_SHIFT 0xE1
+#define K_CTRL 0xE0
+#define K_ALTGR 0xE6
+#define K_HIDE 0xFF
+typedef struct { u8 u, w; } okey_t;
+static const okey_t ORow0[] = {{0x29,2},{0x1E,2},{0x1F,2},{0x20,2},{0x21,2},{0x22,2},{0x23,2},{0x24,2},{0x25,2},{0x26,2},{0x27,2},{0x2D,2},{0x2A,3},{0}};
+static const okey_t ORow1[] = {{0x2B,3},{0x14,2},{0x1A,2},{0x08,2},{0x15,2},{0x17,2},{0x1C,2},{0x18,2},{0x0C,2},{0x12,2},{0x13,2},{0x2F,2},{0x30,2},{0}};
+static const okey_t ORow2[] = {{0x04,2},{0x16,2},{0x07,2},{0x09,2},{0x0A,2},{0x0B,2},{0x0D,2},{0x0E,2},{0x0F,2},{0x33,2},{0x34,2},{0x28,4},{0}};
+static const okey_t ORow3[] = {{K_SHIFT,3},{0x64,2},{0x1D,2},{0x1B,2},{0x06,2},{0x19,2},{0x05,2},{0x11,2},{0x10,2},{0x36,2},{0x37,2},{0x38,2},{0x2E,2},{0}};
+static const okey_t ORow4[] = {{K_CTRL,3},{K_ALTGR,3},{0x2C,9},{0x50,2},{0x52,2},{0x51,2},{0x4F,2},{0x4C,3},{K_HIDE,3},{0}};
+static const okey_t *const ORows[5] = {ORow0, ORow1, ORow2, ORow3, ORow4};
+#define OSK_KH 28
+#define OSK_H (5 * (OSK_KH + 2) + 2)
+int osk_on;   /* la placa lo activa: hay pantalla tactil */
+static int osk_vis, osk_shift, osk_ctrl, osk_altgr, osk_hl = -1; static u64 osk_hl_t;
+static int panel_h(void) { int ph = 0; for (int i = 0; i < nz; i++) if (z[i]->flags & WF_PANEL) ph = z[i]->h; return ph; }
+static int osk_y0(void) { return scr_h - OSK_H - (T.panel_top ? 0 : panel_h()); }   /* encima de la barra de tareas */
+static int osk_key_at(int r, int k, int *x, int *y, int *w) {   /* posicion de la tecla k de la fila r */
+    int tot = 0, before = 0; for (int i = 0; ORows[r][i].u; i++) { if (i == k) before = tot; tot += ORows[r][i].w; }
+    *x = 2 + before * ((int)scr_w - 4) / tot; *w = (before + ORows[r][k].w) * ((int)scr_w - 4) / tot - (*x - 2) - 2;
+    *y = osk_y0() + 2 + r * (OSK_KH + 2); return 0;
+}
+static void glyph(int x, int y, int idx, u32 col) { const u8 *g = font8x16 + idx * 16; for (int j = 0; j < 16; j++) for (int i = 0; i < 8; i++) if (g[j] & (0x80 >> i)) rect(x + i, y + j, 1, 1, col); }
+static void osk_label(int u, char *o, int *gl) {
+    *gl = 0; o[0] = 0; int es = T.lang == 0;
+    switch (u) {
+    case K_SHIFT: strncpy0(o, es ? "May" : "Shift", 16); return; case K_CTRL: strncpy0(o, "Ctrl", 16); return; case K_ALTGR: strncpy0(o, "AltGr", 16); return;
+    case K_HIDE: *gl = 0x1F; return; case 0x29: strncpy0(o, "Esc", 16); return; case 0x2B: strncpy0(o, "Tab", 16); return;
+    case 0x28: strncpy0(o, es ? "Intro" : "Enter", 16); return; case 0x2A: *gl = 0x1B; return; case 0x4C: strncpy0(o, es ? "Supr" : "Del", 16); return;
+    case 0x2C: strncpy0(o, es ? "espacio" : "space", 16); return;
+    case 0x50: *gl = 0x1B; return; case 0x4F: *gl = 0x1A; return; case 0x52: *gl = 0x18; return; case 0x51: *gl = 0x19; return;
+    }
+    int m = (osk_shift ? M_SHIFT : 0) | (osk_altgr ? M_ALTGR : 0); u32 c = key_char(u, m);
+    if (c >= 0xE001 && c <= 0xE004) c = c == 0xE001 ? 0xB4 : c == 0xE002 ? '`' : c == 0xE003 ? '^' : 0xA8;
+    if (c >= 'a' && c <= 'z' && osk_shift) c -= 32;
+    if (c) o[utf8_encode(c, o)] = 0;
+}
+static void osk_draw(void) {
+    if (!osk_vis) return;
+    int y0 = osk_y0(); rect(0, y0, scr_w, OSK_H, T.panel2); rect(0, y0, scr_w, 1, T.acc);
+    for (int r = 0; r < 5; r++) for (int k = 0; ORows[r][k].u; k++) {
+        int x, y, w, u = ORows[r][k].u; osk_key_at(r, k, &x, &y, &w);
+        int on = (u == K_SHIFT && osk_shift) || (u == K_CTRL && osk_ctrl) || (u == K_ALTGR && osk_altgr) || osk_hl == r * 32 + k;
+        u32 bg = on ? T.acc : (u >= 0xE0 || u < 4 || (u >= 0x28 && u <= 0x2B) || u >= 0x4C) ? T.inact : T.panel1;
+        rect(x, y, w, OSK_KH, bg); rect(x, y + OSK_KH - 1, w, 1, 0);
+        if (u == K_SHIFT && osk_shift == 2) rect(x + 4, y + OSK_KH - 5, w - 8, 2, 0xFFFFFF);   /* mayusculas fijas */
+        char l[16]; int gl; osk_label(u, l, &gl);
+        if (gl) glyph(x + (w - 8) / 2, y + (OSK_KH - 16) / 2, gl, 0xFFFFFF);
+        else { int n = 0; for (const char *q = l; utf8_decode(&q); ) n++; text(x + (w - n * 8) / 2, y + (OSK_KH - 16) / 2, l, 0xFFFFFF, w); }
+    }
+}
+static void on_key2(int u, int down); static int osk_set(int v);
+static void osk_press(int px, int py) {
+    for (int r = 0; r < 5; r++) for (int k = 0; ORows[r][k].u; k++) {
+        int x, y, w, u = ORows[r][k].u; osk_key_at(r, k, &x, &y, &w);
+        if (px < x || px >= x + w + 2 || py < y || py >= y + OSK_KH + 2) continue;
+        osk_hl = r * 32 + k; osk_hl_t = ticks + 150 * HZ / 1000;
+        if (u == K_SHIFT) osk_shift = (osk_shift + 1) % 3;
+        else if (u == K_CTRL) osk_ctrl = !osk_ctrl;
+        else if (u == K_ALTGR) osk_altgr = !osk_altgr;
+        else if (u == K_HIDE) { osk_hl = -1; osk_set(0); return; }
+        else {
+            if (osk_shift) on_key2(K_SHIFT, 1); if (osk_ctrl) on_key2(K_CTRL, 1); if (osk_altgr) on_key2(K_ALTGR, 1);
+            on_key2(u, 1); on_key2(u, 0);
+            if (osk_altgr) on_key2(K_ALTGR, 0); if (osk_ctrl) on_key2(K_CTRL, 0); if (osk_shift) on_key2(K_SHIFT, 0);
+            if (osk_shift == 1) osk_shift = 0; osk_ctrl = osk_altgr = 0;
+        }
+        dirty(0, osk_y0(), scr_w, OSK_H); return;
+    }
+}
+/* calibracion del tactil (pi/tactil.c): cruz a pantalla completa, encima de todo */
+static int cal_n, cal_x, cal_y;
+void wm_calib(int step, int x, int y) { u64 f = irq_save(); cal_n = step; cal_x = x; cal_y = y; irq_restore(f); dirty(0, 0, scr_w, scr_h); if (wm_task) task_wake(wm_task); }
+static void cal_draw(void) {
+    if (!cal_n) return;
+    rect(0, 0, scr_w, scr_h, 0x111827);
+    char m[80]; snprintf(m, sizeof m, T.lang == 0 ? "Toca el centro de la cruz (%d de 3)" : "Touch the center of the cross (%d of 3)", cal_n);
+    int n = 0; for (const char *q = m; utf8_decode(&q); ) n++;
+    text((scr_w - n * 8) / 2, scr_h / 2 - 40, m, 0xFFFFFF, scr_w);
+    const char *t = T.lang == 0 ? "Calibrar la pantalla táctil" : "Touch screen calibration"; n = 0; for (const char *q = t; utf8_decode(&q); ) n++;
+    text((scr_w - n * 8) / 2, scr_h / 2 - 64, t, T.ui_acc2, scr_w);
+    rect(cal_x - 14, cal_y, 29, 1, 0xFFFFFF); rect(cal_x, cal_y - 14, 1, 29, 0xFFFFFF); rect(cal_x - 3, cal_y - 3, 7, 7, 0xF87171);
+}
+u32 *wm_fb_line(int y) { return (u32 *)(fb + y * pitch); }   /* la pantalla SPI lee de aqui */
+static void notify_list(void);
+static int osk_set(int v) { int n = v < 0 ? !osk_vis : !!v; if (n != osk_vis) { osk_vis = n; osk_shift = osk_ctrl = osk_altgr = 0; dirty(0, 0, scr_w, scr_h); notify_list(); kprintf("wm: teclado en pantalla %s\n", n ? "visible" : "oculto"); } return osk_vis; }
+static void osk_tick(void) { if (osk_hl >= 0 && ticks > osk_hl_t) { osk_hl = -1; if (osk_vis) dirty(0, osk_y0(), scr_w, OSK_H); } }
+#endif
 static void compose(void) {
     u64 fl = irq_save(); int a = dx0, b = dy0, c = dx1, d = dy1; dx0 = dy0 = 1 << 30; dx1 = dy1 = -1; irq_restore(fl);
     if (c <= a || d <= b) return;
@@ -111,6 +201,9 @@ static void compose(void) {
         int X = rx - 1, Y = ry - TITLE, W = rw + 2, H = rh + TITLE + 1; u32 k = T.ui_acc2;
         rect(X, Y, W, 2, k); rect(X, Y + H - 2, W, 2, k); rect(X, Y, 2, H, k); rect(X + W - 2, Y, 2, H, k);
     }
+#ifdef ZZ_TACTIL
+    osk_draw(); cal_draw();
+#endif
     draw_cursor();
     for (int j = b; j < d; j++) {
         u32 *s = bb + j * scr_w + a;
@@ -120,6 +213,9 @@ static void compose(void) {
         else if (bpp == 32) { volatile u32 *q = (volatile u32 *)o; for (int i = 0; i < n; i++) { u32 v = s[i]; q[i] = (v & 0xFF00) | (v >> 16 & 0xFF) | (v & 0xFF) << 16; } }
         else for (int i = 0; i < n; i++) { u32 v = s[i]; o[i*3] = v; o[i*3+1] = v >> 8; o[i*3+2] = v >> 16; }
     }
+#ifdef __arm__
+    lcd_dirty(a, b, c, d);   /* la pantalla SPI copia esta zona */
+#endif
 }
 static void send(win_t *w, u32 type, int x, int y, u32 key, u32 ch, u32 btn) {
     if (w->w != w->cw && (type == EV_MOVE || type == EV_DOWN || type == EV_UP || type == EV_WHEEL) && w->w > 0) x = x * w->cw / w->w;
@@ -180,6 +276,9 @@ static void on_mouse(int nx, int ny, int b, int wheel) {
     nx = MAX(0, MIN(nx, (int)scr_w - 1)); ny = MAX(0, MIN(ny, (int)scr_h - 1));
     int moved = nx != mx || ny != my, pressed = b & ~mbtn, released = mbtn & ~b;
     if (moved) { cursor_dirty(); mx = nx; my = ny; cursor_dirty(); }
+#ifdef ZZ_TACTIL
+    if (osk_vis && my >= osk_y0() && my < osk_y0() + OSK_H && !grab && !drag_mode) { if (b & ~mbtn & 1) osk_press(mx, my); mbtn = b; return; }
+#endif
     if (moved) {
         if (drag_mode == 1 && dragw) { dirty_win(dragw); dragw->x = MAX(drag_ox + mx, 1 - dragw->w + 60); dragw->y = MAX(drag_oy + my, TITLE); dirty_win(dragw); }
         else if (drag_mode == 2 && dragw) {
@@ -279,6 +378,9 @@ static void wm_thread(void *a) {
             else on_mouse(e.a, e.b, e.c, e.d);
         }
         key_repeat();
+#ifdef ZZ_TACTIL
+        osk_tick();
+#endif
         compose();
         mutex_unlock(&wm);
         task_block(rep_u ? 8 : 12);
@@ -301,6 +403,9 @@ void fb_early_panic(const char *m) {
 void wm_init(void) {
     if (!bi.fb_addr || !bi.fb_w) { kprintf("wm: sin framebuffer\n"); return; }
     scr_w = bi.fb_w; scr_h = bi.fb_h; pitch = bi.fb_pitch; bpp = bi.fb_bpp; is_rgb = bi.fb_rgb;
+#ifdef __arm__
+    extern int fb_in_ram; if (fb_in_ram) fb = P2V(bi.fb_addr); else
+#endif
     fb = ioremap_wc(bi.fb_addr, pitch * scr_h);
     bb = kmalloc(scr_w * scr_h * 4); lbuf = kmalloc(scr_w * 4);
     if (!bb) { kprintf("wm: sin memoria\n"); return; }
@@ -329,10 +434,22 @@ int wm_create(const zwincfg_t *c, const char *title) {
     if (!id) { mutex_unlock(&wm); return E_NOMEM; }
     win_t *w = &wins[id - 1]; memset(w, 0, sizeof *w);
     w->id = id; w->flags = c->flags; w->owner = cur; w->proc = cur->proc; strncpy0(w->title, title, 64);
-    int e = alloc_canvas(w, MIN(c->w, (int)scr_w), MIN(c->h, (int)scr_h));
+    int cw = MIN(c->w, (int)scr_w), ch = MIN(c->h, (int)scr_h);
+#ifdef ZZ_TACTIL
+    /* pantalla pequena: una ventana fija que no cabe se muestra reducida (el programa dibuja a su tamano y los toques
+       se traducen); una redimensionable se abre del tamano del area libre */
+    int fit = 0, ph = panel_h(), aw = scr_w - 2, ah = scr_h - ph - TITLE - 1, small = scr_h < 600 && (c->flags & WF_DECOR);
+    if (small) { if (!(c->flags & WF_RESIZE) && (c->w > aw || c->h > ah)) { cw = MIN(c->w, 1600); ch = MIN(c->h, 1200); fit = 1; } else { cw = MIN(cw, aw); ch = MIN(ch, ah); } }
+#endif
+    int e = alloc_canvas(w, cw, ch);
     if (e) { mutex_unlock(&wm); return e; }
     w->x = c->x; w->y = c->y;
     if (c->x < 0 && (c->flags & WF_DECOR)) { cascade = (cascade + 1) % 8; w->x = 60 + cascade * 28; w->y = 50 + cascade * 26; if (w->x + w->w > (int)scr_w) w->x = 1; if (w->y + w->h + 40 > (int)scr_h) w->y = TITLE; }
+#ifdef ZZ_TACTIL
+    if (fit) { int mw = aw, mh = ah; if ((u64)mw * ch > (u64)mh * cw) mw = mh * cw / ch; else mh = mw * ch / cw; w->w = mw; w->h = mh; }
+    if (small) { int top = TITLE + (T.panel_top ? ph : 0), bot = scr_h - (T.panel_top ? 0 : ph) - 1;
+        w->x = MAX(1, MIN(w->x, (int)scr_w - 1 - w->w)); w->y = MAX(top, MIN(w->y, bot - w->h)); }
+#endif
     w->used = 1; z_insert(w); dirty_win(w);
     if (lay(w) == 1 || lay(w) == 3 || lay(w) == 4) set_focus(w);
     notify_list(); mutex_unlock(&wm);
@@ -391,6 +508,9 @@ int wm_op(int id, int op, i64 a, i64 b) {
     case 3: dirty_win(w); w->x = a; w->y = b; dirty_win(w); break;
     case 4: do_max(w); break;
     case 5: send(w, EV_CLOSE, 0, 0, 0, 0, 0); break;
+#ifdef ZZ_TACTIL
+    case 20: r = osk_on ? (a == 2 ? osk_vis : osk_set(a)) : E_NOSYS; break;   /* teclado en pantalla: a = -1 cambiar, 0 ocultar, 1 mostrar, 2 consultar */
+#endif
     default: r = E_INVAL;
     }
     mutex_unlock(&wm); return r;

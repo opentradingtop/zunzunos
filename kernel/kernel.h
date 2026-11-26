@@ -1,8 +1,13 @@
 /* ZunzunOS - cabecera comun del kernel */
 #pragma once
 typedef unsigned char u8; typedef unsigned short u16; typedef unsigned int u32;
-typedef unsigned long u64; typedef signed char i8; typedef short i16; typedef int i32; typedef long i64;
-typedef unsigned long size_t;
+typedef signed char i8; typedef short i16; typedef int i32;
+#ifdef __arm__
+/* ARMv7 de 32 bits (Raspberry Pi 2): long mide 32 bits, asi que u64/i64 son long long */
+typedef unsigned long long u64; typedef long long i64; typedef __SIZE_TYPE__ size_t;
+#else
+typedef unsigned long u64; typedef long i64; typedef unsigned long size_t;
+#endif
 typedef __builtin_va_list va_list;
 #define va_start __builtin_va_start
 #define va_end __builtin_va_end
@@ -14,6 +19,9 @@ typedef __builtin_va_list va_list;
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define HZ 1000
 
+#ifdef __arm__
+#include "pi/arch.h"
+#else
 /* --- puertos y CPU --- */
 static inline void outb(u16 p, u8 v) { __asm__ volatile("outb %0,%1" : : "a"(v), "Nd"(p)); }
 static inline void outw(u16 p, u16 v) { __asm__ volatile("outw %0,%1" : : "a"(v), "Nd"(p)); }
@@ -32,6 +40,11 @@ static inline u64 irq_save(void) { u64 f; __asm__ volatile("pushfq; pop %0; cli"
 static inline void irq_restore(u64 f) { if (f & 0x200) __asm__ volatile("sti"); }
 static inline void dma_sync(const void *p, u64 n) { u64 a = (u64)p & ~63UL, e = (u64)p + n; __asm__ volatile("mfence"); for (; a < e; a += 64) __asm__ volatile("clflush (%0)" : : "r"(a)); __asm__ volatile("mfence"); }
 static inline void mb(void) { __asm__ volatile("mfence" : : : "memory"); }
+static inline void irq_on(void) { __asm__ volatile("sti"); }
+static inline void irq_off(void) { __asm__ volatile("cli"); }
+static inline void cpu_idle(void) { __asm__ volatile("sti; hlt"); }   /* espera la siguiente interrupcion */
+static inline void cpu_halt(void) { __asm__ volatile("cli; hlt"); }   /* se detiene sin atender interrupciones */
+#endif
 #define R8(a) (*(volatile u8 *)(a))
 #define R16(a) (*(volatile u16 *)(a))
 #define R32(a) (*(volatile u32 *)(a))
@@ -59,15 +72,29 @@ void serial_init(void); int dmesg_read(char *, int);
 int utf8_decode(const char **); int utf8_encode(u32, char *);
 
 /* --- cpu --- */
+#ifndef __arm__
 typedef struct { u64 r15, r14, r13, r12, r11, r10, r9, r8, rbp, rdi, rsi, rdx, rcx, rbx, rax, vec, err, rip, cs, rflags, rsp, ss; } regs_t;
+#define SC_NUM(r) ((r)->rax)
+#define SC_ARGS(r, a, b, c, d, e) u64 a = (r)->rbx, b = (r)->rcx, c = (r)->rdx, d = (r)->rsi, e = (r)->rdi
+#endif
 void cpu_init(void); void timer_init(void); void tss_set_rsp0(u64); void udelay(u64); void mdelay_busy(u64);
 extern volatile u64 ticks; extern u64 tsc_khz; extern char cpu_brand[49];
 void fpu_save(void *); void fpu_load(void *); void fpu_init_state(void *);
 
 /* --- memoria --- */
+#ifndef __arm__
 #define DMAP 0xFFFF800000000000UL
 #define KVMA 0xFFFFFFFF80000000UL
 #define P2V(p) ((void *)((u64)(p) + DMAP))
+/* espacio de los procesos */
+#define APP_BASE 0x400000UL
+#define STACK_TOP 0x7FFFFFF00000UL
+#define STACK_SIZE (8UL << 20)
+#define USER_TOP 0x800000000000UL
+#define USER_BRK_MAX 0x1000000000UL
+#define CANVAS_BASE 0x2000000000UL   /* lienzos de las ventanas: uno por ventana, CANVAS_STEP cada uno */
+#define CANVAS_STEP 0x4000000UL
+#endif
 #define PAGE 4096UL
 #define PTE_P 1UL
 #define PTE_W 2UL
@@ -79,7 +106,7 @@ void fpu_save(void *); void fpu_load(void *); void fpu_init_state(void *);
 #define PTE_ADDR 0x000FFFFFFFFFF000UL
 u64 V2P(const void *);
 void mm_init(void);
-u64 pmm_alloc(void); void pmm_free(u64); u64 pmm_alloc_contig(u64 n, u64 maxphys); void pmm_free_contig(u64, u64);
+u64 pmm_alloc(void); void pmm_free(u64); u64 pmm_alloc_contig(u64 n, u64 maxphys); u64 pmm_alloc_contig_al(u64 n, u64 maxphys, u64 al); void pmm_free_contig(u64, u64);
 u64 pmm_free_pages(void); u64 pmm_total_pages(void);
 void *kmalloc(size_t); void *kzalloc(size_t); void kfree(void *);
 void *dma_alloc(size_t); void dma_free(void *, size_t);
@@ -194,7 +221,7 @@ void input_joy(u32 btn, int dx, int dy, u32 id); extern volatile u8 kbd_leds; ex
 void input_init(void); void ps2_poll(void); void input_key(u8 usage, int down);
 void input_mouse(int dx, int dy, int btn, int wheel); void input_abs(int x, int y, int maxx, int maxy, int btn, int wheel);
 typedef struct { int kind; int a, b, c, d; } inev_t;
-int input_pop(inev_t *); u32 key_translate(u8 usage, int mods); extern int key_layout; extern task_t *wm_task;
+int input_pop(inev_t *); u32 key_translate(u8 usage, int mods); u32 key_char(u8 usage, int mods); extern int key_layout; extern task_t *wm_task;
 
 /* --- ventanas --- */
 typedef struct { u32 acc, inact, border, ttxt, ttxt2, close, d1, d2, panel1, panel2, ui_acc, ui_acc2, ui_bg, ui_panel, ui_line, ui_text, ui_muted, ui_white; u32 title_sc, text_sc, panel_top, menu_grid, icon_sc, show_icons, motif, lang, gen; } ztheme_t;

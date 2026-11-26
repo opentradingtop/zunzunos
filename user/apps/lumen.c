@@ -16,7 +16,7 @@
 static zwin *W; static char msg[300], base[48];
 static long atol(const char *s) { while (*s == ' ') s++; int g = *s == '-'; if (g) s++; long v = 0; while (*s >= '0' && *s <= '9') v = v * 10 + *s++ - '0'; return g ? -v : v; }
 static int isalnum(int c) { return isalpha(c) || isdigit(c); }
-static long now_num(void) { u32 t[6]; z_time(t); return (long)t[5] * 10000000000L + (long)t[4] * 100000000L + (long)t[3] * 1000000L + t[2] * 10000 + t[1] * 100 + t[0]; }
+static long now_num(void) { u32 t[6]; z_time(t); return (long)t[5] * 10000000000LL + (long)t[4] * 100000000LL + (long)t[3] * 1000000LL + t[2] * 10000 + t[1] * 100 + t[0]; }
 static char *memchr_(const char *s, int c, long n) { for (long i = 0; i < n; i++) if (s[i] == (char)c) return (char *)s + i; return 0; }
 static int u8len(u8 c) { return c < 0x80 ? 1 : c < 0xE0 ? 2 : c < 0xF0 ? 3 : 4; }
 static int put_utf8(u32 c, char *o) { if (c < 0x10000) return utf8_put(c, o); o[0] = 0xF0 | c >> 18; o[1] = 0x80 | (c >> 12 & 63); o[2] = 0x80 | (c >> 6 & 63); o[3] = 0x80 | (c & 63); return 4; }
@@ -114,7 +114,7 @@ static msg_t *msg_add(conv_t *c, int role) { if (c->n == c->cap) { c->cap = c->c
 static void msg_del(conv_t *c, int i) { if (i < 0 || i >= c->n) return; msg_free(c->m[i]); memmove(c->m + i, c->m + i + 1, (c->n - i - 1) * sizeof *c->m); c->n--; }
 static void conv_free(conv_t *c) { for (int i = 0; i < c->n; i++) msg_free(c->m[i]); free(c->m); free(c->sys); free(c); }
 static void put_block(sb_t *b, const char *s) { for (const char *p = s; *p; ) { const char *e = strchr(p, '\n'); long n = e ? e - p : (long)strlen(p); if (n >= 2 && p[0] == '@' && p[1] == '@') sb_s(b, "@"); sb_add(b, p, n); sb_s(b, "\n"); if (!e) break; p = e + 1; } }
-static int conv_save(conv_t *c) { if (!c->file[0]) { long t = now_num(); for (int k = 0; k < 100; k++) { snprintf(c->file, 32, "%ld%02d.TXT", t % 10000000000L, k); char p[128]; snprintf(p, 128, "%s/LUMEN/%s", base, c->file); zdirent d; if (z_stat(p, &d)) break; } }
+static int conv_save(conv_t *c) { if (!c->file[0]) { long t = now_num(); for (int k = 0; k < 100; k++) { snprintf(c->file, 32, "%ld%02d.TXT", t % 10000000000LL, k); char p[128]; snprintf(p, 128, "%s/LUMEN/%s", base, c->file); zdirent d; if (z_stat(p, &d)) break; } }
     sb_t b = {0}; sb_f(&b, "LUMEN1\ntitulo=%s\nmodelo=%s\nfecha=%ld\nsistema=", c->title, c->model, c->upd); esc_nl(&b, c->sys ? c->sys : ""); sb_s(&b, "\n");
     if (c->natt) { sb_s(&b, "adjuntos="); for (int i = 0; i < c->natt; i++) { if (i) sb_s(&b, "|"); sb_s(&b, c->att[i]); } sb_s(&b, "\n"); }
     for (int i = 0; i < c->n; i++) { msg_t *m = c->m[i]; if (m->role == 0) { sb_s(&b, "@@tu\n"); if (m->img) { sb_s(&b, "@@imagenes "); for (const char *q = m->img; *q; q++) sb_add(&b, *q == '\n' ? "|" : q, 1); sb_s(&b, "\n"); } } else if (m->role == 1) sb_f(&b, "@@ia %s|%d|%d|%ld|%d\n", m->model, m->tin, m->tout, m->ms, m->stopped); else sb_s(&b, "@@error\n"); put_block(&b, m->t.p);
@@ -223,7 +223,7 @@ static void sse_json(sse_t *x, char *p) { jd_t d; int r = jparse(&d, p); if (r <
     const char *rs = js(&d, jget(&d, dl, "reasoning")); if (!rs) rs = js(&d, jget(&d, dl, "reasoning_content")); if (rs && *rs) { sb_s(&m->r, rs); x->got = 1; }
     int us = jget(&d, r, "usage"); if (us >= 0) { m->tin = (int)jn(&d, jget(&d, us, "prompt_tokens")); m->tout = (int)jn(&d, jget(&d, us, "completion_tokens")); }
     m->dirty = 1; jfree(&d); }
-static int sse_cb(const char *d, long n, void *ctx) { sse_t *x = ctx; sb_add(&x->line, d, n); if (!x->sse && x->raw.n < (4L << 20)) sb_add(&x->raw, d, n);
+static int sse_cb(const char *d, long n, void *ctx) { sse_t *x = ctx; sb_add(&x->line, d, n); if (!x->sse && x->raw.n < (4LL << 20)) sb_add(&x->raw, d, n);
     for (;;) { char *e = memchr_(x->line.p, '\n', x->line.n); if (!e) break; *e = 0; char *l = x->line.p; long ll = e - l; if (ll && l[ll - 1] == '\r') l[--ll] = 0;
         if (l[0] == ':' || !strncmp(l, "data:", 5) || !strncmp(l, "event:", 6)) x->sse = 1;
         if (!strncmp(l, "data:", 5)) { char *p = l + 5; while (*p == ' ') p++; if (!strcmp(p, "[DONE]")) x->done = 1; else if (*p) sse_json(x, p); }
@@ -260,7 +260,7 @@ static void rag_del(int i) { conv_t *c = CC(); if (!c || i < 0 || i >= c->natt) 
 static sb_t RAGT; static int rag_n, rag_docs;
 static void rag_build(conv_t *c, const char *q) { free(RAGT.p); RAGT = (sb_t){0}; rag_n = rag_docs = 0; if (!c->natt) return; zrdoc tmp[MAXATT]; int nd = 0;
     for (int i = 0; i < c->natt; i++) { char er[80]; zrdoc *d = rag_doc(c->att[i], er, 80); if (d) tmp[nd++] = *d; }
-    if (!nd) return; model_t *md = md_find(C.model); long budget = md && md->ctx ? MIN(24000L, md->ctx * 4 / 3) : 16000; budget = MAX(budget, 3000L);
+    if (!nd) return; model_t *md = md_find(C.model); long budget = md && md->ctx ? MIN(24000LL, md->ctx * 4 / 3) : 16000; budget = MAX(budget, 3000LL);
     sb_t f = {0}; sb_s(&f, ""); rag_n = zr_search(tmp, nd, q, budget, &f, &rag_docs);
     for (int i = 0; i < nd; i++) for (int k = 0; k < nrd; k++) if (!strcmp(RD[k].path, tmp[i].path)) { RD[k].co = tmp[i].co; RD[k].cl = tmp[i].cl; RD[k].nch = tmp[i].nch; }
     sb_s(&RAGT, tr("Fragmentos de archivos que he adjuntado. Úsalos para responder y cita el archivo entre corchetes; si la respuesta no está en ellos, dilo.")); sb_s(&RAGT, "\n"); sb_add(&RAGT, f.p, f.n); free(f.p);
@@ -294,7 +294,7 @@ static void ask(void) { conv_t *c = CC(); if (!c || busy) return; while (c->n &&
     m = c->n && c->m[c->n - 1]->role == 1 ? c->m[c->n - 1] : 0; if (m) m->dirty = 1; busy = 0; stop_req = 0; c->upd = now_num(); conv_title(c); conv_sort(); int se = conv_save(c);
     if (er[0]) snprintf(msg, 300, "%s", er); else if (!m) strcpy(msg, tr("Detenido")); else snprintf(msg, 300, "%s %s · %ld.%ld s%s", tr("Respuesta de"), model_name(m->model), m->ms / 1000, m->ms % 1000 / 100, m->stopped ? tr(" (detenida)") : "");
     if (se) snprintf(msg + strlen(msg), 300 - strlen(msg), "  ·  %s: %s", tr("no se pudo guardar el chat"), z_errstr(se));
-    char lg[400]; snprintf(lg, 400, "[prueba] lumen respuesta %ld letras, razonamiento %ld, error: %s", m ? m->t.n : 0L, m ? m->r.n : 0L, er[0] ? er : "no"); z_log(lg); }
+    char lg[400]; snprintf(lg, 400, "[prueba] lumen respuesta %ld letras, razonamiento %ld, error: %s", m ? m->t.n : 0LL, m ? m->r.n : 0LL, er[0] ? er : "no"); z_log(lg); }
 
 /* ---------- Markdown a lineas de pantalla. \1 cambia negrita y \2 codigo en linea ---------- */
 static void addl(msg_t *m, const char *pre, const char *s, long n, int kind, int st, int blk) { if (m->nL % 64 == 0) m->L = realloc(m->L, (m->nL + 64) * sizeof *m->L); int pl = pre ? strlen(pre) : 0; char *l = malloc(pl + n + 1); if (pl) memcpy(l, pre, pl); if (n) memcpy(l + pl, s, n); l[pl + n] = 0; m->L[m->nL++] = (dl_t){l, kind, blk, st}; }
@@ -390,7 +390,7 @@ static void draw_tb(void) { g_rect(W, 0, 0, W->w, TB, UI_PANEL); g_rect(W, 0, TB
     char t[160], nm[60]; const char *mn = model_name(C.model); if (cpy_utf8(nm, 34, mn, strlen(mn)) < (int)strlen(mn)) strcat(nm, "..."); snprintf(t, 160, "%s: %s \xE2\x96\xBC", tr("Modelo"), nm); w = g_textw(t) + 22; btn(x, 7, w, 26, t, mode == 2 ? 1 : 0, B_MODEL); x += w + 6;
     w = bw("Ajustes"); btn(x, 7, w, 26, "Ajustes", mode == 1 ? 1 : 0, B_SET); if (!C.key[0] && is_or()) g_circle(W, x + w - 5, 10, 4, 0xDC2626, 1); x += w + 6;
     w = bw("Exportar"); if (x + w + bw("Imprimir") < W->w) { btn(x, 7, w, 26, "Exportar", 0, B_EXP); x += w + 6; w = bw("Imprimir"); btn(x, 7, w, 26, "Imprimir", 0, B_PRINT); } }
-static void fmt_upd(long u, char *o, int cap) { u32 t[6] = {u % 100, u / 100 % 100, u / 10000 % 100, u / 1000000 % 100, u / 100000000 % 100, u / 10000000000L}; char a[24]; z_fmt_time(t, 1, 0, a, 24); if (u / 1000000 == now_num() / 1000000) snprintf(o, cap, "%s %s", tr("Hoy"), a); else { char d[40]; z_fmt_date(t, 1, d, 40); snprintf(o, cap, "%s %s", d, a); } }
+static void fmt_upd(long u, char *o, int cap) { u32 t[6] = {u % 100, u / 100 % 100, u / 10000 % 100, u / 1000000 % 100, u / 100000000 % 100, u / 10000000000LL}; char a[24]; z_fmt_time(t, 1, 0, a, 24); if (u / 1000000 == now_num() / 1000000) snprintf(o, cap, "%s %s", tr("Hoy"), a); else { char d[40]; z_fmt_date(t, 1, d, 40); snprintf(o, cap, "%s %s", d, a); } }
 static void draw_side(void) { int h = W->h - TB - SBH; g_rect(W, 0, TB, SW, h, UI_PANEL); g_rect(W, SW - 1, TB, 1, h, UI_LINE); g_text(W, 12, TB + 10, "Conversaciones", UI_MUTED);
     int y = TB + 34, rows = MAX(1, (W->h - SBH - y) / 40); sb_top = MAX(0, MIN(sb_top, ncv - rows)); if (!ncv) para(12, y + 4, SW - 24, tr("Aún no hay chats guardados."), UI_MUTED);
     for (int i = sb_top; i < ncv && i < sb_top + rows; i++, y += 40) { conv_t *c = CV[i]; if (i == cur) g_round(W, 4, y, SW - 9, 38, 4, UI_ACC2); char t[100], d[60]; dnorm_str(c->title[0] ? c->title : tr("Chat nuevo"), t, 100);

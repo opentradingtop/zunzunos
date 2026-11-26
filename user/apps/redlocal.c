@@ -23,7 +23,7 @@ static char CFG[64], IDF[64];
 #define INBOX "/sys/ZUNZUN/RED-MENSAJES.TXT"
 #define MAXM 64
 #define MAXS 64
-#define MAXF (256L << 20)
+#define MAXF (256LL << 20)
 
 typedef struct { char id[12], name[32]; } mem_t;
 typedef struct { char id[12], name[40], host[12], path[160]; int rw; } share_t;
@@ -103,7 +103,7 @@ static void ivf(u8 *iv, int dir, u64 n) { memset(iv, 0, 12); iv[0] = dir; for (i
 static int csend(conn_t *c, const void *d, long n) { u8 *b = malloc(n + 20); if (!b) return -1; b[0] = n; b[1] = n >> 8; b[2] = n >> 16; b[3] = n >> 24; u8 iv[12]; ivf(iv, c->dir, c->tx++);
     gcm_seal(&c->g, iv, b, 4, d, n, b + 4, b + 4 + n); int r = raw_send(c, b, n + 20); free(b); return r; }
 static int csends(conn_t *c, const char *s) { return csend(c, s, strlen(s)); }
-static long crecv(conn_t *c, u8 **out, int to) { u8 h[4]; if (raw_recv(c, h, 4, to)) return -1; long n = h[0] | h[1] << 8 | h[2] << 16 | (long)h[3] << 24; if (n < 0 || n > (2L << 20)) return -1;
+static long crecv(conn_t *c, u8 **out, int to) { u8 h[4]; if (raw_recv(c, h, 4, to)) return -1; long n = h[0] | h[1] << 8 | h[2] << 16 | (long)h[3] << 24; if (n < 0 || n > (2LL << 20)) return -1;
     u8 *b = malloc(n + 17); if (raw_recv(c, b, n + 16, to)) { free(b); return -1; } u8 iv[12]; ivf(iv, !c->dir, c->rx++); u8 *pl = malloc(n + 1);
     if (gcm_open(&c->g, iv, h, 4, b, n, pl, b + n)) { free(b); free(pl); return -1; }   /* 0 = la etiqueta cuadra */ free(b); pl[n] = 0; *out = pl; return n; }
 static void sess_key(conn_t *c, const u8 *nc, const u8 *ns) { u8 salt[32], prk[32], k[16]; memcpy(salt, nc, 16); memcpy(salt + 16, ns, 16); zc_hkdf_extract(256, salt, 32, R.key, 32, prk); zc_hkdf_expand(256, prk, (const u8 *)"zred1 sesion", 12, k, 16); gcm_init(&c->g, k, 16); }
@@ -130,7 +130,7 @@ static void spool(void) { zdirent e; char inf[64] = ""; for (int i = 0; !z_readd
     char b[160], f[200], g[200]; strcpy(b, inf); b[strlen(b) - 4] = 0; snprintf(f, 200, SPOOL "/%s.inf", b); snprintf(g, 200, SPOOL "/%s.env", b); if (z_rename(f, g)) return;   /* recogido: ya no se puede cancelar */
     char *t = z_readfile(g, 0); long n = 0; snprintf(f, 200, SPOOL "/%s.bin", b); u8 *d = z_readfile(f, &n); int rc = -5; char err[120] = "";
     if (t && d) { char *bar = strchr(t, '|'), *sl = strchr(t, '/'); if (bar) *bar = 0; if (sl) *sl = 0; if (sl) { if (bar) safe(bar + 1); char h[300]; snprintf(h, 300, "IMPRIME|%s|%ld|%.200s", sl + 1, n, bar ? bar + 1 : "ZunzunOS");
-            conn_t c; if (!cconnect(&c, t, err)) { if (!csends(&c, h)) { for (long o = 0; o < n; o += 65536) csend(&c, d + o, MIN(65536L, n - o)); if (!n) csend(&c, "", 0); u8 *r = 0; if (crecv(&c, &r, 120000) > 0) { rc = strncmp((char *)r, "OK", 2) ? (strncmp((char *)r, "ERR|", 4) ? -5 : atoi((char *)r + 4) ? atoi((char *)r + 4) : -5) : 0; } free(r); } z_close(c.s); } else rc = -111; } }
+            conn_t c; if (!cconnect(&c, t, err)) { if (!csends(&c, h)) { for (long o = 0; o < n; o += 65536) csend(&c, d + o, MIN(65536LL, n - o)); if (!n) csend(&c, "", 0); u8 *r = 0; if (crecv(&c, &r, 120000) > 0) { rc = strncmp((char *)r, "OK", 2) ? (strncmp((char *)r, "ERR|", 4) ? -5 : atoi((char *)r + 4) ? atoi((char *)r + 4) : -5) : 0; } free(r); } z_close(c.s); } else rc = -111; } }
     char lg[200]; snprintf(lg, 200, "[prueba] red trabajo enviado a %s: %ld bytes, %d %s", t ? mname(t) : "?", n, rc, err); z_log(lg);
     char res[200], v[16]; snprintf(res, 200, SPOOL "/%s.res", b); snprintf(v, 16, "%d", rc); z_writefile(res, v, strlen(v)); z_unlink(f); z_unlink(g); free(t); free(d); }
 /* ---------- carpetas: rutas seguras dentro de la carpeta compartida ---------- */
@@ -184,7 +184,7 @@ static void srv_session(conn_t *c, char **f, int k) {
         if (!strcmp(a[0], "LISTA") && na >= 3) { share_t *s = share(a[1]); char p[400]; if (!s || strcmp(s->host, myid) || resolve(s, a[2], p, 400)) { csends(c, "ERR|carpeta no disponible"); continue; }
             sb_t o = {0}; sb_s(&o, "OK\n"); zdirent e; for (int i = 0; !z_readdir(p, i, &e); i++) { if (e.name[0] == '.') continue; sb_f(&o, "%c|%lu|%s\n", e.is_dir ? 'D' : 'F', (unsigned long)e.size, e.name); } csend(c, o.p, o.n); free(o.p); }
         else if (!strcmp(a[0], "LEE") && na >= 3) { share_t *s = share(a[1]); char p[400]; long fl; u8 *d; if (!s || strcmp(s->host, myid) || resolve(s, a[2], p, 400) || !(d = z_readfile(p, &fl))) { csends(c, "ERR|no se pudo leer"); continue; }
-            char ok[40]; snprintf(ok, 40, "OK|%ld", fl); csends(c, ok); for (long o = 0; o < fl; o += 65536) csend(c, d + o, MIN(65536L, fl - o)); free(d); }
+            char ok[40]; snprintf(ok, 40, "OK|%ld", fl); csends(c, ok); for (long o = 0; o < fl; o += 65536) csend(c, d + o, MIN(65536LL, fl - o)); free(d); }
         else if (!strcmp(a[0], "ESCRIBE") && na >= 4) { share_t *s = share(a[1]); char p[400]; long sz = atol(a[3]), got = 0; sb_t d = {0}; sb_add(&d, "", 0);
             while (got < sz) { u8 *q2; long m = crecv(c, &q2, 20000); if (m < 0) break; sb_add(&d, q2, m); free(q2); got += m; }
             if (got != sz) break; if (!s || strcmp(s->host, myid) || !s->rw || resolve(s, a[2], p, 400) || sz > MAXF) { csends(c, s && !s->rw ? "ERR|carpeta de solo lectura" : "ERR|no se pudo escribir"); free(d.p); continue; }
@@ -285,7 +285,7 @@ static int fetch(ent_t *e, char *dst, int cap, int open) { share_t *s = &R.s[sel
 static void upload(void) { share_t *s = &R.s[sel_sh]; char p[300]; z_docdir(p); strcat(p, "/"); if (!ui_prompt("Subir un archivo", "Archivo de este equipo:", p, 290)) return; long n; u8 *d = z_readfile(p, &n); if (!d) { snprintf(msg, 300, "%s %s", tr_("No se puede leer"), p); return; }
     const char *b = strrchr(p, '/'); b = b ? b + 1 : p; char h[500], err[120]; snprintf(h, 500, "ESCRIBE|%s|%s%s%s|%ld", s->id, cwd, cwd[0] ? "/" : "", b, n);
     if (local()) { char rel[400], q[400]; snprintf(rel, 400, "%s%s%s", cwd, cwd[0] ? "/" : "", b); int w = resolve(s, rel, q, 400) ? -1 : z_writefile(q, d, n); free(d); z_sync(); list_dir(); if (w) strcpy(msg, tr_("No se pudo subir")); else snprintf(msg, 300, "%s: %s", tr_("Subido"), b); return; } conn_t c; if (cconnect(&c, s->host, err)) { free(d); snprintf(msg, 300, "%s", err); return; }
-    csends(&c, h); for (long o = 0; o < n; o += 65536) csend(&c, d + o, MIN(65536L, n - o)); if (!n) csend(&c, "", 0); free(d); u8 *r; long m = crecv(&c, &r, 30000); z_close(c.s);
+    csends(&c, h); for (long o = 0; o < n; o += 65536) csend(&c, d + o, MIN(65536LL, n - o)); if (!n) csend(&c, "", 0); free(d); u8 *r; long m = crecv(&c, &r, 30000); z_close(c.s);
     if (m < 0 || strncmp((char *)r, "OK", 2)) { snprintf(msg, 300, "%s: %s", tr_("No se pudo subir"), m < 0 ? tr_("sin respuesta") : (char *)r + 4); if (m >= 0) free(r); return; } free(r); char lg[400]; snprintf(lg, 400, "[prueba] red subido %s (%ld)", b, n); z_log(lg); list_dir(); snprintf(msg, 300, "%s: %s", tr_("Subido"), b); }
 static void simple(const char *op, const char *rel, const char *extra) { share_t *s = &R.s[sel_sh]; char h[600], err[120]; u8 *r;
     if (local()) { char p[400], q[400]; if (resolve(s, rel, p, 400)) return; if (op[0] == 'B') z_unlink(p); else if (op[0] == 'C') z_mkdir(p); else { char r2[400]; const char *sl = strrchr(rel, '/'); snprintf(r2, 400, "%.*s%s%s", sl ? (int)(sl - rel) : 0, rel, sl ? "/" : "", extra); if (!resolve(s, r2, q, 400)) z_rename(p, q); } z_sync(); list_dir(); return; } snprintf(h, 600, "%s|%s|%s%s%s", op, s->id, rel, extra ? "|" : "", extra ? extra : ""); if (request(s->host, h, 0, 0, &r, err) < 0) { snprintf(msg, 300, "%s", err); return; } free(r); list_dir(); }

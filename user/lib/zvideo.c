@@ -83,7 +83,7 @@ static int rdat(int fd, long off, void *b, long n) { if (z_seek(fd, off, 0) < 0)
 static void addf(long **o, long **l, int *n, int *cap, long off, long len) { if (*n == *cap) { *cap = *cap * 2 + 256; *o = realloc(*o, *cap * sizeof(long)); *l = realloc(*l, *cap * sizeof(long)); } (*o)[*n] = off; (*l)[*n] = len; (*n)++; }
 int zavi_load(zavi_r *r, const char *path) { memset(r, 0, sizeof *r); r->vstream = 0; r->astream = -1; zdirent st; if (z_stat(path, &st)) return -2; r->n = st.size; r->fd = z_open(path, O_READ); if (r->fd < 0) return r->fd;
     u8 h[64]; if (r->n < 64 || rdat(r->fd, 0, h, 12) || memcmp(h, "RIFF", 4) || memcmp(h + 8, "AVI ", 4)) { zavi_free(r); return -22; } long movi = -1; int strm = -1;
-    for (long p = 12; p + 8 <= r->n; ) { if (rdat(r->fd, p, h, MIN(64L, r->n - p))) break; u32 sz = rd32(h + 4);
+    for (long p = 12; p + 8 <= r->n; ) { if (rdat(r->fd, p, h, MIN(64LL, r->n - p))) break; u32 sz = rd32(h + 4);
         if (!memcmp(h, "LIST", 4)) { if (!memcmp(h + 8, "movi", 4)) { movi = p + 8; p += 8 + sz + (sz & 1); continue; } p += 12; continue; }
         if (!memcmp(h, "avih", 4) && sz >= 40) { r->us_frame = rd32(h + 8); r->w = rd32(h + 40); r->h = rd32(h + 44); }
         else if (!memcmp(h, "strh", 4) && sz >= 48) { strm++; if (!memcmp(h + 8, "auds", 4)) r->astream = strm; else if (!memcmp(h + 8, "vids", 4)) { r->vstream = strm; u32 scale = rd32(h + 28), rate = rd32(h + 32); if (scale && rate) r->us_frame = (u32)(1000000ULL * scale / rate); } }
