@@ -28,7 +28,7 @@ ok &= r == 0 and order(log, ['sesion: crear pin', 'PIN guardado (0)', 'sesion: b
 d = open(img, 'rb').read()
 if d.find(b'SESION  TXT') < 0: print('FALLO: el PIN no se guardo en la memoria'); ok = False
 if d.find(b'SECRETO TXT') >= 0: print('FALLO: el documento del invitado llego a la memoria'); ok = False
-MH = 42 + 9 * 28 + 14; MY = 800 - 36 - MH - 2; FY = MY + 42 + 28 * 5 + 14; AY = MY + max(42, min(42 + 5 * 28, MH - 6 - 5 * 28)) + 14  # Sistema > Configuracion
+MH = 42 + 9 * 28 + 14; MY = 800 - 36 - MH - 2; FY = MY + 42 + 28 * 5 + 14; AY = MY + max(42, min(42 + 5 * 28, MH - 6 - 6 * 28)) + 14  # Sistema (6 programas) > Configuracion
 CONFIG = ['click:50,782', 'sleep:0.6', f'move:100,{FY}', 'sleep:0.5', f'move:245,{FY}', 'sleep:0.3', f'move:350,{AY}', 'sleep:0.3', f'click:350,{AY}', 'sleep:1.5']
 r, log = run('s2', BOOT + ['click:520,400', 'sleep:1', 'type:9999', 'sleep:1.5', 'shot:s2-pin-mal', 'type:1234', 'wait:sesion: administrador', 'sleep:1', 'shot:s2-dentro']
     + CONFIG + ['click:138,390', 'sleep:0.8', 'click:388,375', 'wait:[zz] salvapantallas', 'sleep:2.5', 'shot:s2-salvapantallas', 'click:640,400', 'wait:sesion: bloqueada', 'sleep:0.8', 'shot:s2-pide-pin', 'type:1234', 'sleep:1.5'])

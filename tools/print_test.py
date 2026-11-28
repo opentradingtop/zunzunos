@@ -10,7 +10,7 @@ def menu(f, i, n): return ['click:50,782', 'sleep:0.6', f'move:100,{fam_y(f)}', 
 s = ['wait:escritorio listo', 'wait:vfs: /sys', 'wait:red: IP', 'sleep:1']
 OX, OY = 88, 76
 if part in ('all', 'prn'):
-    s += menu(5, 1, 5)
+    s += menu(5, 1, 6)
     def add(h, extra=()): return [f'click:{OX+168},{OY+20}', 'sleep:0.6', f'type:{h}\\n', 'sleep:1.5', *extra, 'wait:impresora anadida', 'sleep:0.5']
     test = [f'click:{OX+452},{OY+20}', 'sleep:0.5']
     s += add('10.0.2.2:8631') + test + ['wait:(pdf,', 'sleep:0.5', 'shot:pr-1']

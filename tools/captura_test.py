@@ -11,12 +11,12 @@ def M(f, i, n):
     return ['click:50,782', 'sleep:0.6', f'move:100,{fy}', 'sleep:0.5', f'move:245,{fy}', 'sleep:0.3', f'move:350,{ay}', 'sleep:0.3', f'click:350,{ay}', 'sleep:2']
 OX, OY = 88, 76
 s = ['wait:escritorio listo', 'wait:vfs: /sys', 'wait:red: IP', 'sleep:1', 'key:print', 'wait:[prueba] captura', 'sleep:1', 'shot:k-aviso']
-s += M(5, 1, 5) + ['key:alt-print', 'sleep:2']   # Impresoras abierta: captura solo de su ventana
+s += M(5, 1, 6) + ['key:alt-print', 'sleep:2']   # Impresoras abierta: captura solo de su ventana
 s += [f'click:{OX+168},{OY+20}', 'sleep:0.6', 'type:10.0.2.2:9101\\n', 'sleep:2', 'shot:k-menu', f'click:{OX+180},{OY+40+15}', 'wait:impresora anadida', 'sleep:0.5']
 lang = f'click:{OX+380+150},{OY+80+13}'   # PCL -> Texto -> Samsung SPL2 (trabajo de ~700 KB, unos 11 s a 64 KB/s)
 s += [lang, 'sleep:0.4', lang, 'sleep:0.6', 'key:alt-f4', 'sleep:0.6']
 # trabajo largo: toda la salida de la terminal a 600 ppp; se cancela mientras se prepara
-s += M(5, 2, 5) + ['type:dmesg\\n', 'sleep:0.5', 'type:dmesg\\n', 'sleep:0.5', 'type:lspci\\n', 'sleep:0.5', 'key:ctrl-p', 'wait:dialogo imprimir abierto', 'sleep:1', 'click:955,625', 'sleep:0.8',
+s += M(5, 2, 6) + ['type:dmesg\\n', 'sleep:0.5', 'type:dmesg\\n', 'sleep:0.5', 'type:lspci\\n', 'sleep:0.5', 'key:ctrl-p', 'wait:dialogo imprimir abierto', 'sleep:1', 'click:955,625', 'sleep:0.8',
        'click:987,782', 'sleep:0.8', 'shot:k-cola', 'click:1238,533', 'wait:imprimir 10.0.2.2', 'sleep:1', 'click:987,782', 'sleep:0.8', 'shot:k-cancelado', 'key:esc', 'sleep:0.5']
 r = subprocess.call(['python3', '-I', 'tools/vm.py', '--mode', 'bios', '--no-disk', '--abs', '--out', out, '--timeout', '60', '--port', '4699', '--qemu', q] + s, stdout=subprocess.DEVNULL)
 log = open(os.path.join(out, 'serial-bios.log'), errors='replace').read(); ok = r == 0

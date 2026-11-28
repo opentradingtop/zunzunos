@@ -11,7 +11,8 @@ def check(name, cond, extra=''):
 def run(*a, inp=None):
     p = subprocess.run([B] + [str(x) for x in a], capture_output=True, text=True); return p.returncode, (p.stdout + p.stderr).strip()
 def sh(cmd):
-    p = subprocess.run(cmd, shell=True, capture_output=True, text=True); return p.returncode, (p.stdout + p.stderr).strip()
+    # errors='replace': el unzip de macOS cambia por '?' los bytes de UTF-8 que no ve imprimibles (la Ü sale como \xc3?)
+    p = subprocess.run(cmd, shell=True, capture_output=True, text=True, errors='replace'); return p.returncode, (p.stdout + p.stderr).strip()
 def same_tree(a, b):
     for root, dirs, files in os.walk(a):
         rel = os.path.relpath(root, a)

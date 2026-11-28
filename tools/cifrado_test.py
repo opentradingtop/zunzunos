@@ -18,7 +18,7 @@ def M(f, i, n):
     return ['click:50,782', 'sleep:0.6', f'move:100,{fy}', 'sleep:0.5', f'move:245,{fy}', 'sleep:0.3', f'move:350,{ay}', 'sleep:0.3', f'click:350,{ay}', 'sleep:2']
 CX, CY = 88, 76   # contenido de Configuracion (primera ventana)
 P = 'frase de prueba 1'
-s1 = ['wait:escritorio listo', 'wait:vfs: /sys', 'sleep:1'] + M(5, 0, 5) + ['sleep:1', f'click:{CX + 80},{CY + 377}', 'sleep:1', 'shot:c-seccion', f'click:{CX + 346},{CY + 275}', 'sleep:1', f'type:{P}\\n', 'sleep:1', f'type:{P}\\n', 'wait:cifrado activado', 'sleep:2', 'shot:c-activado', 'key:alt-f4', 'sleep:1']
+s1 = ['wait:escritorio listo', 'wait:vfs: /sys', 'sleep:1'] + M(5, 0, 6) + ['sleep:1', f'click:{CX + 80},{CY + 377}', 'sleep:1', 'shot:c-seccion', f'click:{CX + 346},{CY + 275}', 'sleep:1', f'type:{P}\\n', 'sleep:1', f'type:{P}\\n', 'wait:cifrado activado', 'sleep:2', 'shot:c-activado', 'key:alt-f4', 'sleep:1']
 r1 = subprocess.call(['python3', '-I', 'tools/vm.py', '--mode', 'bios', '--no-disk', '--abs', '--out', os.path.join(out, '1'), '--timeout', '60', '--port', '4771', '--qemu', q] + s1, stdout=subprocess.DEVNULL)
 log1 = open(os.path.join(out, '1', 'serial-bios.log'), errors='replace').read(); ok = r1 == 0
 mnt, dev = mount(True)
@@ -28,7 +28,7 @@ try:
     if not cf: print('FALLO: no se guardo CIFRADO.TXT'); ok = False
 finally: subprocess.run(['hdiutil', 'detach', dev], capture_output=True)
 s2 = ['wait:escritorio listo', 'wait:HID puntero', 'wait:vfs: /sys', 'sleep:2', 'move:640,400', 'wait:cifrado pide la frase', 'sleep:1', 'shot:c-frase', 'type:frase equivocada\\n', 'sleep:3', f'type:{P}\\n', 'wait:cifrado abierto', 'sleep:1']
-s2 += M(5, 2, 5) + ['sleep:1', 'type:cp /sys/DOCS/secreto.txt /sys/COPIA.TXT\\n', 'sleep:2', 'key:alt-f4', 'sleep:1']
+s2 += M(5, 2, 6) + ['sleep:1', 'type:cp /sys/DOCS/secreto.txt /sys/COPIA.TXT\\n', 'sleep:2', 'key:alt-f4', 'sleep:1']
 r2 = subprocess.call(['python3', '-I', 'tools/vm.py', '--mode', 'bios', '--no-disk', '--abs', '--out', os.path.join(out, '2'), '--timeout', '60', '--port', '4772', '--qemu', q] + s2, stdout=subprocess.DEVNULL)
 log2 = open(os.path.join(out, '2', 'serial-bios.log'), errors='replace').read(); ok = ok and r2 == 0
 if 'cifrado: frase incorrecta' not in log2: print('FALLO: la frase equivocada no se rechazo'); ok = False
