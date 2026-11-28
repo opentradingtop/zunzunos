@@ -5,6 +5,8 @@
 
 Pasos: wait:TEXTO  sleep:SEG  shot:NOMBRE  key:ctrl-a  hold:a,1.5  type:texto
        move:X,Y  click:X,Y  rclick:X,Y  dclick:X,Y  drag:X,Y,X2,Y2  hmp:COMANDO
+       waitcount:TEXTO|N (hasta que TEXTO salga N veces)  waitfile:ARCHIVO|TEXTO[|N] (en el registro de otro equipo)
+       typefrom:ARCHIVO|REGEX (escribe el grupo 1 de la ultima coincidencia, esperando a que aparezca)
 
 Antes de la primera accion con teclado o raton, si el escritorio muestra la pantalla de inicio de
 sesion, entra como administrador (y pulsa 'Ahora no' si pide crear un PIN). --no-login lo desactiva.
@@ -115,6 +117,21 @@ try:
                 time.sleep(0.2)
             if not ok: break
             print(f'ok wait {v!r} ({time.time()-t0:.1f}s)')
+        elif k in ('waitcount', 'waitfile', 'typefrom'):
+            import re
+            pp = v.split('|'); x, y = pp[0], pp[1]; cnt = int(pp[2]) if len(pp) > 2 else 1; t0 = time.time(); got = None
+            while got is None:
+                if k == 'waitcount': got = True if serial().count(x) >= int(y) else None
+                else:
+                    try: txt = open(x, errors='replace').read()
+                    except OSError: txt = ''
+                    if k == 'waitfile': got = True if txt.count(y) >= cnt else None
+                    else: m = re.findall(y, txt); got = m[-1] if m else None
+                if got is None and (time.time() - t0 > a.timeout or p.poll() is not None): print(f'FALLO: {k} {v!r}'); ok = False; break
+                if got is None: time.sleep(0.3)
+            if not ok: break
+            if k == 'typefrom': ensure_login(); typ(got); print(f'ok typefrom {got!r}')
+            else: print(f'ok {k} {v!r} ({time.time()-t0:.1f}s)')
         elif k == 'sleep': time.sleep(float(v))
         elif k == 'sh': print('sh>', subprocess.run(v, shell=True, capture_output=True, text=True, timeout=60).stdout.strip()[:300])
         elif k == 'shot':

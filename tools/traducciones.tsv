@@ -1547,3 +1547,76 @@ No arranques con las dos unidades conectadas a la vez: son identicas.	No arranqu
 Atencion: un sector del origen no se pudo leer y queda a cero (el %lu).	Atención: un sector del origen no se pudo leer y queda a cero (el %lu).	Warning: one source sector could not be read and is left as zeros (sector %lu).
 Más	-	More
 Añadir a marcadores	-	Add to bookmarks
+ (adjuntos no enviados: el otro equipo tiene una versión anterior)	-	 (attachments not sent: the other computer has an older version)
+ (conectado)	-	 (connected)
+ (sin conexión)	-	 (not connected)
+ · el resto, pendiente	-	 · the rest, pending
+%s es demasiado grande (como mucho %d MB)	-	%s is too large (%d MB at most)
+%s quiere unirse a la red "%s" con tu invitación.	-	%s wants to join the network "%s" with your invitation.
+%s te invita a la red "%s" por Internet.	-	%s invites you to the network "%s" over the Internet.
+Acceso por Internet activado: comprobando el router...	-	Internet access on: checking the router...
+Acceso por Internet desactivado: solo la red local.	-	Internet access off: local network only.
+Activado	-	On
+Activar el acceso por Internet	-	Turn on Internet access
+Como mucho %d adjuntos por mensaje	-	At most %d attachments per message
+Comprobando el router...	-	Checking the router...
+Comprobar ahora	-	Check now
+Comprueba que el otro equipo ve el mismo código:	-	Check that the other computer shows the same code:
+Conectando con el administrador...	-	Connecting to the administrator...
+Conexión por Internet	-	Internet connection
+Crear un código de invitación	-	Create an invitation code
+Código (un solo uso, caduca en 2 días):	-	Code (single use, expires in 2 days):
+Código copiado: dáselo a la otra casa (por teléfono, correo...). Sirve una vez y caduca en 2 días.	-	Code copied: give it to the other home (by phone, email...). It works once and expires in 2 days.
+Código de invitación que te ha dado el administrador:	-	Invitation code the administrator gave you:
+Cómo se llega a cada equipo	-	How each computer is reached
+Desactivado	-	Off
+Desactivar el acceso por Internet	-	Turn off Internet access
+Direcciones a mano	-	Manual addresses
+Direcciones a mano...	-	Manual addresses...
+Direcciones de este equipo en Internet	-	This computer's Internet addresses
+Dirección del relé (nombre o IP:puerto; /clave si la tiene). Vacío: sin relé.	-	Relay address (name or IP:port; /key if it has one). Empty: no relay.
+El administrador no aceptó la invitación	-	The administrator did not accept the invitation
+El administrador no reconoce el código: puede que haya caducado o que ya se haya usado.	-	The administrator does not recognize the code: it may have expired or already been used.
+El router no deja abrir el puerto solo (UPnP, NAT-PMP y PCP apagados): ábrelo a mano (TCP 7141) o usa un relé.	-	The router does not let the port be opened automatically (UPnP, NAT-PMP and PCP off): open it by hand (TCP 7141) or use a relay.
+El router no tiene una IP pública (CGNAT, típico del móvil y de algunas compañías): hace falta un relé para que te llamen.	-	The router has no public IP (CGNAT, typical of mobile and some providers): a relay is needed for others to reach you.
+Entregado a %d de %d; los demás lo recibirán en cuanto se puedan conectar	-	Delivered to %d of %d; the others will get it as soon as they can connect
+Ese código no es válido.	-	That code is not valid.
+Ese equipo ya estaba en la red: se le dará la clave otra vez.	-	That computer was already in the network: it will get the key again.
+Esperando a que el administrador acepte...	-	Waiting for the administrator to accept...
+Este equipo no sale a Internet por un router (cable directo).	-	This computer does not reach the Internet through a router (direct cable).
+Este equipo todavía no tiene dirección en Internet: abre el puerto, escribe una dirección a mano o pon un relé.	-	This computer has no Internet address yet: open the port, enter an address by hand or set a relay.
+Hay dos routers seguidos (doble NAT): abre el puerto a mano en los dos o usa un relé.	-	There are two routers in a row (double NAT): open the port by hand on both or use a relay.
+IP pública	-	Public IP
+Invitación por Internet	-	Invitation over the Internet
+Invitación rechazada	-	Invitation rejected
+Invitar a un equipo de otra casa	-	Invite a computer from another home
+La respuesta no viene del administrador: alguien se está haciendo pasar por él.	-	The reply does not come from the administrator: someone is impersonating them.
+Los adjuntos de un mensaje no pueden pasar de 256 MB	-	The attachments of a message cannot exceed 256 MB
+No se pudo conectar con el administrador: ¿está encendido y con el acceso por Internet activado?	-	Could not connect to the administrator: is it on, with Internet access turned on?
+Nombres o IP:puerto de este equipo en Internet, separados por comas (*:7141 = la IP pública que se vea):	-	Names or IP:port of this computer on the Internet, separated by commas (*:7141 = the public IP seen):
+Preparando el adjunto...	-	Preparing the attachment...
+Primero activa el acceso por Internet.	-	First turn on Internet access.
+Puerto abierto en el router con %s: %s	-	Port opened on the router with %s: %s
+Relé de la red	-	Network relay
+Relé de la red...	-	Network relay...
+Se abrirá el puerto cuando este equipo esté en una red.	-	The port will be opened when this computer is in a network.
+Se usan las direcciones escritas a mano.	-	The addresses entered by hand are used.
+Si es el mismo, acepta para que entre en la red.	-	If it is the same, accept to let it into the network.
+Une equipos de casas distintas como si estuvieran en la misma red: carpetas, impresoras y mensajes, cifrados de extremo a extremo.	-	Joins computers in different homes as if they were on the same network: folders, printers and messages, end-to-end encrypted.
+Unirse a una red de otra casa	-	Join a network from another home
+Unirse a una red por Internet	-	Join a network over the Internet
+Unirse con un código de invitación...	-	Join with an invitation code...
+a	-	to
+adjuntos en Documentos/Red/Adjuntos	-	attachments in Documents/Red/Adjuntos
+apagado o sin conexión	-	off or not connected
+conectado por Internet; recoge sus mensajes al conectar	-	connected over the Internet; picks up its messages when it connects
+el archivo ya no está o ha cambiado	-	the file is gone or has changed
+en línea por Internet	-	online over the Internet
+ninguna	-	none
+ninguno	-	none
+por Internet	-	over the Internet
+por Internet, a través del relé	-	over the Internet, through the relay
+por el relé	-	through the relay
+por la red local	-	over the local network
+sin conexión	-	not connected
+Internet	-	Internet

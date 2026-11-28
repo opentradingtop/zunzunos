@@ -32,7 +32,7 @@ El estudio de KolibriOS y las decisiones de diseño están en
 | Ofimática | Escritor (libros; TXT, MD, HTML, RTF y DOCX), Hoja (XLSX y CSV), Presentar y Agenda |
 | Apps web | Instalador de programas HTML/CSS con formularios y cálculos, desde archivo, portapapeles o http |
 | Chat con IA | **LUMEN**: chat con los modelos de OpenRouter (gratuitos o de pago), de **Lyceum** (servidores en la UE) o con un servidor compatible con OpenAI en la red local; respuestas en vivo por HTTPS, razonamiento, Markdown con tablas y código, chats guardados, exportar a Markdown e imprimir; **archivos adjuntos** (TXT, DOCX, ODT, XLSX, PDF…) de los que toma los fragmentos que vienen al caso para cada pregunta; imágenes para los modelos que las aceptan. Guía en [docs/LUMEN.md](docs/LUMEN.md) |
-| Red local | **Intranet** entre equipos ZunzúnOS por cable, con router o con un cable directo (dirección local automática): un administrador crea la red e invita a los demás (código de 6 cifras en las dos pantallas), carpetas compartidas de solo lectura o de lectura y escritura en cualquier equipo, impresoras compartidas (una impresora USB de un equipo aparece al imprimir en todos), mensajes entre equipos; conexiones autenticadas y cifradas. Guía en [docs/RED.md](docs/RED.md) |
+| Red local | **Intranet** entre equipos ZunzúnOS por cable, con router o con un cable directo (dirección local automática): un administrador crea la red e invita a los demás (código de 6 cifras en las dos pantallas), carpetas compartidas de solo lectura o de lectura y escritura en cualquier equipo, impresoras compartidas (una impresora USB de un equipo aparece al imprimir en todos), mensajes entre equipos con **archivos adjuntos** (por partes, con barra de progreso y reanudación; se guardan en Documentos/Red/Adjuntos), y la **misma red por Internet** entre casas distintas: el puerto se abre solo en el router (UPnP, NAT-PMP o PCP) o a mano, direcciones con nombre DNS, anuncio de la IP cuando cambia, invitación con un código y el código de 6 cifras, y un relé opcional que pone el usuario (`tools/zred-rele.py`, en un VPS o una Raspberry Pi) para CGNAT y móviles, que no puede leer nada; conexiones autenticadas y cifradas de extremo a extremo, sin cuentas ni nube. Guía en [docs/RED.md](docs/RED.md) |
 | Privacidad | **Guardia de red**: ningún programa sale a Internet sin permiso (Permitir, Preguntar o Bloquear por programa; la red local siempre se permite) y un registro visible de cada conexión con su programa, destino y bytes (Configuración → Conexiones). Lo hace el núcleo, en todas las salidas: TCP, UDP, DNS y ping |
 | Cifrado y escrituras seguras | **Cifrado opcional** de los datos con frase de paso (AES-256 en el núcleo; documentos, escritorio, configuración y puntos de restauración). Guardar es seguro ante un corte de luz: se escribe aparte y se cambia al final |
 | Teclado y texto | Seleccionar texto arrastrando con el ratón en todos los programas (también PDF, correo y LUMEN), cortar/copiar/pegar y deshacer/rehacer en todos los cuadros de texto, repetición de teclas al mantenerlas pulsadas, atajos (Win, Win+E, Win+D, Win+L, Ctrl+W, Ctrl+N/O/S/P…) |
@@ -71,6 +71,16 @@ Pruebas automáticas de las aplicaciones (maneja QEMU con teclado y ratón):
 ```bash
 python3 -I tools/gui_test.py /tmp/zunzun-pruebas bios
 ```
+
+Red local entre dos equipos (cable directo) y por Internet entre tres casas simuladas (routers con UPnP, NAT-PMP y
+CGNAT, y el relé; en Linux, como root, porque pone direcciones 198.51.100.x en `lo`):
+
+```bash
+python3 -I tools/red_test.py /tmp/zunzun-red
+sudo python3 -I tools/red_internet_test.py /tmp/zunzun-internet
+```
+
+Las pruebas que miran dentro de la imagen usan `tools/imgfs.py` (hdiutil en el Mac, mtools en Linux).
 
 ## Grabar en una memoria USB
 

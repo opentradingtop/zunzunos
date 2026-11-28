@@ -32,6 +32,7 @@ static void arp_send(int op, const u8 *tm, const u8 *dm, u32 tip) { if (!nic) re
 static int ip_tx(u32 dst, u8 proto, const void *seg, u32 n) {
     u8 p[1520]; u8 mac[6]; if (n > 1480) return E_INVAL; static u16 id;
     if (dst == 0xFFFFFFFF) memcpy(mac, BCAST, 6);
+    else if ((dst & 0xF0) == 0xE0) { mac[0] = 1; mac[1] = 0; mac[2] = 0x5E; mac[3] = dst >> 8 & 0x7F; mac[4] = dst >> 16; mac[5] = dst >> 24; }   /* multidifusion (SSDP del router: 239.255.255.250) */
     else {
         u32 hop = (dst & my_mask) == (my_ip & my_mask) || (dst & 0xFFFF) == (169 | 254 << 8) || (my_ip & 0xFFFF) == (169 | 254 << 8) || !my_gw ? dst : my_gw;   /* 169.254 y sin router: directo por el cable */ int ok = 0; if (!hop) return E_CONN;
         for (int i = 0; i < 32; i++) if (arpt[i].ip == hop && arpt[i].t) { memcpy(mac, arpt[i].mac, 6); ok = 1; break; }
@@ -101,10 +102,12 @@ static void tcp_rx(u32 src, const u8 *t, u32 n) {
     if (hl > n) return; const u8 *d = t + hl; u32 len = n - hl; sock_t *s, *ls = 0;
     for (s = socks; s; s = s->next) { if (s->type != 1 || s->lport != dp) continue; if (s->st == LISTEN) ls = s; else if (s->rport == sp && s->rip == src && s->st != C) break; }
     if (!s && ls && (fl & F_SYN) && !(fl & F_ACK)) {
+        /* contra la inundacion de SYN desde Internet: como mucho 16 conexiones sin aceptar por puerto en escucha */
+        int pend = 0; for (sock_t *c = socks; c; c = c->next) if (c->parent == ls && !c->accepted) pend++; if (pend >= 16) return;
         s = sock_alloc(1); if (!s) return; s->parent = ls; s->lport = dp; s->rport = sp; s->rip = src; s->rnxt = seq + 1; s->una = s->nxt = (u32)rdtsc(); s->wnd = wnd; s->st = SYN_R; seg_tx(s, s->nxt, F_SYN | F_ACK, 0, 0); s->nxt++; s->rto_at = ticks + s->rto; return;
     }
     if (!s) { if (!(fl & F_RST)) rst_reply(src, sp, dp, ack, seq + len + ((fl & F_SYN) ? 1 : 0), fl & F_ACK); return; }
-    if (fl & F_RST) { s->err = E_CONN; s->st = C; s->peer_fin = 1; if (s->orphan) sock_free(s); return; }
+    if (fl & F_RST) { s->err = E_CONN; s->st = C; s->peer_fin = 1; if (s->orphan || (s->parent && !s->accepted)) sock_free(s); return; }
     if (s->st == SYN_S) {
         if ((fl & (F_SYN | F_ACK)) == (F_SYN | F_ACK) && ack == s->nxt) { s->rnxt = seq + 1; s->una = ack; s->wnd = wnd; s->st = EST; s->rto_at = 0; s->retries = 0; seg_tx(s, s->nxt, F_ACK, 0, 0); }
         return;
@@ -138,7 +141,7 @@ static void tcp_timers(void) {
         if (s->st == TIME_W && ticks >= s->die_at) { s->st = C; if (s->orphan) { sock_free(s); continue; } }
         if (s->orphan && s->die_at && ticks >= s->die_at) { sock_free(s); continue; }
         if (s->rto_at && ticks >= s->rto_at) {
-            if (++s->retries > 10) { s->err = E_TIMEOUT; s->st = C; s->rto_at = 0; s->peer_fin = 1; if (s->orphan) sock_free(s); continue; }
+            if (++s->retries > 10) { s->err = E_TIMEOUT; s->st = C; s->rto_at = 0; s->peer_fin = 1; if (s->orphan || (s->parent && !s->accepted)) sock_free(s); continue; }
             s->rto = MIN(s->rto * 2, 8000U); s->rto_at = ticks + s->rto;
             if (s->st == SYN_S) seg_tx(s, s->una, F_SYN, 0, 0);
             else if (s->st == SYN_R) seg_tx(s, s->una, F_SYN | F_ACK, 0, 0);
@@ -245,7 +248,7 @@ i64 sock_sendto(file_t *f, u32 ip, int port, const void *b, u64 n) {
     for (int t = 0; t < 15; t++) { mutex_lock(&nl); int r = udp_tx(ip, s->lport, port, b, n); mutex_unlock(&nl); if (!r) return n; if (r != E_TIMEOUT) return r; msleep(100); }
     return E_TIMEOUT;
 }
-int sock_from(file_t *f, u32 *ip, u16 *port) { sock_t *s = f->priv; *ip = s->from_ip; *port = s->from_port; return 0; }
+int sock_from(file_t *f, u32 *ip, u16 *port) { sock_t *s = f->priv; if (s->type == 1) { *ip = s->rip; *port = s->rport; return 0; } *ip = s->from_ip; *port = s->from_port; return 0; }
 int sock_bind(file_t *f, int port) { sock_t *s = f->priv; s->lport = port; if (s->type == 1) s->st = LISTEN; return 0; }
 int sock_accept(file_t *f, int to, file_t **o) {
     sock_t *l = f->priv; u64 end = to > 0 ? ticks + to : 0; if (l->st != LISTEN) return E_INVAL;

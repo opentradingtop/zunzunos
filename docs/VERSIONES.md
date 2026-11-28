@@ -3,6 +3,30 @@
 La cifra está en `user/lib/version.h` y sube con cada actualización que se graba en la memoria USB o se publica.
 Se ve en Acerca de y en la primera línea del registro de arranque (y por tanto en `DIAGNOST.TXT`).
 
+## 2.8 — 28/11/2026
+
+- **Red local por Internet** (`docs/RED.md`): los equipos de una misma red se conectan también entre casas
+  distintas, con las mismas carpetas, impresoras y mensajes. Pestaña **Internet** en Red local:
+  - el servicio abre el puerto TCP 7141 en el router con PCP, UPnP IGD (SSDP y SOAP) o NAT-PMP y lo renueva;
+    detecta CGNAT y doble NAT; direcciones a mano con IP o nombre DNS (`*:7141` = la IP pública del momento);
+    IP pública por el router, el relé o un servidor STUN opcional;
+  - cada equipo anuncia sus direcciones con número de secuencia y los equipos se pasan las de los demás: un
+    equipo que cambia de IP se reencuentra; comprobación cada minuto (punto verde «en línea por Internet»);
+  - **invitación por Internet** con un código `ZRED1-…@dirección` (secreto de 80 bits, un solo uso, 2 días) y el
+    mismo código de 6 cifras en las dos pantallas;
+  - **relé** opcional `tools/zred-rele.py` (Python 3) para CGNAT y móviles: solo pasa bytes cifrados de extremo a
+    extremo y no sabe de qué red es nadie;
+  - seguridad: por Internet solo se atiende lo autenticado (saludo `HOLA2` sin datos en claro e invitaciones con
+    código), bloqueo de direcciones que fallan, límite de saludos, plazo de 8 s por saludo; el acceso por Internet
+    se activa y desactiva en cada equipo.
+- **Adjuntos en los mensajes** (red local e Internet): hasta 10 archivos de 64 MB, por partes con SHA-256, barra
+  de progreso, reanudación tras un corte y cola de mensajes pendientes que el servicio reintenta. Se guardan en
+  Documentos/Red/Adjuntos y se abren con su programa desde la conversación.
+- Núcleo: multidifusión IPv4 de salida (SSDP), dirección del otro extremo de una conexión TCP (`z_peer`), como
+  mucho 16 conexiones a medio abrir por puerto y se liberan las que no terminan.
+- Pruebas: `tools/red_internet_test.py` (tres casas con routers falsos UPnP, NAT-PMP y CGNAT, y el relé) y
+  `tools/imgfs.py` para que las pruebas que miran dentro de la imagen funcionen también en Linux (mtools).
+
 ## 2.7 — 26/11/2026
 
 - ZunzúnOS arranca en la **Raspberry Pi 2 Model B** (BCM2836, ARMv7 de 32 bits) con la pantalla táctil de 3,5"

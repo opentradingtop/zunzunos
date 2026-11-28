@@ -72,6 +72,7 @@ u64 syscall_dispatch(regs_t *r) {
     case 68: { FD(f, a); file_t *n; int x = sock_accept(f, (int)b, &n); if (x) return x; x = fd_alloc(n); if (x < 0) sock_close(n); return x; }
     case 69: { FD(f, a); UCHK(d, e); return sock_sendto(f, b, c, (void *)d, e); }
     case 70: { FD(f, a); UCHK(b, c); UCHK(e, 8); i64 r = sock_recv(f, (void *)b, c, (int)d); if (r >= 0) { u32 ip; u16 pt; sock_from(f, &ip, &pt); ((u32 *)e)[0] = ip; ((u32 *)e)[1] = pt; } return r; }
+    case 71: { FD(f, a); UCHK(b, 8); if (!f->is_sock) return E_INVAL; u32 ip; u16 pt; sock_from(f, &ip, &pt); ((u32 *)b)[0] = ip; ((u32 *)b)[1] = pt; return 0; }   /* el otro extremo de una conexion */
 
     case 80: UCHK(a, b); return snd_write((void *)a, b);
     case 81: UCHK(a, b); return snd_info((char *)a, b);

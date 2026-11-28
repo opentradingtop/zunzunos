@@ -6,6 +6,7 @@ y sacar a B de la red. Con "router", A recibe 192.168.50.20 de un router falso y
 y el Edge con cable directo; despues A pierde el cable y lo recupera sin router y debe pasar a 169.254.
 Uso: red_test.py DIR_SALIDA [explorar|router]"""
 import os, re, shutil, subprocess, sys, threading, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import imgfs
 out = sys.argv[1]; mode = sys.argv[2] if len(sys.argv) > 2 else ''; explore = mode == 'explorar'; router = mode == 'router'; otra = mode == 'otra'; os.makedirs(out, exist_ok=True)
 MH = 42 + 9 * 28 + 14; MY = 800 - 36 - MH - 2
 FAM = [['rescate', 'files', 'discos', 'papelera', 'restaurar', 'instalar'], ['escritor', 'hoja', 'diapos', 'agenda', 'editor', 'calc', 'pdf'], ['browser', 'apps', 'correo', 'lumen', 'redlocal', 'navjs', 'jsconsola', 'nube'], ['viewer', 'player', 'grabadora', 'paint', 'pantalla', 'video', 'radio'], ['snake', 'mines', 'blocks', 'enjambre'], ['config', 'impresoras', 'term', 'sysmon', 'acerca']]
@@ -14,15 +15,7 @@ def M(b):
     return ['click:50,782', 'sleep:0.6', f'move:100,{fy}', 'sleep:0.5', f'move:245,{fy}', 'sleep:0.3', f'move:350,{ay}', 'sleep:0.3', f'click:350,{ay}', 'sleep:2']
 def stick(name, docs=None):
     p = os.path.join(out, name); shutil.copy('build/zunzun.img', p)
-    if docs:
-        a = subprocess.run(['hdiutil', 'attach', '-imagekey', 'diskimage-class=CRawDiskImage', '-mountrandom', '/tmp', p], capture_output=True, text=True, timeout=60).stdout; dev = a.split()[0]
-        try:
-            mnt = [l.split('\t')[-1].strip() for l in a.splitlines() if '/tmp' in l][0]; os.makedirs(os.path.join(mnt, 'DOCS'), exist_ok=True)
-            for n, d in docs.items():
-                f = os.path.join(mnt, n if '/' in n else os.path.join('DOCS', n)); os.makedirs(os.path.dirname(f), exist_ok=True); open(f, 'w').write(d)
-            for x in os.listdir(mnt):
-                if x.startswith('.'): subprocess.run(['rm', '-rf', os.path.join(mnt, x)])
-        finally: subprocess.run(['hdiutil', 'detach', dev], capture_output=True)
+    if docs: imgfs.put(p, {(n if '/' in n else 'DOCS/' + n): d for n, d in docs.items()})
     return p
 B_OLD = {'ZUNZUN/RED-ID.TXT': 'id=aaaaaaaa\nnombre=Equipo-COPIA\nmac=525400aa0001\n', 'ZUNZUN/RED.TXT': 'ZRED1\nred=12345678\nnombre=Copiada\nclave=' + '00' * 32 + '\nadmin=aaaaaaaa\nversion=1\nequipo=aaaaaaaa|Equipo-COPIA\n'}
 A = stick('a.img', {'nota.txt': 'Nota de prueba de la red local de ZunzunOS.\n', 'ZUNZUN/IMPRESORAS.TXT': 'Samsung ML-1640|file:/sys/DOCS/impreso.qpdl|qpdl|0|0|1|600|Samsung ML-1640 Series\n'}); B = stick('b.img', B_OLD if otra else None)
@@ -85,13 +78,10 @@ if otra and ('red servicio listo: aaaaaaaa' in lb or 'servicio listo' not in lb)
 if not router and not otra:
     m = re.search(r'red trabajo enviado a .*: (\d+) bytes, (-?\d+)', lb); m2 = re.search(r'red impresion de .* en Samsung ML-1640: (\d+) bytes, (-?\d+)', la)
     if not m or m.group(2) != '0' or not m2 or m2.group(2) != '0' or m.group(1) != m2.group(1): print('FALLO: impresion por la red', m and m.group(0), m2 and m2.group(0)); ok = False
-    a = subprocess.run(['hdiutil', 'attach', '-readonly', '-imagekey', 'diskimage-class=CRawDiskImage', '-mountrandom', '/tmp', A], capture_output=True, text=True, timeout=60).stdout
-    try:
-        mnt = [l.split('\t')[-1].strip() for l in a.splitlines() if '/tmp' in l][0]; d = open(os.path.join(mnt, 'DOCS', 'impreso.qpdl'), 'rb').read()
-        if b'QPDL' not in d[:200] or (m2 and len(d) != int(m2.group(1))): print('FALLO: el trabajo no es QPDL o no esta entero', len(d)); ok = False
-        else: print('trabajo QPDL recibido en A:', len(d), 'bytes')
-    except Exception as e: print('FALLO: no se encontro el trabajo en A:', e); ok = False
-    finally: subprocess.run(['hdiutil', 'detach', a.split()[0]] if a.split() else ['true'], capture_output=True)
+    d = imgfs.get(A, 'DOCS/impreso.qpdl')
+    if d is None: print('FALLO: no se encontro el trabajo en A'); ok = False
+    elif b'QPDL' not in d[:200] or (m2 and len(d) != int(m2.group(1))): print('FALLO: el trabajo no es QPDL o no esta entero', len(d)); ok = False
+    else: print('trabajo QPDL recibido en A:', len(d), 'bytes')
 ca = re.search(r'red codigo (\d{3} \d{3})', la)
 for x in ('PANICO', 'fallo de pagina', 'excepcion', 'termino: -'):
     if x in la or x in lb: print('FALLO:', x); ok = False

@@ -178,6 +178,7 @@ static inline int z_accept(int s, int to) { return SC2(68, s, to); }
 static inline long z_sendto(int s, u32 ip, int port, const void *b, long n) { return SC5(69, s, ip, port, b, n); }
 /* recibe un datagrama UDP; from[0] = IP de quien lo envia, from[1] = su puerto */
 static inline long z_recvfrom(int s, void *b, long n, int to, u32 from[2]) { return SC5(70, s, b, n, to, from); }
+static inline int z_peer(int s, u32 from[2]) { return SC2(71, s, from); }   /* direccion y puerto del otro extremo (TCP) */
 int z_parse_ip(const char *s, u32 *ip); void z_fmt_ip(u32 ip, char *o);
 
 /* sonido */
