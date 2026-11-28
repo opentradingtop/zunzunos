@@ -120,6 +120,7 @@ static void tcp_rx(u32 src, const u8 *t, u32 n) {
             s->una = ack; s->retries = 0; s->rto = 400; s->rto_at = s->una != s->nxt ? ticks + s->rto : 0;
             if (s->fin_sent && s->una == s->nxt) { if (s->st == FIN1) s->st = FIN2; else if (s->st == LAST_A) { s->st = C; if (s->orphan) { sock_free(s); return; } } }
         }
+        else if (ah <= 0 && s->st >= EST) s->retries = 0;   /* contesta aunque no avance (ventana cerrada: el otro esta vivo, solo va lento) */
         s->wnd = wnd;
     }
     int need_ack = 0;
