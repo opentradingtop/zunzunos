@@ -77,6 +77,8 @@ JSAPPS := jsconsola
 $(patsubst %,$(B)/a/%.o,$(JSAPPS)): UCFLAGS += -Iuser/colibri
 $(patsubst %,$(B)/rd/%,$(JSAPPS)): EXTRA := $(CBOBJ)
 $(patsubst %,$(B)/rd/%,$(JSAPPS)): $(CBOBJ)
+# Alquimia: el motor esta en user/apps/alquimia/*.c y entra por #include en user/apps/alquimia.c
+$(B)/a/alquimia.o: $(wildcard user/apps/alquimia/*.c) user/lib/zcrypto.h
 $(B)/rd/apps: EXTRA := $(WOBJ)
 $(B)/rd/apps: $(WOBJ)
 $(B)/rd/browser: EXTRA := $(WOBJ)

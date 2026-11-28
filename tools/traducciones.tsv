@@ -1620,3 +1620,143 @@ por el relé	-	through the relay
 por la red local	-	over the local network
 sin conexión	-	not connected
 Internet	-	Internet
+Ver	-	Show
+formato de salida	-	output format
+Elegir	-	Choose
+Normal	-	Normal
+Comprimir	-	Compress
+Extraer	-	Extract
+Convertir	-	Convert
+Cambiar	-	Change
+Vaciar	-	Clear
+Nada	-	None
+Igual	-	Same
+igual	-	same
+Archivo	-	File
+Documento	-	Document
+Vídeo	-	Video
+Calidad	-	Quality
+Letra	-	Font size
+ancho	-	width
+Hecho:	-	Done:
+archivos	-	files
+Guardar en	-	Save in
+Falta memoria	-	Out of memory
+Contraseña incorrecta	-	Wrong password
+Tamaño:	-	Size:
+Markdown	-	Markdown
+Decodificar	-	Decode
+Añade primero archivos o carpetas.	-	Add files or folders first.
+Escribe el nombre del archivo.	-	Type the file name.
+GZ guarda un solo archivo: elige TAR.GZ o ZIP para varios o para carpetas.	-	GZ holds a single file: choose TAR.GZ or ZIP for several files or for folders.
+La contraseña solo vale para ZIP.	-	A password only works with ZIP.
+Ya existe y se sustituirá:	-	It already exists and will be replaced:
+Comprimiendo...	-	Compressing...
+, cifrado AES-256	-	, AES-256 encrypted
+Qué comprimir	-	What to compress
+Añade archivos o carpetas, o elígelos en Archivos con el botón derecho.	-	Add files or folders, or pick them in Files with the right button.
+Compresión	-	Compression
+ZIP cifrado WinZip AES-256: se abre con 7-Zip, WinRAR y WinZip	-	WinZip AES-256 encrypted ZIP: opens with 7-Zip, WinRAR and WinZip
+opcional (ZIP cifrado AES-256)	-	optional (AES-256 encrypted ZIP)
+solo para ZIP	-	ZIP only
+(elige una carpeta)	-	(choose a folder)
+de espacio ahorrado	-	of space saved
+Archivo cifrado: escribe la contraseña para extraerlo.	-	Encrypted archive: type the password to extract it.
+Abre primero un archivo comprimido.	-	Open an archive first.
+No hay nada marcado.	-	Nothing is checked.
+Extrayendo...	-	Extracting...
+Todo bien:	-	All good:
+Extraídos	-	Extracted
+los CRC coinciden	-	the CRCs match
+ZIP (también cifrados), TAR, TAR.GZ, TGZ y GZ	-	ZIP (encrypted too), TAR, TAR.GZ, TGZ and GZ
+guardado	-	stored
+ · cifrado	-	 · encrypted
+solo si está cifrado	-	only if it is encrypted
+Extraer en	-	Extract to
+Añade primero los archivos que quieres convertir.	-	Add the files you want to convert first.
+Convertidos:	-	Converted:
+con error:	-	with errors:
+Qué convertir	-	What to convert
+Imágenes, sonido, vídeo AVI, documentos, tablas y comprimidos.	-	Images, sound, AVI video, documents, tables and archives.
+Lado máx.	-	Max. side
+Canales	-	Channels
+Frecuencia	-	Sample rate
+Normalizar el volumen	-	Normalize the volume
+GIF: fotogramas/s	-	GIF: frames/s
+Papel Carta (EE. UU.) en el PDF	-	US Letter paper in the PDF
+Separador	-	Separator
+La primera fila es la cabecera	-	The first row is the header
+Contraseña para abrirlo	-	Password to open it
+Comprimir, extraer y convertir	-	Compress, extract and convert
+Todo en este equipo, sin Internet	-	All on this computer, no Internet
+Añadir a Alquimia	-	Add to Alquimia
+Carpeta para comprimir	-	Folder to compress
+Dónde guardar el comprimido	-	Where to save the archive
+Abrir comprimido	-	Open archive
+Dónde extraer	-	Where to extract
+Dónde guardar lo convertido	-	Where to save the converted files
+Añadir carpeta	-	Add folder
+Abrir comprimido...	-	Open archive...
+Contraseña corta	-	Short password
+La contraseña tiene menos de 8 letras y se adivina pronto. ¿Seguir igualmente?	-	The password has fewer than 8 characters and is easy to guess. Continue anyway?
+Rápida	-	Fast
+Máxima	-	Maximum
+Estéreo	-	Stereo
+tab	-	tab
+El ZIP pasaría de 4 GB (ZIP64 no se crea)	-	The ZIP would exceed 4 GB (ZIP64 is not created)
+Un archivo pasa de 4 GB (ZIP64 no se crea)	-	A file exceeds 4 GB (ZIP64 is not created)
+Demasiados archivos para un ZIP sin ZIP64	-	Too many files for a ZIP without ZIP64
+GZ guarda un solo archivo, no carpetas: usa TAR.GZ	-	GZ holds a single file, not folders: use TAR.GZ
+No hay nada que comprimir	-	There is nothing to compress
+GZ guarda un solo archivo: elige TAR.GZ o ZIP para varios	-	GZ holds a single file: choose TAR.GZ or ZIP for several
+No se puede leer el archivo	-	The file cannot be read
+No es un ZIP o está incompleto	-	It is not a ZIP or it is incomplete
+El directorio del ZIP está dañado	-	The ZIP directory is damaged
+No es un TAR válido	-	It is not a valid TAR
+No es un GZ	-	It is not a GZ
+GZ con un método desconocido	-	GZ with an unknown method
+El GZ está dañado	-	The GZ is damaged
+El CRC no coincide: archivo dañado	-	The CRC does not match: damaged file
+No es un archivo comprimido que Alquimia conozca (ZIP, TAR, TAR.GZ o GZ)	-	It is not an archive Alquimia knows (ZIP, TAR, TAR.GZ or GZ)
+Cabecera local dañada	-	Damaged local header
+El archivo está cortado	-	The file is truncated
+Entrada cifrada dañada	-	Damaged encrypted entry
+La comprobación HMAC falla: archivo alterado o dañado	-	The HMAC check fails: file altered or damaged
+Tamaño incorrecto	-	Wrong size
+Los datos comprimidos están dañados	-	The compressed data is damaged
+Método de compresión no soportado:	-	Unsupported compression method:
+Este archivo está cifrado: escribe la contraseña	-	This archive is encrypted: type the password
+WAV con un formato que no se puede leer	-	WAV in a format that cannot be read
+AIFF-C comprimido: no se puede leer	-	Compressed AIFF-C: cannot be read
+AIFF con un formato que no se puede leer	-	AIFF in a format that cannot be read
+No se ha podido decodificar el MP3	-	The MP3 could not be decoded
+No se reconoce el sonido	-	The sound format is not recognized
+No es un AVI que se pueda leer	-	It is not an AVI that can be read
+El vídeo no tiene sonido	-	The video has no sound
+El vídeo no tiene imagen	-	The video has no picture
+No se puede leer el fotograma	-	The frame cannot be read
+No se encuentra el archivo	-	The file is not found
+No hay Base64 que decodificar	-	There is no Base64 to decode
+No se puede leer la imagen (¿formato o variante no soportados?)	-	The image cannot be read (unsupported format or variant?)
+No se puede escribir la imagen	-	The image cannot be written
+Esa conversión no es posible	-	That conversion is not possible
+Archivo comprimido	-	Archive
+Texto Base64	-	Base64 text
+ZIP de fotogramas	-	ZIP of frames
+Volcado HEX	-	HEX dump
+Huella SHA-256	-	SHA-256 fingerprint
+El JSON tiene que ser una lista de objetos o de listas	-	The JSON has to be a list of objects or of lists
+No hay filas repetidas en el XML	-	There are no repeated rows in the XML
+No hay filas en el YAML	-	There are no rows in the YAML
+No es un XLSX válido	-	It is not a valid XLSX
+No es un DOCX válido	-	It is not a valid DOCX
+No es un ODT válido	-	It is not a valid ODT
+No es un EPUB válido o no tiene texto	-	It is not a valid EPUB or it has no text
+No se puede leer el RTF	-	The RTF cannot be read
+Convertir con Alquimia	-	Convert with Alquimia
+Comprimir con Alquimia	-	Compress with Alquimia
+Alquimia	-	Alquimia
+Comprimiendo	-	Compressing
+Comprimir o convertir...	-	Compress or convert...
+Elige uno o más archivos para convertir	-	Choose one or more files to convert
+Elige qué comprimir	-	Choose what to compress

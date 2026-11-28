@@ -48,6 +48,9 @@ static void aes_enc(const zgcm *g, const u8 *in, u8 *out) { u8 s[16]; for (int i
         if (r < g->nr) for (int c = 0; c < 4; c++) { u8 *a = t + 4 * c, a0 = a[0], a1 = a[1], a2 = a[2], a3 = a[3], x = a0 ^ a1 ^ a2 ^ a3; a[0] ^= x ^ xt(a0 ^ a1); a[1] ^= x ^ xt(a1 ^ a2); a[2] ^= x ^ xt(a2 ^ a3); a[3] ^= x ^ xt(a3 ^ a0); }
         for (int i = 0; i < 16; i++) s[i] = t[i] ^ (u8)(g->rk[r * 4 + i / 4] >> (24 - 8 * (i % 4))); }
     zcpy(out, s, 16); }
+/* AES por bloques para quien lo necesite fuera de GCM (Alquimia: ZIP cifrado WinZip AES, CTR propio) */
+void zc_aes_key(zgcm *g, const u8 *key, int klen) { aes_key(g, key, klen); }
+void zc_aes_enc(const zgcm *g, const u8 *in, u8 *out) { aes_enc(g, in, out); }
 static void gmul(u8 *x, const u8 *h) { u8 z[16], v[16]; zset(z, 0, 16); zcpy(v, h, 16); for (int i = 0; i < 128; i++) { if (x[i / 8] >> (7 - i % 8) & 1) for (int j = 0; j < 16; j++) z[j] ^= v[j]; int lsb = v[15] & 1; for (int j = 15; j > 0; j--) v[j] = (v[j] >> 1) | (v[j - 1] << 7); v[0] >>= 1; if (lsb) v[0] ^= 0xe1; } zcpy(x, z, 16); }
 void gcm_init(zgcm *g, const u8 *key, int klen) { aes_key(g, key, klen); u8 z[16]; zset(z, 0, 16); aes_enc(g, z, g->H); }
 static void ghash(const zgcm *g, u8 *y, const u8 *d, long n) { while (n > 0) { int k = n < 16 ? n : 16; for (int i = 0; i < k; i++) y[i] ^= d[i]; gmul(y, g->H); d += k; n -= k; } }

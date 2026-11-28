@@ -103,6 +103,7 @@ static inline long z_guard(int op, const void *a, long b) { return SC3(114, op, 
 /* cifrado de datos: op 0 estado (1 activado, 2 abierto, 4 desactivandose), 1 abrir, 2 activar, 3 empezar a desactivar, 4 terminar */
 static inline long z_crypt(int op, const char *pass) { return SC2(115, op, pass); }
 int z_pick_file(const char *title, const char *exts, char *out, int cap);   /* selector de archivos (zpick.c) */
+int z_pick_dir(const char *title, char *out, int cap);   /* el mismo selector para elegir una carpeta */
 int z_pass_dialog(const char *title, const char *msg, char *buf, int cap); int z_crypt_rewrite(void (*progress)(int n, void *ctx), void *ctx);
 int z_rules_load(void); int z_rules_save(void); const char *z_app_name(const char *bin);
 /* bateria: o[0] hay, o[1] %, o[2] cargando, o[3] con cargador, o[4] descargando; error si no se puede leer */

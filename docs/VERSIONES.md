@@ -26,6 +26,19 @@ Se ve en Acerca de y en la primera línea del registro de arranque (y por tanto 
   mucho 16 conexiones a medio abrir por puerto y se liberan las que no terminan.
 - Pruebas: `tools/red_internet_test.py` (tres casas con routers falsos UPnP, NAT-PMP y CGNAT, y el relé) y
   `tools/imgfs.py` para que las pruebas que miran dentro de la imagen funcionen también en Linux (mtools).
+- **Alquimia** (`docs/ALQUIMIA.md`), familia Sistema: las web apps PRESSA / PRESSA PRO y ALQUIMIA en un solo
+  programa nativo, con tres pestañas:
+  - **Comprimir**: ZIP, TAR.GZ, TAR y GZ con deflate propio por flujo (Rápida, Normal, Máxima); contraseña opcional
+    WinZip AES-256 (AE-2) en ZIP; manómetro del espacio ahorrado;
+  - **Extraer**: ZIP (AES AE-1/AE-2, ZipCrypto, ZIP64, nombres UTF-8 o CP437), TAR (GNU y pax), TAR.GZ y GZ, con
+    comprobación de CRC y HMAC, selección de lo que se extrae y rutas peligrosas contenidas en el destino;
+  - **Convertir**: imágenes, sonido, vídeo AVI, documentos, tablas y comprimidos entre sí, y cualquier archivo a
+    Base64, HEX, data URI o SHA-256.
+  - Archivos: botón derecho → **Comprimir o convertir...**; doble clic en un `.zip/.tar/.gz/.tgz` lo abre en Alquimia.
+  - Biblioteca: `z_pick_dir` (el selector sirve también para carpetas) y `zc_aes_key`/`zc_aes_enc`.
+  - Pruebas en el Mac o Linux sin arrancar el sistema: `tools/alquimia_test.sh` (219 comprobaciones contra unzip,
+    tar, gzip, Python, PIL, ffmpeg, pdftotext… y capturas de la interfaz).
+- Raspberry Pi: `make pi` vuelve a compilar (`redlocal.c` usaba `long long`, que en ARM no se puede escribir).
 
 ## 2.7 — 26/11/2026
 

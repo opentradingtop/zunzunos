@@ -31,6 +31,7 @@ python3 -I tools/captura_test.py "$S/r-cap" "$K/stick.img" "-nic user,model=e100
 ok "lugares, accesos directos y seleccionar"; mkstick; python3 -I tools/seleccion_test.py "$S/r-sel" "$STICK" 2>&1 | filt
 ok "grabar pantalla y videos"; mkstick; python3 -I tools/video_test.py "$S/r-vid" "$K/stick.img" "$STICK" 2>&1 | filt
 ok "formulas de la hoja"; tools/pruebas/hoja/correr.sh "$S/r-hoja" 2>&1 | filt
+ok "alquimia (en el anfitrion)"; tools/alquimia_test.sh "$S/r-alq" 2>&1 | filt
 ok "teclado, copiar y pegar, cookies y navegador"; mkstick; rm -rf "$S/r-web"; python3 -I tools/fake_web.py "$S/r-web" > "$S/r-web.log" 2>&1 & FW=$!; sleep 1
 python3 -I tools/tareas_test.py "$S/r-tar" "$S/r-web" "-nic user,model=e1000 $STICK" 2>&1 | filt; kill $FW 2>/dev/null; wait $FW 2>/dev/null
 ok "navegador: historial y gestor de cookies"; mkstick; rm -rf "$S/r-wb"; python3 -I tools/fake_web.py "$S/r-wb" > "$S/r-wb.log" 2>&1 & FW=$!; sleep 1

@@ -24,6 +24,7 @@ typedef struct { u32 rk[60]; int nr; u8 H[16]; } zgcm;
 void gcm_init(zgcm *g, const u8 *key, int klen);
 void gcm_seal(zgcm *g, const u8 *iv, const u8 *aad, int al, const u8 *in, long n, u8 *out, u8 *tag);
 int gcm_open(zgcm *g, const u8 *iv, const u8 *aad, int al, const u8 *in, long n, u8 *out, const u8 *tag);
+void zc_aes_key(zgcm *g, const u8 *key, int klen); void zc_aes_enc(const zgcm *g, const u8 *in, u8 *out); /* un bloque AES (klen 16, 24 o 32) */
 /* X25519 */
 void x25519(u8 *out, const u8 *scalar, const u8 *point); void x25519_base(u8 *out, const u8 *scalar);
 /* firmas */
