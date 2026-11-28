@@ -199,7 +199,7 @@ static int cconnect2(conn_t *c, const char *id, char *err, int force) { memset(c
         else if (r[0] == 'd') c->s = dial(r + 2, PTCP, service_mode ? 3000 : 5000);
         else if (r[0] == 'r') { char box[40]; buzon(id, box); if (rele_call(c, box)) c->s = -1; }
         if (c->s < 0) continue; c->inet = !lan;
-        int hto = service_mode ? 6000 : 15000, h = hs_client(c, id, 0, hto);
+        int hto = service_mode ? 10000 : 15000, h = hs_client(c, id, 0, hto);
         if (h == -1 && lan) { z_close(c->s); c->s = z_socket(1); if (c->s >= 0 && !z_connect(c->s, p->ip, PTCP, 5000)) { c->rn = c->rp = 0; h = hs_client(c, id, 1, hto); } }   /* equipo con la version anterior */
         if (!h) { if (!lan) { strncpy0(p->via, r, 80); p->iseen = z_ms(); if (service_mode) peers_save(); } return 0; }
         if (c->s >= 0) z_close(c->s); if (h == -2) { strcpy(err, tr_("clave de red distinta: el equipo necesita otra invitación")); return -1; } }
@@ -219,7 +219,8 @@ static void spool(void) { zdirent e; char inf[64] = ""; for (int i = 0; !z_readd
     char b[160], f[200], g[200]; strcpy(b, inf); b[strlen(b) - 4] = 0; snprintf(f, 200, SPOOL "/%s.inf", b); snprintf(g, 200, SPOOL "/%s.env", b); if (z_rename(f, g)) return;   /* recogido: ya no se puede cancelar */
     char *t = z_readfile(g, 0); long n = 0; snprintf(f, 200, SPOOL "/%s.bin", b); u8 *d = z_readfile(f, &n); int rc = -5; char err[120] = "";
     if (t && d) { char *bar = strchr(t, '|'), *sl = strchr(t, '/'); if (bar) *bar = 0; if (sl) *sl = 0; if (sl) { if (bar) safe(bar + 1); char h[300]; snprintf(h, 300, "IMPRIME|%s|%ld|%.200s", sl + 1, n, bar ? bar + 1 : "ZunzunOS");
-            conn_t c; if (!cconnect(&c, t, err)) { if (!csends(&c, h)) { for (long o = 0; o < n; o += 65536) csend(&c, d + o, MIN(65536LL, n - o)); if (!n) csend(&c, "", 0); u8 *r = 0; if (crecv(&c, &r, 120000) > 0) { rc = strncmp((char *)r, "OK", 2) ? (strncmp((char *)r, "ERR|", 4) ? -5 : atoi((char *)r + 4) ? atoi((char *)r + 4) : -5) : 0; } free(r); } z_close(c.s); } else rc = -111; } }
+            conn_t c; int cr = -1; for (int k = 0; k < 3 && (cr = cconnect(&c, t, err)); k++) z_sleep(3000);   /* el otro servicio puede estar ocupado un momento */
+            if (!cr) { if (!csends(&c, h)) { for (long o = 0; o < n; o += 65536) csend(&c, d + o, MIN(65536LL, n - o)); if (!n) csend(&c, "", 0); u8 *r = 0; if (crecv(&c, &r, 120000) > 0) { rc = strncmp((char *)r, "OK", 2) ? (strncmp((char *)r, "ERR|", 4) ? -5 : atoi((char *)r + 4) ? atoi((char *)r + 4) : -5) : 0; } free(r); } z_close(c.s); } else rc = -111; } }
     char lg[200]; snprintf(lg, 200, "[prueba] red trabajo enviado a %s: %ld bytes, %d %s", t ? mname(t) : "?", n, rc, err); z_log(lg);
     char res[200], v[16]; snprintf(res, 200, SPOOL "/%s.res", b); snprintf(v, 16, "%d", rc); z_writefile(res, v, strlen(v)); z_unlink(f); z_unlink(g); free(t); free(d); }
 /* ---------- carpetas: rutas seguras dentro de la carpeta compartida ---------- */
