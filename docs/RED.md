@@ -265,7 +265,7 @@ lo que abren lo abren en QEMU con `hostfwd_add`. El relé es `tools/zred-rele.py
 NAT-PMP, detectar el CGNAT, poner el relé, invitar por Internet con código a B (directo) y a C (CGNAT), usar desde A
 la carpeta de C por el relé (subir, listar, descargar), imprimir desde B en la impresora de A, mensaje a todos con
 dos adjuntos (comprobados byte a byte en los discos), cambiar la IP pública de B (anuncio y reencuentro), un adjunto
-de 12 MB cortado a mitad quitando el cable a B 40 s (queda pendiente y se reanuda desde donde se quedó), sondas de un
+de 6 MB cortado a mitad quitando el cable a B 40 s (queda pendiente y se reanuda desde donde se quedó), sondas de un
 atacante contra el puerto abierto (invitación de red local, saludo antiguo, etiqueta falsa, invitación inventada,
 goteo y bloqueo) y desactivar Internet (el router cierra el puerto). Lo que **no** se ha probado: Internet de verdad,
 routers reales, SSDP por multidifusión real y STUN contra un servidor real.

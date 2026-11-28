@@ -303,10 +303,16 @@ static int recv_msg(conn_t *c, const char *from, char *pl) {
     sb_t o = {0}; sb_s(&o, "OK"); long off[MAXADJ]; for (int i = 0; i < na; i++) { snprintf(A[i].path, 200, "%s/%s-%d", pd, msgid, i); zdirent d; off[i] = z_stat(A[i].path, &d) ? 0 : (long)d.size; if (off[i] > A[i].size) { z_unlink(A[i].path); off[i] = 0; } sb_f(&o, "|%ld", off[i]); }
     if (csend(c, o.p, o.n)) { free(o.p); return -1; } free(o.p);
     if (tot) { char lg[120]; snprintf(lg, 120, "[prueba] red recibiendo %d adjuntos de %s (%ld bytes)", na, mname(from), tot); z_log(lg); }
-    for (int i = 0; i < na; i++) { if (off[i] >= A[i].size) continue; int fd = z_open(A[i].path, O_WRITE | O_CREATE | O_APPEND); if (fd < 0) { csends(c, "ERR|no se pudo guardar"); return -1; }
-        while (off[i] < A[i].size) { u8 *q; long m = crecv(c, &q, 30000); if (m < 0 || m > A[i].size - off[i]) { if (m >= 0) free(q); z_close(fd); z_sync(); char lg[160]; snprintf(lg, 160, "[prueba] red adjunto %s cortado en %ld", A[i].name, off[i]); z_log(lg); return -1; }
-            long w = z_write(fd, q, m); free(q); if (w != m) { z_close(fd); csends(c, "ERR|no cabe en el disco"); return -1; } if ((off[i] + m) >> 20 != off[i] >> 20) { char lg[160]; snprintf(lg, 160, "[prueba] red adjunto %s: %ld MB", A[i].name, (off[i] + m) >> 20); z_log(lg); } off[i] += m; }
-        z_close(fd); z_sync(); }
+    /* se escribe en bloques de 1 MB (añadir a un archivo FAT recorre su cadena: pocos bloques grandes van mucho mas deprisa);
+       lo ya escrito queda para reanudar */
+    u8 *blk = malloc(1 << 20); long bn = 0;
+    for (int i = 0; i < na; i++) { if (off[i] >= A[i].size) continue; int fd = z_open(A[i].path, O_WRITE | O_CREATE | O_APPEND); if (fd < 0) { free(blk); csends(c, "ERR|no se pudo guardar"); return -1; } bn = 0;
+        while (off[i] + bn < A[i].size) { u8 *q; long m = crecv(c, &q, 30000); int cut = m < 0 || m > (1 << 20) || m > A[i].size - off[i] - bn;
+            if (!cut) { if (bn + m > (1 << 20)) { if (z_write(fd, blk, bn) != bn) { free(q); z_close(fd); free(blk); csends(c, "ERR|no cabe en el disco"); return -1; } off[i] += bn; bn = 0; z_sync(); char lg[160]; snprintf(lg, 160, "[prueba] red adjunto %s: %ld MB", A[i].name, off[i] >> 20); z_log(lg); }
+                memcpy(blk + bn, q, m); bn += m; free(q); continue; }
+            if (m >= 0) free(q); if (bn && z_write(fd, blk, bn) == bn) off[i] += bn; z_close(fd); z_sync(); free(blk); char lg[160]; snprintf(lg, 160, "[prueba] red adjunto %s cortado en %ld", A[i].name, off[i]); z_log(lg); return -1; }
+        if (bn && z_write(fd, blk, bn) != bn) { z_close(fd); free(blk); csends(c, "ERR|no cabe en el disco"); return -1; } off[i] += bn; z_close(fd); z_sync(); }
+    free(blk);
     for (int i = 0; i < na; i++) { char hx[65]; if (file_sha(A[i].path, A[i].size, hx) || strcmp(hx, A[i].sha)) { z_unlink(A[i].path); z_sync(); csends(c, "ERR|adjunto dañado, se volverá a enviar"); return -1; } }
     for (int i = 0; i < na; i++) { char dst[200]; uniq_path(dir, A[i].name, dst, 200); if (z_rename(A[i].path, dst)) strncpy0(dst, A[i].path, 200); strncpy0(A[i].path, dst, 200); }
     safe(text); char st[2000]; att_text(text, A, na, st, 2000); chat_store(conv, from, st, ""); msg_mark(msgid); csends(c, "FIN");

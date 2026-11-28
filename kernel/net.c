@@ -13,7 +13,7 @@ typedef struct sock {
     struct sock *next, *parent; int type, st, orphan, accepted, peer_fin, fin_sent, want_fin, err; u16 lport, rport; u32 rip;
     u32 una, nxt, rnxt, wnd; u8 *rx, *tx; u32 rh, rl, th, tl; u64 rto_at; u32 rto; u64 die_at; int retries;
     dg_t *q, *qe; int qn; u32 from_ip; u16 from_port;
-    u32 gseq; int trusted;   /* guardia: entrada del registro y socket del propio nucleo (DNS) */
+    u32 gseq; int trusted; u64 lrx;   /* lrx: ultimo segmento recibido del otro extremo */   /* guardia: entrada del registro y socket del propio nucleo (DNS) */
 } sock_t;
 static sock_t *socks; static u16 next_port = 49200;
 
@@ -107,6 +107,7 @@ static void tcp_rx(u32 src, const u8 *t, u32 n) {
         s = sock_alloc(1); if (!s) return; s->parent = ls; s->lport = dp; s->rport = sp; s->rip = src; s->rnxt = seq + 1; s->una = s->nxt = (u32)rdtsc(); s->wnd = wnd; s->st = SYN_R; seg_tx(s, s->nxt, F_SYN | F_ACK, 0, 0); s->nxt++; s->rto_at = ticks + s->rto; return;
     }
     if (!s) { if (!(fl & F_RST)) rst_reply(src, sp, dp, ack, seq + len + ((fl & F_SYN) ? 1 : 0), fl & F_ACK); return; }
+    s->lrx = ticks;
     if (fl & F_RST) { s->err = E_CONN; s->st = C; s->peer_fin = 1; if (s->orphan || (s->parent && !s->accepted)) sock_free(s); return; }
     if (s->st == SYN_S) {
         if ((fl & (F_SYN | F_ACK)) == (F_SYN | F_ACK) && ack == s->nxt) { s->rnxt = seq + 1; s->una = ack; s->wnd = wnd; s->st = EST; s->rto_at = 0; s->retries = 0; seg_tx(s, s->nxt, F_ACK, 0, 0); }
@@ -142,7 +143,7 @@ static void tcp_timers(void) {
         if (s->st == TIME_W && ticks >= s->die_at) { s->st = C; if (s->orphan) { sock_free(s); continue; } }
         if (s->orphan && s->die_at && ticks >= s->die_at) { sock_free(s); continue; }
         if (s->rto_at && ticks >= s->rto_at) {
-            if (++s->retries > 10) { s->err = E_TIMEOUT; s->st = C; s->rto_at = 0; s->peer_fin = 1; if (s->orphan || (s->parent && !s->accepted)) sock_free(s); continue; }
+            if (++s->retries > 10 && ticks - s->lrx > 60000) {   /* el otro calla de verdad (con la ventana cerrada sigue contestando) */ s->err = E_TIMEOUT; s->st = C; s->rto_at = 0; s->peer_fin = 1; if (s->orphan || (s->parent && !s->accepted)) sock_free(s); continue; }
             s->rto = MIN(s->rto * 2, 8000U); s->rto_at = ticks + s->rto;
             if (s->st == SYN_S) seg_tx(s, s->una, F_SYN, 0, 0);
             else if (s->st == SYN_R) seg_tx(s, s->una, F_SYN | F_ACK, 0, 0);

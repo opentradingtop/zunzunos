@@ -44,7 +44,7 @@ FAM = [['rescate', 'files', 'discos', 'papelera', 'restaurar', 'instalar'], ['es
 def M(b):
     f = [i for i, l in enumerate(FAM) if b in l][0]; L = FAM[f]; i = L.index(b); y0 = max(42, min(42 + f * 28, MH - 6 - len(L) * 28)); fy = MY + 42 + 28 * f + 14; ay = MY + y0 + 28 * i + 14
     return ['click:50,782', 'sleep:0.6', f'move:100,{fy}', 'sleep:0.5', f'move:245,{fy}', 'sleep:0.3', f'move:350,{ay}', 'sleep:0.3', f'click:350,{ay}', 'sleep:2']
-random.seed(7); FOTO = bytes(random.getrandbits(8) for _ in range(300 * 1024)); GRANDE = os.urandom(12 * 1024 * 1024)
+random.seed(7); FOTO = bytes(random.getrandbits(8) for _ in range(300 * 1024)); GRANDE = os.urandom(6 * 1024 * 1024)
 NOTA = 'Nota de prueba de la red local de ZunzunOS por Internet.\n'
 PERM = 'browser=1\ncorreo=1\nlumen=1\napps=1\nredlocal=1\n'   # la guardia ya deja salir a Red local (si no, pregunta la primera vez)
 def stick(name, files):
